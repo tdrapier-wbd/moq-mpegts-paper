@@ -1,42 +1,17 @@
 # Test 40 — Does the SRT contribution chain carry the #3533 content-join stall?
 
-**State: run, conclusive.** The two-stage SRT ingest does **not** absorb the trigger. On builds through
-`d518b61b`, a source whose content restarts on a continuous timeline stalls `moq export ts` permanently
-when it arrives over SRT through the deployed chain shape, exactly as it does through the published
-local-pipe reproducer. On **`5d0991b9`** (`main` after [#3793](https://github.com/moq-dev/moq/pull/3793),
-which carries [#3784](https://github.com/moq-dev/moq/pull/3784) closing
-[#3533](https://github.com/moq-dev/moq/issues/3533), the **0.31 Mb/s export stall is gone** — the
-acceptance oracle reads full rate through the first join — but a **homogeneous** build hits a different
-failure at the join: `moq import ts` exits with *frame timestamp is below the live edge*. That
-successor failure is still present on `ffa5b81b`, re-measured through this rig after
-[#3987](https://github.com/moq-dev/moq/pull/3987) closed
-[#3798](https://github.com/moq-dev/moq/issues/3798) without changing any code; the mechanism is
-characterised per stream kind in [T41](test-41-import-reanchor-coverage.md). **On homogeneous
-`9d2a4f6e` the chain is healthy:** the import survives every join and the export holds full rate
-through all five joins in the window. The runs used a generator that left AC-3 and teletext
-timestamps unrebased. Every verdict holds with it corrected. On upstream `dev` after
-[#4543](https://github.com/moq-dev/moq/pull/4543), the join holds only with the corrected generator
-([Corrections](#corrections)).
+**State: run, conclusive.** The two-stage SRT ingest does **not** absorb the trigger. On builds through `d518b61b`, a source whose content restarts on a continuous timeline stalls `moq export ts` permanently when it arrives over SRT through the deployed chain shape, exactly as it does through the published local-pipe reproducer. On **`5d0991b9`** (`main` after [#3793](https://github.com/moq-dev/moq/pull/3793), which carries [#3784](https://github.com/moq-dev/moq/pull/3784) closing [#3533](https://github.com/moq-dev/moq/issues/3533), the **0.31 Mb/s export stall is gone** — the acceptance oracle reads full rate through the first join — but a **homogeneous** build hits a different failure at the join: `moq import ts` exits with _frame timestamp is below the live edge_. That successor failure is still present on `ffa5b81b`, re-measured through this rig after [#3987](https://github.com/moq-dev/moq/pull/3987) closed [#3798](https://github.com/moq-dev/moq/issues/3798) without changing any code; the mechanism is characterised per stream kind in [T41](test-41-import-reanchor-coverage.md). **On homogeneous `9d2a4f6e` the chain is healthy:** the import survives every join and the export holds full rate through all five joins in the window. The runs used a generator that left AC-3 and teletext timestamps unrebased. Every verdict holds with it corrected. On upstream `dev` after [#4543](https://github.com/moq-dev/moq/pull/4543), the join holds only with the corrected generator ([Corrections](#corrections)).
 
 ## Objective
 
-[#3533](https://github.com/moq-dev/moq/issues/3533) is reported and reproduced against a **local
-pipe**: generator → `tsp` → `moq import ts`. That establishes the defect but not the exposure. The
-deployed contribution path is not a pipe — it is two systemd units joined by a loopback multicast
-group ([T4](test-4-remote-e2e-srt.md) § *The standing live ingest*), and between the encoder and the
-importer sit an SRT receive buffer, a jitter-absorbing re-emission, a multicast socket and a second
-`tsp` instance. Any of those could in principle re-align the stream at the join and absorb the
-trigger, which would mean the live feed never meets the defect and the fence
-[T34](test-34-real-encoder-severity.md) is holding open is not actually load-bearing.
+[#3533](https://github.com/moq-dev/moq/issues/3533) is reported and reproduced against a **local pipe**: generator → `tsp` → `moq import ts`. That establishes the defect but not the exposure. The deployed contribution path is not a pipe — it is two systemd units joined by a loopback multicast group ([T4](test-4-remote-e2e-srt.md) § _The standing live ingest_), and between the encoder and the importer sit an SRT receive buffer, a jitter-absorbing re-emission, a multicast socket and a second `tsp` instance. Any of those could in principle re-align the stream at the join and absorb the trigger, which would mean the live feed never meets the defect and the fence [T34](test-34-real-encoder-severity.md) is holding open is not actually load-bearing.
 
-This asks the narrow question: **does the trigger survive the chain?** It is also written to be the
-acceptance test for the eventual fix — when a build claims to close #3533, this is the rig that says
-whether it did, against the path we actually run.
+This asks the narrow question: **does the trigger survive the chain?** It is also written to be the acceptance test for the eventual fix — when a build claims to close #3533, this is the rig that says whether it did, against the path we actually run.
 
 ## Environment
 
-| | |
-|---|---|
+|  |  |
+| --- | --- |
 | Host | Secondary, 8 vCPU / 15.7 GB, Ubuntu 26.04, `eu-west-1b` |
 | Relay | The host's own standing relay, `https://localhost:443/anon` |
 | Builds | `0e61e35` (#3375, the regression), `025613d` (its parent) — the pinned T27 bisect pair — and `d518b61b`; later `5d0991b9`, `ffa5b81b` and `9d2a4f6e`, each in its own section below |
@@ -45,13 +20,9 @@ whether it did, against the path we actually run.
 | Rig | [`t40-continuous-join-srt.sh`](scripts/t40-continuous-join-srt.sh) |
 | Window | 150 s, sampled every 5 s — four content joins inside the window |
 
-Both arms ran on **one host**, sequentially, against one relay, with the same generator and the same
-clip. That is deliberate and it is the instrument [T34](test-34-real-encoder-severity.md) argued for:
-the two-host arrangement that also straddles #3375 varies host, kernel, core count and contribution
-path alongside the build, and the single-host pinned-binary pair varies only the build.
+Both arms ran on **one host**, sequentially, against one relay, with the same generator and the same clip. That is deliberate and it is the instrument [T34](test-34-real-encoder-severity.md) argued for: the two-host arrangement that also straddles #3375 varies host, kernel, core count and contribution path alongside the build, and the single-host pinned-binary pair varies only the build.
 
-The chain runs on its own ports (`SRT 9101`, group `239.255.0.9:5009`) and its own broadcast, so the
-standing `srt-ingest` and `moq-live-publisher` units were untouched throughout.
+The chain runs on its own ports (`SRT 9101`, group `239.255.0.9:5009`) and its own broadcast, so the standing `srt-ingest` and `moq-live-publisher` units were untouched throughout.
 
 ## Procedure
 
@@ -76,16 +47,13 @@ python3 ts-continuous-source.py t40_clip.ts --passes 40 \
 moq --broadcast t40.<arm>.hang export ts --latency-max 3s > /dev/null
 ```
 
-The oracle is the subscriber's own emitted-byte counter, `/proc/<pid>/io` `wchar`, sampled every 5 s
-and differenced. That is the same instrument #3533 reports against, so the numbers below are directly
-comparable with the issue's table.
+The oracle is the subscriber's own emitted-byte counter, `/proc/<pid>/io` `wchar`, sampled every 5 s and differenced. That is the same instrument #3533 reports against, so the numbers below are directly comparable with the issue's table.
 
 ## Pass criteria, fixed before running
 
 1. The pre-#3375 arm sustains its baseline rate across at least three content joins.
 2. If the post-#3375 arm collapses, the collapse coincides with a join rather than with start-up.
-3. A collapse counts as *permanent* only if **no** sample after it recovers above a third of
-   baseline.
+3. A collapse counts as _permanent_ only if **no** sample after it recovers above a third of baseline.
 
 All three were met.
 
@@ -94,7 +62,7 @@ All three were met.
 Per-subscriber emitted rate, Mb/s, one 150 s window per arm:
 
 | t (s) | `025613d` (parent) | `0e61e35` (#3375) |
-|---:|---:|---:|
+| --: | --: | --: |
 | 10 | 9.92 | 9.92 |
 | 15 | 9.43 | 9.43 |
 | 20 | 9.71 | 9.71 |
@@ -104,107 +72,58 @@ Per-subscriber emitted rate, Mb/s, one 150 s window per arm:
 | 40 | 9.36 | 0.32 |
 | … to 150 | median **9.29**, min 8.86, max 9.92 | median **0.31**, min 0.30, **max 0.32** |
 
-- **The two arms are identical to the hundredth of a Mb/s until the join.** The generator is
-  deterministic and the chain is the same, so the divergence is attributable to the build alone.
-- **The stall is permanent.** Across 24 samples and four joins after the collapse, the post-#3375
-  arm's *maximum* sample is 0.32 Mb/s against a 9.57 Mb/s pre-join median — no partial recovery in
-  any sample. This matches #3533's reported 0.31 Mb/s residue on the local-pipe reproducer to within
-  the sampling noise, which is corroboration that the same defect is being exercised and not a
-  second one with a similar shape.
-- **The residue is the PSI, AC-3 and teletext continuing while video and MPEG-1 audio stop**, as
-  #3533 describes; 0.31 Mb/s of a 9.95 Mbps source is the right order for that remainder.
-- The importer's own log shows the mechanism arriving: `audio stream lost frame sync and resynced
-  pid=121 track=".mp2"` with the resync counter climbing one per join (`resyncs=20`,
-  `discarded=7140` by the end of the window). The primary audio re-lock at the join is where the
-  upstream quest note places the trigger, and it is visible here.
+- **The two arms are identical to the hundredth of a Mb/s until the join.** The generator is deterministic and the chain is the same, so the divergence is attributable to the build alone.
+- **The stall is permanent.** Across 24 samples and four joins after the collapse, the post-#3375 arm's _maximum_ sample is 0.32 Mb/s against a 9.57 Mb/s pre-join median — no partial recovery in any sample. This matches #3533's reported 0.31 Mb/s residue on the local-pipe reproducer to within the sampling noise, which is corroboration that the same defect is being exercised and not a second one with a similar shape.
+- **The residue is the PSI, AC-3 and teletext continuing while video and MPEG-1 audio stop**, as #3533 describes; 0.31 Mb/s of a 9.95 Mbps source is the right order for that remainder.
+- The importer's own log shows the mechanism arriving: `audio stream lost frame sync and resynced pid=121 track=".mp2"` with the resync counter climbing one per join (`resyncs=20`, `discarded=7140` by the end of the window). The primary audio re-lock at the join is where the upstream quest note places the trigger, and it is visible here.
 
 ### `5d0991b9` — #3533 closed; a new join failure on the dev line
 
 Re-run against **`5d0991b9`** after [#3784](https://github.com/moq-dev/moq/pull/3784) merged:
 
 | Arm | Build | Relay | Baseline (≤20 s) | Through first join | Verdict |
-|---|---|---|---:|---|---|
-| `main-5d0991b9` | `5d0991b9` | standing `d518b61b` | 9.32 Mb/s | peak **9.86 Mb/s** at t=25 s; export exits at t=30 s with *TS track layout changed* | **No #3533 stall** — full rate until exit |
-| `main-5d0991b9-swap` | `5d0991b9` | standing `5d0991b9` | — | import exits at first join: *frame timestamp is below the live edge*; export oracle ~0 Mb/s | **Join failure, not stall** |
+| --- | --- | --- | --: | --- | --- |
+| `main-5d0991b9` | `5d0991b9` | standing `d518b61b` | 9.32 Mb/s | peak **9.86 Mb/s** at t=25 s; export exits at t=30 s with _TS track layout changed_ | **No #3533 stall** — full rate until exit |
+| `main-5d0991b9-swap` | `5d0991b9` | standing `5d0991b9` | — | import exits at first join: _frame timestamp is below the live edge_; export oracle ~0 Mb/s | **Join failure, not stall** |
 
-Upstream's `export_test::discontinuity_flags_the_break_once_across_tracks` — which embeds the #3533
-content-join fence — **passes** on this build (103/103 `export_test` cases).
+Upstream's `export_test::discontinuity_flags_the_break_once_across_tracks` — which embeds the #3533 content-join fence — **passes** on this build (103/103 `export_test` cases).
 
 ### `9d2a4f6e` — healthy through every join
 
-Run homogeneous: client and a dedicated relay both `9d2a4f6e` (noq), the relay on
-`127.0.0.1:4494` with `--quic-congestion-control loss`, and the rig, clip, generator and window
-otherwise as above.
+Run homogeneous: client and a dedicated relay both `9d2a4f6e` (noq), the relay on `127.0.0.1:4494` with `--quic-congestion-control loss`, and the rig, clip, generator and window otherwise as above.
 
 | Arm | Build | Baseline (≤20 s) | Through the window | Verdict |
-|---|---|---:|---|---|
+| --- | --- | --: | --- | --- |
 | `main-9d2a4f6e` | `9d2a4f6e`, client and relay | 9.94 Mb/s | 29 samples, 9.43–10.41 Mb/s, tail median 9.96 Mb/s, five content joins in the importer's log | **HEALTHY** — no sample below a third of baseline |
 | `main-6f1a9e33` | `6f1a9e33`, client and relay | 9.96 Mb/s | 29 samples, 9.46–10.34 Mb/s, tail median 10.00 Mb/s, five content joins | **HEALTHY** — no sample below a third of baseline |
 
-`6f1a9e33`, the later `main` carrying the programme selection and `--linger`, is unchanged from
-`9d2a4f6e` on this rig, down to the importer's audio log.
+`6f1a9e33`, the later `main` carrying the programme selection and `--linger`, is unchanged from `9d2a4f6e` on this rig, down to the importer's audio log.
 
-The importer holds one session for the whole window; its reconnects all follow the rig's own
-teardown. At each join it logs two MPEG-1 audio frame-sync losses (184 and 530 bytes discarded) and
-recovers, where the builds through `d518b61b` logged one per join. The rate oracle cannot see what
-that costs the audio, and the output is not graded for continuity here.
+The importer holds one session for the whole window; its reconnects all follow the rig's own teardown. At each join it logs two MPEG-1 audio frame-sync losses (184 and 530 bytes discarded) and recovers, where the builds through `d518b61b` logged one per join. The rate oracle cannot see what that costs the audio, and the output is not graded for continuity here.
 
 ## Conclusions
 
-1. **The deployed contribution chain is exposed** — the SRT buffer, loopback multicast hop and second
-   `tsp` instance do not absorb the join trigger ([T34](test-34-real-encoder-severity.md) remains
-   load-bearing for a *real* encoder's severity).
-2. **#3533's export stall is fixed on `5d0991b9`.** The 0.31 Mb/s residue signature does not appear;
-   the unit test and the mixed-build T40 arm both show full rate through the first join.
-3. **Continuous-source publishing on homogeneous `5d0991b9` and `ffa5b81b` fails at the join** —
-   import exits with *frame timestamp is below the live edge*. That is a separate defect from #3533.
-   **It is gone on `9d2a4f6e`**, so the permanence re-soak and long runs on
-   `ts-continuous-source.py` can run on that build. It is not an artefact of the generator's
-   private-stream defect (see [Corrections](#corrections)). With the corrected generator, a local
-   pipe into `moq import ts` on each build still exits at the first join with the same error. Main
-   at `6a016409`, which descends from `9d2a4f6e`, holds through three joins with either generator.
-4. **The pinned bisect pair remains the control** for the pre-fix stall signature; service builds may
-   move independently.
-5. **On upstream `dev` from [#4543](https://github.com/moq-dev/moq/pull/4543), the join holds only
-   with the corrected generator** `[dev]`. `dev` at `9a80e875` ends the import at the first join on
-   the uncorrected generator, and holds full rate through three joins, over SRT and a pipe, on the
-   corrected one ([upstream contributions](upstream-contributions.md)).
+1. **The deployed contribution chain is exposed** — the SRT buffer, loopback multicast hop and second `tsp` instance do not absorb the join trigger ([T34](test-34-real-encoder-severity.md) remains load-bearing for a _real_ encoder's severity).
+2. **#3533's export stall is fixed on `5d0991b9`.** The 0.31 Mb/s residue signature does not appear; the unit test and the mixed-build T40 arm both show full rate through the first join.
+3. **Continuous-source publishing on homogeneous `5d0991b9` and `ffa5b81b` fails at the join** — import exits with _frame timestamp is below the live edge_. That is a separate defect from #3533. **It is gone on `9d2a4f6e`**, so the permanence re-soak and long runs on `ts-continuous-source.py` can run on that build. It is not an artefact of the generator's private-stream defect (see [Corrections](#corrections)). With the corrected generator, a local pipe into `moq import ts` on each build still exits at the first join with the same error. Main at `6a016409`, which descends from `9d2a4f6e`, holds through three joins with either generator.
+4. **The pinned bisect pair remains the control** for the pre-fix stall signature; service builds may move independently.
+5. **On upstream `dev` from [#4543](https://github.com/moq-dev/moq/pull/4543), the join holds only with the corrected generator** `[dev]`. `dev` at `9a80e875` ends the import at the first join on the uncorrected generator, and holds full rate through three joins, over SRT and a pipe, on the corrected one ([upstream contributions](upstream-contributions.md)).
 
 ## What this does not show
 
-- **Nothing about a real encoder.** The generator's join is a hard cut at an IDR — ordinary in
-  broadcast, but not the content a real feed carries, and the coded-frame size at the join is not
-  typical. Whether a real encoder produces this junction at all is exactly what
-  [T34](test-34-real-encoder-severity.md) exists to answer, and this does not pre-empt it.
-- **Nothing about severity in the field.** A permanent stall is unambiguous here because the source
-  keeps joining. A source that joins once and never again would show the same collapse, but the
-  operational consequence depends on how a deployment notices — and
-  [T27](test-27-liveness-detector.md) is where that belongs.
+- **Nothing about a real encoder.** The generator's join is a hard cut at an IDR — ordinary in broadcast, but not the content a real feed carries, and the coded-frame size at the join is not typical. Whether a real encoder produces this junction at all is exactly what [T34](test-34-real-encoder-severity.md) exists to answer, and this does not pre-empt it.
+- **Nothing about severity in the field.** A permanent stall is unambiguous here because the source keeps joining. A source that joins once and never again would show the same collapse, but the operational consequence depends on how a deployment notices — and [T27](test-27-liveness-detector.md) is where that belongs.
 
 ## Corrections
 
-**What was believed:** that unifying the two hosts' builds had to wait for the real-encoder arm,
-because the pair straddling #3375 was the only available `OLD`/`NEW` control.
+**What was believed:** that unifying the two hosts' builds had to wait for the real-encoder arm, because the pair straddling #3375 was the only available `OLD`/`NEW` control.
 
-**What is true:** the pinned bisect binaries are a strictly better control — same host, same kernel,
-same chain, one variable — and they are unaffected by what the service units run. The two-host
-arrangement was never the instrument; it was a coincidence that looked like one.
+**What is true:** the pinned bisect binaries are a strictly better control — same host, same kernel, same chain, one variable — and they are unaffected by what the service units run. The two-host arrangement was never the instrument; it was a coincidence that looked like one.
 
-**Method rule:** *a control made of two production deployments is a coincidence, not an experiment.
-If the same comparison can be made from pinned artefacts on one host, the deployments are free to
-move.*
+**Method rule:** _a control made of two production deployments is a coincidence, not an experiment. If the same comparison can be made from pinned artefacts on one host, the deployments are free to move._
 
 **What was believed:** that `ts-continuous-source.py` carried every PID on one continuous timeline.
 
-**What is true:** until it was corrected, it rebased PTS and DTS only for stream IDs
-`0xC0`–`0xEF`. The clip's AC-3 and teletext are carried as private stream 1, so every run in this
-file saw those two PIDs step back one pass span (30.25 s) at each join, unflagged, while PCR and
-the other PIDs advanced. Every verdict above was re-checked with the corrected generator
-(conclusions 3 and 5): the failing builds still fail at the join, and the healthy ones stay
-healthy, so no verdict moves. The 30 s step was a second trigger on the failing builds, not the
-cause. It also shifts the frame the failure lands on: group 24 frame 52 with the uncorrected
-generator, group 25 frame 2 with the corrected one.
+**What is true:** until it was corrected, it rebased PTS and DTS only for stream IDs `0xC0`–`0xEF`. The clip's AC-3 and teletext are carried as private stream 1, so every run in this file saw those two PIDs step back one pass span (30.25 s) at each join, unflagged, while PCR and the other PIDs advanced. Every verdict above was re-checked with the corrected generator (conclusions 3 and 5): the failing builds still fail at the join, and the healthy ones stay healthy, so no verdict moves. The 30 s step was a second trigger on the failing builds, not the cause. It also shifts the frame the failure lands on: group 24 frame 52 with the uncorrected generator, group 25 frame 2 with the corrected one.
 
-**Method rule:** *before a looped soak, scan every timestamp-bearing PID across the joins*
-([`ts-join-scan.py`](scripts/ts-join-scan.py);
-[method notes](method-notes.md#1-controls)).
+**Method rule:** _before a looped soak, scan every timestamp-bearing PID across the joins_ ([`ts-join-scan.py`](scripts/ts-join-scan.py); [method notes](method-notes.md#1-controls)).

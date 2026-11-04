@@ -1,80 +1,20 @@
 # T8b — congestion control for a permanent fixed-rate trunk
 
-> **State:** C1–C7 are executed — C1–C5 on the namespace rig (68 cells), C6 as a 14 h soak, C7 as ten 120 s random-loss arms.
-> **The experiment does not name a congestion controller, and that is its result** — C1, C2 and C4
-> rank them in three different orders, and C5 shows why the question was the wrong one: what governs
-> this feed is the **provisioning margin** and the **bottleneck queue discipline**, both of which move
-> the outcome further than any controller choice. Below ~1.2× headroom delay climbs steeply; at or
-> above it every controller is comfortable and indistinguishable. An AQM removes bufferbloat outright
-> for every controller and transport at once (554–584 ms → 101–119 ms). What is stable across all five
-> conditions is the failure *mode*: the MoQ lane loses content and never integrity — **0 continuity
-> errors in every one of its ~40 cells**, a zero the exporter guarantees by writing its own counters,
-> so the loss is read from delivered fraction and never from the count — while SRT inverts that and
-> gets worse the better-behaved the network is, reaching 17,652–22,365 errors under an AQM while
-> taking the most bytes of any lane.
-> **C3 is where the media-aware lane loses, and the mechanism is explained while the magnitudes are
-> not.** Sharing a congested bottleneck, MoQ's *aggregate* falls below what a single flow carried
-> unopposed while SRT's rises and holds — and the collapse is neither the controller (loss-based CUBIC
-> collapses like delay-sensing BBRv1) nor bufferbloat (it survives `cake`, which cut RTT from ~550 ms to
-> 100 ms). **It is the subscriber's own release deadline**, and a budget deep enough removes it
-> entirely, at 0 continuity errors throughout. But **five replicates retire the budget ladder as a set
-> of numbers**: at `n=2` with everything pinned the aggregate spans 5.11–9.14 Mb/s at a 2 s budget and
-> 6.78–8.94 at 500 ms, so the two rungs overlap and the recorded 4.29 → 10.35 ladder is one sample per
-> cell from distributions that wide. The cells where nothing sheds reproduce tightly; no cell where the
-> subscriber is actively shedding reproduces to better than a factor of two.
-> **C3 also found a subscriber that dies:** under contention `moq export ts` exits with
-> `Error: hang: moq error: old` — **not** [#3271](https://github.com/moq-dev/moq/pull/3271); the
-> authoritative numbers and the withdrawn attribution are in [C3 § subscriber death](#the-re-check-against-upstream-3271-and-the-subscriber-death-it-found) and Corrections. **C6 settles
-> permanence in BBRv1's favour** — 14 hours unattended, 0 continuity errors, 0 respawns, no stall, so
-> C1's one-in-three bloat is a transient and not a standing fault — while refuting this file's own
-> prediction about relay memory, which converged on **2.03× the ceiling T9 predicted**. One known gap
-> remains: the four segmented C2 cells are withheld (outcome matches the expected mechanism, but their
-> own RTT says the specified queue never formed). **C7 (random loss, no cap)** did not reproduce the
-> BBRv3 abort on either build, and found upstream `main`'s subscriber collapsing to a fifth of the older
-> build's delivery at 10 % loss, on either controller, bisected to the media-time interleave (#4001).
-> The mechanism is measured: every source skip under loss rewinds the exporter, and each rewind renews
-> the interleave's full `max_age` hold. Keeping the hold across a rewind restores the full rate, measured
-> on the change before it merged as [#4618](https://github.com/moq-dev/moq/pull/4618) (`e488e699`),
-> and confirmed on the merged build: `main` at `83ce47fe` keeps the full egress rate at 10 % loss. Every
-> C7 rate is egress bytes, which the export pads: graded on content, the older build's 10 % run
-> carries 2.7 % of the video ([T48](test-48-passthrough-export.md)) and the merged build's two carry
-> 8.0 % and 2.6 %. The fix restores the export's output, not the programme. The upstream discussion this test came from is
-> [moq #2432](https://github.com/moq-dev/moq/pull/2432).
+> **State:** C1–C7 are executed — C1–C5 on the namespace rig (68 cells), C6 as a 14 h soak, C7 as ten 120 s random-loss arms. **The experiment does not name a congestion controller, and that is its result** — C1, C2 and C4 rank them in three different orders, and C5 shows why the question was the wrong one: what governs this feed is the **provisioning margin** and the **bottleneck queue discipline**, both of which move the outcome further than any controller choice. Below ~1.2× headroom delay climbs steeply; at or above it every controller is comfortable and indistinguishable. An AQM removes bufferbloat outright for every controller and transport at once (554–584 ms → 101–119 ms). What is stable across all five conditions is the failure _mode_: the MoQ lane loses content and never integrity — **0 continuity errors in every one of its ~40 cells**, a zero the exporter guarantees by writing its own counters, so the loss is read from delivered fraction and never from the count — while SRT inverts that and gets worse the better-behaved the network is, reaching 17,652–22,365 errors under an AQM while taking the most bytes of any lane. **C3 is where the media-aware lane loses, and the mechanism is explained while the magnitudes are not.** Sharing a congested bottleneck, MoQ's _aggregate_ falls below what a single flow carried unopposed while SRT's rises and holds — and the collapse is neither the controller (loss-based CUBIC collapses like delay-sensing BBRv1) nor bufferbloat (it survives `cake`, which cut RTT from ~550 ms to 100 ms). **It is the subscriber's own release deadline**, and a budget deep enough removes it entirely, at 0 continuity errors throughout. But **five replicates retire the budget ladder as a set of numbers**: at `n=2` with everything pinned the aggregate spans 5.11–9.14 Mb/s at a 2 s budget and 6.78–8.94 at 500 ms, so the two rungs overlap and the recorded 4.29 → 10.35 ladder is one sample per cell from distributions that wide. The cells where nothing sheds reproduce tightly; no cell where the subscriber is actively shedding reproduces to better than a factor of two. **C3 also found a subscriber that dies:** under contention `moq export ts` exits with `Error: hang: moq error: old` — **not** [#3271](https://github.com/moq-dev/moq/pull/3271); the authoritative numbers and the withdrawn attribution are in [C3 § subscriber death](#the-re-check-against-upstream-3271-and-the-subscriber-death-it-found) and Corrections. **C6 settles permanence in BBRv1's favour** — 14 hours unattended, 0 continuity errors, 0 respawns, no stall, so C1's one-in-three bloat is a transient and not a standing fault — while refuting this file's own prediction about relay memory, which converged on **2.03× the ceiling T9 predicted**. One known gap remains: the four segmented C2 cells are withheld (outcome matches the expected mechanism, but their own RTT says the specified queue never formed). **C7 (random loss, no cap)** did not reproduce the BBRv3 abort on either build, and found upstream `main`'s subscriber collapsing to a fifth of the older build's delivery at 10 % loss, on either controller, bisected to the media-time interleave (#4001). The mechanism is measured: every source skip under loss rewinds the exporter, and each rewind renews the interleave's full `max_age` hold. Keeping the hold across a rewind restores the full rate, measured on the change before it merged as [#4618](https://github.com/moq-dev/moq/pull/4618) (`e488e699`), and confirmed on the merged build: `main` at `83ce47fe` keeps the full egress rate at 10 % loss. Every C7 rate is egress bytes, which the export pads: graded on content, the older build's 10 % run carries 2.7 % of the video ([T48](test-48-passthrough-export.md)) and the merged build's two carry 8.0 % and 2.6 %. The fix restores the export's output, not the programme. The upstream discussion this test came from is [moq #2432](https://github.com/moq-dev/moq/pull/2432).
 
 ## Objective
 
-Characterise **congestion-control behaviour for primary distribution**, which the
-[T8](test-8-srt-vs-moq.md) matrix does not: T8 ran on an over-provisioned path (~292 Mb/s raw TCP
-against a ~10 Mb/s stream), so a "100 %" cell there means "the source fitted in spare capacity," not
-"the controller behaved well." It measures resilience to *non-congestive* impairment.
+Characterise **congestion-control behaviour for primary distribution**, which the [T8](test-8-srt-vs-moq.md) matrix does not: T8 ran on an over-provisioned path (~292 Mb/s raw TCP against a ~10 Mb/s stream), so a "100 %" cell there means "the source fitted in spare capacity," not "the controller behaved well." It measures resilience to _non-congestive_ impairment.
 
 The use case is specific, and it sets the metric:
 
-- The feed is a **fixed, non-congestion-responsive VBR** stream. On the media-aware lane MoQ carries
-  the elementary essence (stuffing is stripped; CBR is rebuilt downstream by the pacer), so the
-  transport sees VBR regardless of the source mux. The feed does **not** adapt its rate to the
-  network — so this is *not* the adaptive-encoder / ABR case the CC knob
-  ([#2432](https://github.com/moq-dev/moq/pull/2432)) was opened for.
-- It must run **24/7/365, permanently**. That makes *stability over indefinite runtime* a first-class
-  requirement: an intermittent or rare failure mode is disqualifying, because over continuous
-  operation it will recur and eventually coincide with a transient.
-- The value proposition versus SRT/Zixi is **relay-scaled distribution**, not glass-to-glass latency,
-  and a downstream pacer rebuilds CBR/PCR at egress.
+- The feed is a **fixed, non-congestion-responsive VBR** stream. On the media-aware lane MoQ carries the elementary essence (stuffing is stripped; CBR is rebuilt downstream by the pacer), so the transport sees VBR regardless of the source mux. The feed does **not** adapt its rate to the network — so this is _not_ the adaptive-encoder / ABR case the CC knob ([#2432](https://github.com/moq-dev/moq/pull/2432)) was opened for.
+- It must run **24/7/365, permanently**. That makes _stability over indefinite runtime_ a first-class requirement: an intermittent or rare failure mode is disqualifying, because over continuous operation it will recur and eventually coincide with a transient.
+- The value proposition versus SRT/Zixi is **relay-scaled distribution**, not glass-to-glass latency, and a downstream pacer rebuilds CBR/PCR at egress.
 
-So the headline metric is **completeness and reconstructability** — delivered fraction, **0 continuity
-errors after the pacer**, and session survival — **not** standing latency. Queuing delay matters only
-where it (a) exceeds the receive buffer (`--latency-max`) and forces group drops, or (b) erodes the
-buffer headroom that absorbs the next transient. This is why the "bufferbloat = latency" framing of
-the upstream test does not map directly: that test optimises latency for a flow that can *fill* the
-pipe; ours is fixed-rate with a re-groomer, so **completeness under contention** is the axis.
+So the headline metric is **completeness and reconstructability** — delivered fraction, **0 continuity errors after the pacer**, and session survival — **not** standing latency. Queuing delay matters only where it (a) exceeds the receive buffer (`--latency-max`) and forces group drops, or (b) erodes the buffer headroom that absorbs the next transient. This is why the "bufferbloat = latency" framing of the upstream test does not map directly: that test optimises latency for a flow that can _fill_ the pipe; ours is fixed-rate with a re-groomer, so **completeness under contention** is the axis.
 
-The **segmented-HTTP arm asks the same question of the third data plane**, and it is the condition
-that plane has not yet been put through. [T5](test-5-network-impairment.md) and
-[T8](test-8-srt-vs-moq.md) impair it non-congestively, where it never corrupts anything and simply
-sheds time; nothing so far has asked what it does when the pipe is *smaller than the feed* and there
-is no more time to shed. Because the answer turns out to depend entirely on the receiver, the arm is
-run under two clients — the off-the-shelf `tsp -I hls` and T6's minimal re-anchoring client — which is
-the only way to tell a property of the lane from a property of one implementation.
+The **segmented-HTTP arm asks the same question of the third data plane**, and it is the condition that plane has not yet been put through. [T5](test-5-network-impairment.md) and [T8](test-8-srt-vs-moq.md) impair it non-congestively, where it never corrupts anything and simply sheds time; nothing so far has asked what it does when the pipe is _smaller than the feed_ and there is no more time to shed. Because the answer turns out to depend entirely on the receiver, the arm is run under two clients — the off-the-shelf `tsp -I hls` and T6's minimal re-anchoring client — which is the only way to tell a property of the lane from a property of one implementation.
 
 This is a characterisation, not a gate: the thesis is decided by T7 (Gate 2).
 
@@ -82,49 +22,35 @@ This is a characterisation, not a gate: the thesis is decided by T7 (Gate 2).
 
 For a permanent fixed-rate trunk, "pass" is about staying reconstructable, not about latency:
 
-1. **Complete and reconstructable.** On a provisioned path (C2–C5) the feed arrives with **0 continuity
-   errors after the pacer** and no session drop, and recovers from a transient without a gap that
-   breaks reconstruction.
-2. **Stable indefinitely (C6).** No drift, leak, or rare abort over a hours→days soak — an intermittent
-   fault is a fail even if the median run looks fine.
-3. **Fails gracefully when under-provisioned (C1).** Degradation is *thinning* (missing content, clean
-   TS), not *damage* (continuity errors) or a session/relay abort.
-4. **Queuing delay judged only against the receive buffer.** Acceptable if it stays clear of
-   `--latency-max` with headroom for a transient; a fail if it periodically approaches or exceeds it.
+1. **Complete and reconstructable.** On a provisioned path (C2–C5) the feed arrives with **0 continuity errors after the pacer** and no session drop, and recovers from a transient without a gap that breaks reconstruction.
+2. **Stable indefinitely (C6).** No drift, leak, or rare abort over a hours→days soak — an intermittent fault is a fail even if the median run looks fine.
+3. **Fails gracefully when under-provisioned (C1).** Degradation is _thinning_ (missing content, clean TS), not _damage_ (continuity errors) or a session/relay abort.
+4. **Queuing delay judged only against the receive buffer.** Acceptable if it stays clear of `--latency-max` with headroom for a transient; a fail if it periodically approaches or exceeds it.
 
-Scored in *Verdict against the pass criteria* below.
+Scored in _Verdict against the pass criteria_ below.
 
 ## Environment
 
-> Placeholders `<EC2_IP>` / `<subscriber-home-ip>` carry the machine-specific values from
-> `INSTRUCTIONS.local.md`.
+> Placeholders `<EC2_IP>` / `<subscriber-home-ip>` carry the machine-specific values from `INSTRUCTIONS.local.md`.
 
 ### Rig — prefer the namespace rig
 
-Contention is a **queue**, not a geography: the base RTT is supplied by `netem` either way. Running
-both endpoints in local network namespaces removes access-link variability and makes the result
-reproducible on any Linux host, so it is the primary rig. The real-path rig is the corroborating
-variant, not the reference.
+Contention is a **queue**, not a geography: the base RTT is supplied by `netem` either way. Running both endpoints in local network namespaces removes access-link variability and makes the result reproducible on any Linux host, so it is the primary rig. The real-path rig is the corroborating variant, not the reference.
 
-The harnesses below are **kept local** (not published) — the invocation details live in
-`INSTRUCTIONS.local.md` §7.
+The harnesses below are **kept local** (not published) — the invocation details live in `INSTRUCTIONS.local.md` §7.
 
 | Rig | Harness | Use |
-|---|---|---|
+| --- | --- | --- |
 | **Namespace (primary)** | `t8b-netns.sh` | Two netns joined by veth on one Linux host; bottleneck + queue downstream, base delay both ways. Fully controlled, no shared-host risk. |
 | Real path (corroborating) | `t8b-shaper.sh` | EC2 `<EC2_IP>` → `<subscriber-home-ip>`, shaping `ens5` egress. Media-only `prio`+`u32` lane so SSH stays clean. The real-path RTT adds to the emulated base delay — record both. |
 | RTT probe (both rigs) | `t8b-rtt-probe.sh` | Standing RTT sampled over the same window as the capture — used only as a buffer-headroom check, not as a QoE metric. |
 
 ### Controllers
 
-Pin `--server-quic-congestion-control` / `--client-quic-congestion-control` on **every** run — the
-resolved default is backend-specific and changed at #2468, and an unpinned run silently confounds the
-comparison. The relay is the sender on the downstream hop, so the relay's flag is the one that
-governs. The goal is **not** to pick a default but to identify the controller we can *pin and rely on*
-for a permanent fixed-rate trunk.
+Pin `--server-quic-congestion-control` / `--client-quic-congestion-control` on **every** run — the resolved default is backend-specific and changed at #2468, and an unpinned run silently confounds the comparison. The relay is the sender on the downstream hop, so the relay's flag is the one that governs. The goal is **not** to pick a default but to identify the controller we can _pin and rely on_ for a permanent fixed-rate trunk.
 
 | Controller | Backend | Build |
-|---|---|---|
+| --- | --- | --- |
 | CUBIC | quinn / quiche | `--server-quic-congestion-control loss` |
 | BBRv1 | quinn | quinn relay, `--server-quic-congestion-control delay` |
 | BBRv2 | quiche | single-backend relay (`--no-default-features --features quiche,websocket,uds`) |
@@ -132,23 +58,18 @@ for a permanent fixed-rate trunk.
 | SRT | — | `tsp -O srt` / `tsp -I srt`, matched buffer, as the incumbent reference |
 | Segmented HTTP | TCP/CUBIC | `t8b-segmented.sh` — `tsp -O hls` + a Python origin in the publisher namespace, 2 s segments, 6-segment window. `RECV=tsp` (off-the-shelf) or `RECV=pull` (T6's re-anchoring client). |
 
-**BBRv3 caveat.** noq/BBRv3 carries a subtract-overflow panic under high loss
-([noq #768](https://github.com/n0-computer/noq/issues/768)). A relay abort is an outage by definition
-for a permanent feed, so record an abort or a collapse as a *result*, not a reason to omit the row.
+**BBRv3 caveat.** noq/BBRv3 carries a subtract-overflow panic under high loss ([noq #768](https://github.com/n0-computer/noq/issues/768)). A relay abort is an outage by definition for a permanent feed, so record an abort or a collapse as a _result_, not a reason to omit the row.
 
 ### Source and buffers
 
-- Source: a real broadcast feed (`contrib-10m.ts`) carried media-aware, paced with
-  `tsp -I file … --infinite -P regulate --pcr-synchronous` (**not** `ffmpeg -re`, which mis-paces this
-  TS). Media-aware carriage strips stuffing, so the wire profile is VBR — the representative input.
+- Source: a real broadcast feed (`contrib-10m.ts`) carried media-aware, paced with `tsp -I file … --infinite -P regulate --pcr-synchronous` (**not** `ffmpeg -re`, which mis-paces this TS). Media-aware carriage strips stuffing, so the wire profile is VBR — the representative input.
 - Matched buffers as in T8: MoQ `--latency-max 2s`, SRT `--latency 2000` on listener and caller.
 
 ## Procedure
 
 ### 0. Calibrate the shaper before trusting any number
 
-A `tc` chain that looks right can still queue in the wrong place. Confirm the rig reproduces the
-intended profile first.
+A `tc` chain that looks right can still queue in the wrong place. Confirm the rig reproduces the intended profile first.
 
 ```bash
 sudo ./scripts/t8b-netns.sh up
@@ -158,31 +79,24 @@ sudo ./scripts/t8b-netns.sh bloat
 sudo ./scripts/t8b-netns.sh sub ./scripts/t8b-rtt-probe.sh sample 10.99.0.1 20 idle.csv
 ```
 
-Calibration passes when idle ≈ base RTT. `iperf3` is not required (and was absent on the EC2 host): a
-loss-based CUBIC run doubles as the greedy reference — it fills the FIFO, so if the CUBIC run drives
-the queue to ~base + queue-depth the bottleneck is where it should be.
+Calibration passes when idle ≈ base RTT. `iperf3` is not required (and was absent on the EC2 host): a loss-based CUBIC run doubles as the greedy reference — it fills the FIFO, so if the CUBIC run drives the queue to ~base + queue-depth the bottleneck is where it should be.
 
 ### 1. Conditions
 
-The upstream shaped-bottleneck profile (10 Mb/s source → 5 Mb/s cap, base RTT, deep queue) is used,
-but re-scoped: an *under-provisioned* cap is a failure-mode probe, while the operating point of
-interest is a *provisioned* path under contention.
+The upstream shaped-bottleneck profile (10 Mb/s source → 5 Mb/s cap, base RTT, deep queue) is used, but re-scoped: an _under-provisioned_ cap is a failure-mode probe, while the operating point of interest is a _provisioned_ path under contention.
 
 | # | Condition | Setup | What it isolates | State |
-|---|---|---|---|---|
+| --- | --- | --- | --- | --- |
 | C1 | Under-provisioned (failure mode) | `bloat`, cap < feed (~2:1) | how each CC/transport fails when the link cannot carry the feed | **run** |
 | C2 | Transient congestion / competing flow **(priority)** | provisioned cap + a competing flow or brief dip below feed rate | does the feed stay complete, and how fast it recovers; post-transient bloat | **run** (four segmented cells withheld) |
 | C3 | Coexistence / fairness | provisioned, N ∈ {2,3} flows share the class | does the feed hold its share (starvation → dropped content) | **run** on FIFO and on `cake`, plus a `--latency-max` sweep at `n=2` |
 | C4 | AQM counterfactual | `codel` / `cake` at the same bottleneck | does AQM change the completeness/latency picture | **run** |
-| C5 | Provisioning margin | cap ≈ 1.5× / 1.1× feed | where content loss *begins* per controller (an economics input) | **run** |
+| C5 | Provisioning margin | cap ≈ 1.5× / 1.1× feed | where content loss _begins_ per controller (an economics input) | **run** |
 | C6 | Long-duration soak (permanence) | provisioned, hours→days | drift / leak / rare abort a short run misses | **14.006 h, BBRv1/quinn at a 15 Mb/s cap** |
 
 ### 2. Run each cell
 
-Per controller per condition: start a **fresh** MoQ import on a unique broadcast name (`moq import`
-crashes at the ~600 s source loop wrap when replaying a looped *file* — a live permanent feed does not
-wrap, but the test harness must keep windows short; reusing a name also leaves a stale announce that
-stalls the export at 0 bytes), then capture completeness + probe over the same window.
+Per controller per condition: start a **fresh** MoQ import on a unique broadcast name (`moq import` crashes at the ~600 s source loop wrap when replaying a looped _file_ — a live permanent feed does not wrap, but the test harness must keep windows short; reusing a name also leaves a stale announce that stalls the export at 0 bytes), then capture completeness + probe over the same window.
 
 ```bash
 # relay with the controller pinned (namespace rig; per-backend binary for BBRv1/BBRv2/BBRv3)
@@ -212,176 +126,96 @@ tsp -I file t8b_bbr1.ts -P analyze -O drop | grep -E 'bitrate|packets'
 ./scripts/t8b-rtt-probe.sh summary idle.csv rtt_cubic.csv rtt_bbr1.csv rtt_bbr2.csv
 ```
 
-Every intended statistic is a printed field of the cell. For C3 that means the *aggregate* over all N
-receivers — `agg_bytes`, `agg_mbps`, `agg_pct_cap` — summed at grade time by
-[`t8b-provisioned.sh`](scripts/t8b-provisioned.sh), which then deletes the extra flows' captures itself
-(see Corrections for why that rule exists).
+Every intended statistic is a printed field of the cell. For C3 that means the _aggregate_ over all N receivers — `agg_bytes`, `agg_mbps`, `agg_pct_cap` — summed at grade time by [`t8b-provisioned.sh`](scripts/t8b-provisioned.sh), which then deletes the extra flows' captures itself (see Corrections for why that rule exists).
 
 ## Results
 
-Rig: two network namespaces on the EC2 host, 5 Mb/s `htb` bottleneck, 100 ms base RTT (2 × 50 ms
-`netem`), 500 ms `bfifo` (312 500 B). Source `contrib-10m.ts` carried media-aware (VBR on the wire),
-paced at ~9.93 Mb/s — i.e. ~2:1 over-subscription of the cap (condition **C1**, the failure mode).
-MoQ `--latency-max 2s`, SRT `--latency 2000`. Each backend used its matching relay build (quinn /
-quiche / noq); `loss` = CUBIC, `delay` = BBRv1 (quinn) / BBRv2 (quiche) / BBRv3 (noq).
+Rig: two network namespaces on the EC2 host, 5 Mb/s `htb` bottleneck, 100 ms base RTT (2 × 50 ms `netem`), 500 ms `bfifo` (312 500 B). Source `contrib-10m.ts` carried media-aware (VBR on the wire), paced at ~9.93 Mb/s — i.e. ~2:1 over-subscription of the cap (condition **C1**, the failure mode). MoQ `--latency-max 2s`, SRT `--latency 2000`. Each backend used its matching relay build (quinn / quiche / noq); `loss` = CUBIC, `delay` = BBRv1 (quinn) / BBRv2 (quiche) / BBRv3 (noq).
 
-**Calibration.** Idle RTT through the shaped path measured min 100.0 / avg 106.7 ms — at the base.
-Under load CUBIC drives the queue to ~520–600 ms (base + ~500 ms queue), confirming the bottleneck
-queue is where it should be.
+**Calibration.** Idle RTT through the shaped path measured min 100.0 / avg 106.7 ms — at the base. Under load CUBIC drives the queue to ~520–600 ms (base + ~500 ms queue), confirming the bottleneck queue is where it should be.
 
 ### C1 — Under-provisioned (failure mode), 5 Mb/s cap, 100 ms base, 500 ms queue
 
-Completeness first (delivered fraction of the cap, continuity after the pacer); queuing delay p50 per
-replicate is a secondary buffer-headroom read. 2–3 replicates per controller, 45–60 s windows.
+Completeness first (delivered fraction of the cap, continuity after the pacer); queuing delay p50 per replicate is a secondary buffer-headroom read. 2–3 replicates per controller, 45–60 s windows.
 
 | Controller (backend) | Delivered (% of cap) | CC errors | Queuing delay p50 | Character |
-|---|---|---|---|---|
+| --- | --- | --- | --- | --- |
 | CUBIC (quinn) | 65–81 % | 0 | 516 / 519 / 520 ms | stable full bloat |
 | CUBIC (quiche) | 62–63 % | 0 | 562 / 566 ms | stable full bloat |
 | BBRv1 (quinn) | 45–76 % | 0 | 226 / **591** / 234 ms | **bimodal** — occasional full bloat |
 | BBRv2 (quiche) | 67–69 % | 0 | 225 / 291 (/ 265) ms | **stable, ~½ CUBIC** |
-| BBRv3 (noq) | **11–13 %** | 0 | 595 / 597 ms | **broken** — bloats *and* starves ([noq #768](https://github.com/n0-computer/noq/issues/768)) |
+| BBRv3 (noq) | **11–13 %** | 0 | 595 / 597 ms | **broken** — bloats _and_ starves ([noq #768](https://github.com/n0-computer/noq/issues/768)) |
 | SRT (reference) | 90 % | **4279** | 583 ms | most bytes, but a damaged (unreconstructable) stream |
 | **Segmented HTTP** (`tsp` client) | **64 %** | **0** | **489 ms** | **clean until it stops — the session dies at 43 s** |
 | **Segmented HTTP** (re-anchoring client) | **99 %** | **0** | **486 ms** | **thins in whole segments; survives** |
 
-The segmented rows were measured in the same session as an SRT re-run that reproduced the published
-reference row to within noise (90 % of cap, 4,288 CC errors against 4,279, p50 582 ms against 583), so
-they sit on the same scale as the rows above them rather than merely alongside them.
+The segmented rows were measured in the same session as an SRT re-run that reproduced the published reference row to within noise (90 % of cap, 4,288 CC errors against 4,279, p50 582 ms against 583), so they sit on the same scale as the rows above them rather than merely alongside them.
 
-**Read the "Character" column as a description of this condition and not as a verdict on a controller.**
-C2 inverts this ordering and C4 flattens it; the reasons are in those sections. What C1 establishes that
-survives is the rig, the segmented lane's client dependence below, and the MoQ/SRT failure-mode split
-(Observations).
+**Read the "Character" column as a description of this condition and not as a verdict on a controller.** C2 inverts this ordering and C4 flattens it; the reasons are in those sections. What C1 establishes that survives is the rig, the segmented lane's client dependence below, and the MoQ/SRT failure-mode split (Observations).
 
 ### C1, segmented lane — the client decides whether this lane degrades or dies
 
-Two clients, one lane, one condition, opposite outcomes. This is the whole result, and it is a result
-about receiver policy rather than about segment fetching.
+Two clients, one lane, one condition, opposite outcomes. This is the whole result, and it is a result about receiver policy rather than about segment fetching.
 
-| | `tsp -I hls` | `t6-hls-pull.py` (re-anchors on failure) |
-|---|---|---|
+|  | `tsp -I hls` | `t6-hls-pull.py` (re-anchors on failure) |
+| --- | --- | --- |
 | Delivered | 3.18 Mb/s — **64 % of cap**, 32 % of source | 4.93 Mb/s — **99 % of cap**, 50 % of source |
 | Segments served | 8 consecutive, no gaps | 12 of an 18-segment span — **6 skipped** |
 | Continuity errors | 0 | 0 |
-| PCR intervals > 40 ms | 0 | 2, max 12.0 s — *the holes* |
+| PCR intervals > 40 ms | 0 | 2, max 12.0 s — _the holes_ |
 | Session at 60 s | **dead: 404 at 43 s** | alive, ~12 s behind the edge |
 
 Both replicates of each are identical to three significant figures.
 
-**`tsp` does not fall off the edge so much as walk backwards off it.** It fetches strictly in order
-and never skips, so a sustained shortfall means it slides steadily further back through the live
-window until the segment it asks for has already been deleted — then a 404, at 43 s. What it does with
-that 404 is worse than stopping: it does not check the status before handing the body to the demuxer,
-so the origin's HTML error page enters the transport stream
-(`MIME type is text/html, maybe not a valid transport stream`, then
-`synchronization lost after 126,800 packets`).
+**`tsp` does not fall off the edge so much as walk backwards off it.** It fetches strictly in order and never skips, so a sustained shortfall means it slides steadily further back through the live window until the segment it asks for has already been deleted — then a 404, at 43 s. What it does with that 404 is worse than stopping: it does not check the status before handing the body to the demuxer, so the origin's HTML error page enters the transport stream (`MIME type is text/html, maybe not a valid transport stream`, then `synchronization lost after 126,800 packets`).
 
-**Given a client that re-anchors, the same lane thins exactly as MoQ does** — and delivers more. It
-skips 6 segments to stay near the edge, producing a clean TS with holes rather than damage: 0
-continuity errors, and two PCR discontinuities of 12 s that *are* the skips. It also fills the
-bottleneck almost perfectly at 99 % of cap, where MoQ manages 45–81 %, because a fetcher that never
-requests a stale object keeps the pipe busy.
+**Given a client that re-anchors, the same lane thins exactly as MoQ does** — and delivers more. It skips 6 segments to stay near the edge, producing a clean TS with holes rather than damage: 0 continuity errors, and two PCR discontinuities of 12 s that _are_ the skips. It also fills the bottleneck almost perfectly at 99 % of cap, where MoQ manages 45–81 %, because a fetcher that never requests a stale object keeps the pipe busy.
 
-**Read the delivery advantage with its price attached.** The re-anchoring client is running roughly
-12 s behind the live edge and takes its content loss in 12 s holes; the MoQ rows are at
-`--latency-max 2s` and shed in group-sized pieces. Segmented HTTP is buying that completeness with
-about six times the latency and much coarser loss granularity, which for a broadcast hand-off is the
-wrong side of both trades even though the delivered fraction is higher.
+**Read the delivery advantage with its price attached.** The re-anchoring client is running roughly 12 s behind the live edge and takes its content loss in 12 s holes; the MoQ rows are at `--latency-max 2s` and shed in group-sized pieces. Segmented HTTP is buying that completeness with about six times the latency and much coarser loss granularity, which for a broadcast hand-off is the wrong side of both trades even though the delivered fraction is higher.
 
-Sweeping the bottleneck against the source's 9.95 Mb/s, with the `tsp` client, locates where its
-particular failure begins:
+Sweeping the bottleneck against the source's 9.95 Mb/s, with the `tsp` client, locates where its particular failure begins:
 
 | Cap | Over-subscription | Delivered | % of cap | % of source | Segments served | Lag at 60 s | Session |
-|---|---|---|---|---|---|---|---|
+| --- | --- | --- | --- | --- | --- | --- | --- |
 | 5 Mb/s | 2.0 : 1 | 3.18 Mb/s | 64 % | 32 % | 8, no gaps | 10 s behind | **404 at 43 s** |
 | 8 Mb/s | 1.24 : 1 | 6.64 Mb/s | 83 % | 67 % | 17, no gaps | 6 s behind | survives, still falling |
 | 12 Mb/s | 0.83 : 1 | 8.93 Mb/s | 74 % | 90 % | 22, no gaps | at the edge | survives, keeps up |
 
-**The 8 Mb/s row is the one to read carefully.** Surviving the window is not the same as being
-healthy: it lost about four segments of ground over 60 s against a nine-segment retention, so it is on
-the same trajectory as the 5 Mb/s cell with a longer fuse. A 60 s window is too short to call it a
-pass.
+**The 8 Mb/s row is the one to read carefully.** Surviving the window is not the same as being healthy: it lost about four segments of ground over 60 s against a nine-segment retention, so it is on the same trajectory as the 5 Mb/s cell with a longer fuse. A 60 s window is too short to call it a pass.
 
-Two properties in that ladder belong to the lane rather than to the client. **A strictly-ordered
-fetcher cannot use the bottleneck it is given** — 64 %, 83 % and 74 % of cap, including the
-over-provisioned cell; the re-anchoring client's 99 % shows the capacity was there to be taken. And
-**the lane bloats the queue even when over-provisioned**: p50 RTT is 337 ms at a 12 Mb/s cap against a
-100 ms base, because each segment fetch is a line-rate burst into the bottleneck buffer. A segmented
-trunk sharing a bottleneck with anything else will hurt it whether or not the trunk is short of
-capacity.
+Two properties in that ladder belong to the lane rather than to the client. **A strictly-ordered fetcher cannot use the bottleneck it is given** — 64 %, 83 % and 74 % of cap, including the over-provisioned cell; the re-anchoring client's 99 % shows the capacity was there to be taken. And **the lane bloats the queue even when over-provisioned**: p50 RTT is 337 ms at a 12 Mb/s cap against a 100 ms base, because each segment fetch is a line-rate burst into the bottleneck buffer. A segmented trunk sharing a bottleneck with anything else will hurt it whether or not the trunk is short of capacity.
 
 ### C2 — Transient congestion on a provisioned path, and it reverses the C1 ranking
 
-15 Mb/s cap (1.5× the feed), 100 ms base, 500 ms `bfifo`. A greedy TCP bulk flow arrives 40 s into a
-120 s window and leaves at 80 s, through the same bottleneck in the same direction. Two replicates each.
-The instrument is the receiver's output sampled once a second, so the transient is scored as three
-phases rather than averaged away; **recovery** is the first second past the transient with three
-consecutive seconds back at ≥ 95 % of the pre-transient rate.
+15 Mb/s cap (1.5× the feed), 100 ms base, 500 ms `bfifo`. A greedy TCP bulk flow arrives 40 s into a 120 s window and leaves at 80 s, through the same bottleneck in the same direction. Two replicates each. The instrument is the receiver's output sampled once a second, so the transient is scored as three phases rather than averaged away; **recovery** is the first second past the transient with three consecutive seconds back at ≥ 95 % of the pre-transient rate.
 
 | Controller | Before | During | After | Recovery | CC | PCR > 40 ms | max |
-|---|---:|---:|---:|---:|---:|---:|---:|
+| --- | --: | --: | --: | --: | --: | --: | --: |
 | CUBIC (quinn) | 9.63 / 9.63 | 9.01 / 8.16 | 9.77 / 9.43 | 3 s / 7 s | 0 | 412 / 394 | 1.20 s |
 | **BBRv1 (quinn)** | 9.56 / 9.54 | **9.36 / 9.50** | 9.79 / 9.64 | **4 s / 1 s** | **0** | 414 / 414 | 0.54 s |
 | BBRv2 (quiche) | 9.28 / 9.33 | **6.69 / 6.10** | 9.06 / 8.97 | **11 s / 13 s** | 0 | 375 / 363 | 2.72 s |
 | SRT (reference) | 9.43 / 9.43 | **9.91 / 9.97** | 10.04 / 10.04 | 1 s / 1 s | **53 / 5** | 4 / 0 | 74 ms |
 
-**BBRv2 was C1's winner and is C2's worst by a wide margin.** Under a shaped bottleneck too small for
-the feed it was the one controller that was *stable* — full delivery at half CUBIC's queuing delay on
-every replicate — and that is the row this experiment previously recommended. Provision the path
-properly and put one competing flow on it, and it gives up **28–35 % of its rate** and takes **11–13
-seconds** to come back. CUBIC gives up 6–15 % and recovers in 3–7 s. BBRv1, the controller C1
-disqualified for bimodality, barely registers the transient at all: −2 % and −0.4 %, back inside 4 s and
-1 s.
+**BBRv2 was C1's winner and is C2's worst by a wide margin.** Under a shaped bottleneck too small for the feed it was the one controller that was _stable_ — full delivery at half CUBIC's queuing delay on every replicate — and that is the row this experiment previously recommended. Provision the path properly and put one competing flow on it, and it gives up **28–35 % of its rate** and takes **11–13 seconds** to come back. CUBIC gives up 6–15 % and recovers in 3–7 s. BBRv1, the controller C1 disqualified for bimodality, barely registers the transient at all: −2 % and −0.4 %, back inside 4 s and 1 s.
 
-**So a failure-mode condition cannot rank controllers for a deployment, and C1 is now evidence for that
-rather than a ranking.** The two conditions do not disagree about any measurement; they disagree about
-which behaviour is being rewarded. A delay-based controller reading a full bottleneck buffer as a signal
-to yield is doing the right thing when the buffer is full because the link is too small, and the wrong
-thing when it is full because something else is briefly using it — the feed is not congestion-responsive,
-so yielding is content lost rather than rate deferred. BBRv2 yields hardest and therefore loses most.
-CUBIC, which needs actual loss before it backs off, holds more of the feed for the same reason it bloats.
+**So a failure-mode condition cannot rank controllers for a deployment, and C1 is now evidence for that rather than a ranking.** The two conditions do not disagree about any measurement; they disagree about which behaviour is being rewarded. A delay-based controller reading a full bottleneck buffer as a signal to yield is doing the right thing when the buffer is full because the link is too small, and the wrong thing when it is full because something else is briefly using it — the feed is not congestion-responsive, so yielding is content lost rather than rate deferred. BBRv2 yields hardest and therefore loses most. CUBIC, which needs actual loss before it backs off, holds more of the feed for the same reason it bloats.
 
-**MoQ: 0 CC in all six cells; SRT: 53 / 5 CC while gaining rate through the transient (9.91 / 9.97 Mb/s
-against 9.43 before).** The thinning-versus-damage split is in Observations.
+**MoQ: 0 CC in all six cells; SRT: 53 / 5 CC while gaining rate through the transient (9.91 / 9.97 Mb/s against 9.43 before).** The thinning-versus-damage split is in Observations.
 
-**The PCR column is the exporter defect, not the transient.** 363–414 intervals above 40 ms on every MoQ
-cell is the clustering characterised in [T18](test-18-delivery-latency.md) and filed as
-[#2937](https://github.com/moq-dev/moq/issues/2937); what the transient adds is the *maximum*, which
-tracks the hole rather than the cadence. SRT's 0–4 is the same contrast T18 measured and for the same
-reason: it carries the source mux with its own PCR spacing.
+**The PCR column is the exporter defect, not the transient.** 363–414 intervals above 40 ms on every MoQ cell is the clustering characterised in [T18](test-18-delivery-latency.md) and filed as [#2937](https://github.com/moq-dev/moq/issues/2937); what the transient adds is the _maximum_, which tracks the hole rather than the cadence. SRT's 0–4 is the same contrast T18 measured and for the same reason: it carries the source mux with its own PCR spacing.
 
 #### The segmented rows of C2 are withheld pending a re-run
 
-Four segmented cells ran and none is reportable, for a reason worth stating precisely rather than
-dismissing. The *outcome* looks exactly like the mechanism C1 identified: delivery falls from ~9–10 Mb/s
-to 2.4–3.0 Mb/s, the receiver's output file stops growing between t=41 s and t=49 s — within seconds of
-the competing flow's scheduled 40 s onset — and in three of the four it never restarts. Half of 15 Mb/s
-is less than the 10 Mb/s feed, so a client that fetches in order falls behind, leaves the origin's
-availability window, and dies on the 404. That is C1's finding arriving on a provisioned path.
+Four segmented cells ran and none is reportable, for a reason worth stating precisely rather than dismissing. The _outcome_ looks exactly like the mechanism C1 identified: delivery falls from ~9–10 Mb/s to 2.4–3.0 Mb/s, the receiver's output file stops growing between t=41 s and t=49 s — within seconds of the competing flow's scheduled 40 s onset — and in three of the four it never restarts. Half of 15 Mb/s is less than the 10 Mb/s feed, so a client that fetches in order falls behind, leaves the origin's availability window, and dies on the 404. That is C1's finding arriving on a provisioned path.
 
-**What cannot be shown is that the queue those cells experienced was the queue the condition specifies.**
-Their standing RTT reads **p95 178–183 ms against 554–584 ms on every other cell in the same condition**,
-so on the only independent evidence the rig collected, the bottleneck buffer never filled — yet the same
-greedy flow demonstrably filled it for the six MoQ and SRT cells run minutes apart under identical
-shaping. Something about these cells is not what the label says, and until it is known which, a
-collapse that *looks* like the expected mechanism is the most dangerous kind of result to publish: it
-would confirm a prior on evidence that does not support it. The re-run records the competing flow's own
-throughput per cell, which is the measurement whose absence makes this undecidable. C1's segmented
-conclusion — that behaviour under contention on this lane is a property of the *client*, not the
-transport — is unaffected, since it was measured with the shortfall applied by the cap itself and needed
-no competing flow at all.
+**What cannot be shown is that the queue those cells experienced was the queue the condition specifies.** Their standing RTT reads **p95 178–183 ms against 554–584 ms on every other cell in the same condition**, so on the only independent evidence the rig collected, the bottleneck buffer never filled — yet the same greedy flow demonstrably filled it for the six MoQ and SRT cells run minutes apart under identical shaping. Something about these cells is not what the label says, and until it is known which, a collapse that _looks_ like the expected mechanism is the most dangerous kind of result to publish: it would confirm a prior on evidence that does not support it. The re-run records the competing flow's own throughput per cell, which is the measurement whose absence makes this undecidable. C1's segmented conclusion — that behaviour under contention on this lane is a property of the _client_, not the transport — is unaffected, since it was measured with the shortfall applied by the cap itself and needed no competing flow at all.
 
 ### C4 — AQM, which deletes the queue, the controller ranking and most of the argument
 
-`codel` and `cake` in place of the 500 ms FIFO, 100 ms base, 5 Mb/s cap, no competing flow, two
-replicates each plus one BBRv3 cell per qdisc. **Read this as C1 with an AQM rather than as a provisioned
-path:** 5 Mb/s against a ~10 Mb/s feed is a 2× shortfall, so the condition isolates the queue discipline
-and holds the shortfall constant, and none of it speaks to a properly sized link. Delivered fraction is
-quoted against the cap, since against the source it is fixed at roughly half by construction.
+`codel` and `cake` in place of the 500 ms FIFO, 100 ms base, 5 Mb/s cap, no competing flow, two replicates each plus one BBRv3 cell per qdisc. **Read this as C1 with an AQM rather than as a provisioned path:** 5 Mb/s against a ~10 Mb/s feed is a 2× shortfall, so the condition isolates the queue discipline and holds the shortfall constant, and none of it speaks to a properly sized link. Delivered fraction is quoted against the cap, since against the source it is fixed at roughly half by construction.
 
 | lane | codel: of cap | CC | PCR > 40 ms | max | cake: of cap | CC | PCR > 40 ms | max |
-|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| --- | --: | --: | --: | --: | --: | --: | --: | --: |
 | CUBIC | 45 / 49 % | 0 | 51 / 56 | 4.68 s | 50 / 50 % | 0 | 60 / 58 | 3.04 s |
 | BBRv1 | 43 / 47 % | 0 | 55 / 55 | 4.68 s | 47 / 58 % | 0 | 57 / 69 | 4.68 s |
 | BBRv2 | 59 / 59 % | 0 | 69 / 72 | 3.32 s | 57 / 54 % | 0 | 67 / 65 | 3.32 s |
@@ -390,352 +224,166 @@ quoted against the cap, since against the source it is fixed at roughly half by 
 | segmented, `tsp` | 79 / 79 % | 0 | **0 / 0** | **25.0 ms** | 56 / 56 % | 0 | **0 / 0** | **25.0 ms** |
 | segmented, re-anchoring | 79 / 79 % | 11 / 11 | 1 / 1 | 10.18 s | 55 / 55 % | 21 / 21 | 2 / 2 | 9.97 s |
 
-**An AQM removes the bufferbloat completely, for every controller and every transport, and that is the
-single most consequential number here.** Standing RTT is **p50 100–108 ms against a 100 ms base, p95
-101–119 ms** — against 554–584 ms p95 on the FIFO under the same base in C1 and C2. The 520–570 ms
-queuing delay that this experiment spent C1 characterising, and that decided C1's controller ranking, is
-a property of the *queue discipline at the bottleneck*, not of the controller and not of the transport.
-Put `codel` or `cake` at the bottleneck and it is simply gone.
+**An AQM removes the bufferbloat completely, for every controller and every transport, and that is the single most consequential number here.** Standing RTT is **p50 100–108 ms against a 100 ms base, p95 101–119 ms** — against 554–584 ms p95 on the FIFO under the same base in C1 and C2. The 520–570 ms queuing delay that this experiment spent C1 characterising, and that decided C1's controller ranking, is a property of the _queue discipline at the bottleneck_, not of the controller and not of the transport. Put `codel` or `cake` at the bottleneck and it is simply gone.
 
-**With the delay gone, the controller spread very nearly goes with it.** C1 separated the controllers by
-a factor of two-and-a-half in standing delay and ~20 points of delivery; here they sit inside 43–59 %
-with zero continuity errors everywhere, and the ordering that survives is weak — BBRv2 marginally ahead
-on both AQMs, BBRv3 last on both, CUBIC and BBRv1 indistinguishable. **Between C1, C2 and C4 the
-controller ranking has now come out in three different orders under three conditions, which retires the
-question rather than answering it:** for a fixed-rate feed the controller is a second-order term, and the
-first-order terms are how the link is provisioned and what the bottleneck queue does.
+**With the delay gone, the controller spread very nearly goes with it.** C1 separated the controllers by a factor of two-and-a-half in standing delay and ~20 points of delivery; here they sit inside 43–59 % with zero continuity errors everywhere, and the ordering that survives is weak — BBRv2 marginally ahead on both AQMs, BBRv3 last on both, CUBIC and BBRv1 indistinguishable. **Between C1, C2 and C4 the controller ranking has now come out in three different orders under three conditions, which retires the question rather than answering it:** for a fixed-rate feed the controller is a second-order term, and the first-order terms are how the link is provisioned and what the bottleneck queue does.
 
-**MoQ: 0 CC in every cell; SRT: 22,365 / 17,815 CC under `codel` / `cake` at the same shortfall** — see
-Observations for the thinning-versus-damage split. MoQ's cost here is hole size: maximum PCR gaps of
-**3.0–7.1 s** where groups were dropped.
+**MoQ: 0 CC in every cell; SRT: 22,365 / 17,815 CC under `codel` / `cake` at the same shortfall** — see Observations for the thinning-versus-damage split. MoQ's cost here is hole size: maximum PCR gaps of **3.0–7.1 s** where groups were dropped.
 
-**The segmented lane's 0 PCR violations here are a symptom of lag, not a conformance win, and the
-distinction matters.** `tsp -I hls` posts 0 intervals over 40 ms and a 25.0 ms maximum — perfect, and it
-would be tempting to read as the lane keeping its timing under pressure. It is not: the client delivers a
-*contiguous* prefix of the stream and simply falls behind, which is [T5](test-5-network-impairment.md)'s
-"sheds time, not bytes" and the reason no gap appears in its PCR train. Its 79 % (codel) and 56 % (cake)
-are how far behind it got before the window closed, not how much it lost. The re-anchoring client is the
-control that proves it: given the same conditions it *does* skip, and its PCR maximum immediately becomes
-**9.97–10.18 s** with 11–21 continuity errors.
+**The segmented lane's 0 PCR violations here are a symptom of lag, not a conformance win, and the distinction matters.** `tsp -I hls` posts 0 intervals over 40 ms and a 25.0 ms maximum — perfect, and it would be tempting to read as the lane keeping its timing under pressure. It is not: the client delivers a _contiguous_ prefix of the stream and simply falls behind, which is [T5](test-5-network-impairment.md)'s "sheds time, not bytes" and the reason no gap appears in its PCR train. Its 79 % (codel) and 56 % (cake) are how far behind it got before the window closed, not how much it lost. The re-anchoring client is the control that proves it: given the same conditions it _does_ skip, and its PCR maximum immediately becomes **9.97–10.18 s** with 11–21 continuity errors.
 
-**Two `cake` cells lost the RTT instrument** (`rtt_p50=NA`) with the delivery measurement intact. Nothing
-depends on those two readings, since the other twenty-four agree on the AQM result, but they are the
-reason the RTT claim above is stated as a range over the condition rather than per cell.
+**Two `cake` cells lost the RTT instrument** (`rtt_p50=NA`) with the delivery measurement intact. Nothing depends on those two readings, since the other twenty-four agree on the AQM result, but they are the reason the RTT claim above is stated as a range over the condition rather than per cell.
 
 ### C5 — the provisioning margin, which is the number an operator actually sets
 
-The condition C2 and C4 make interesting: if the controller is second-order and an AQM deletes the queue,
-what remains is *how much headroom over content rate a fixed feed needs*. Caps of 15, 12, 11 and 10 Mb/s
-against a ~9.9 Mb/s source — 1.51×, 1.21×, 1.11× and 1.01× headroom — on the 500 ms FIFO, no competing
-flow, one replicate per cell. Delivered is against the source; delay is p50 against a 100 ms base.
+The condition C2 and C4 make interesting: if the controller is second-order and an AQM deletes the queue, what remains is _how much headroom over content rate a fixed feed needs_. Caps of 15, 12, 11 and 10 Mb/s against a ~9.9 Mb/s source — 1.51×, 1.21×, 1.11× and 1.01× headroom — on the 500 ms FIFO, no competing flow, one replicate per cell. Delivered is against the source; delay is p50 against a 100 ms base.
 
 | headroom | CUBIC | BBRv1 | BBRv2 | SRT | segmented `tsp` | segmented re-anchor |
-|---|---|---|---|---|---|---|
+| --- | --- | --- | --- | --- | --- | --- |
 | **1.51×** | 95 % / 114 ms | 95 % / 114 ms | 93 % / 113 ms | 97 % / 114 ms | 99 % / **129 ms** | 92 % / 128 ms |
 | **1.21×** | 94 % / 138 ms | 95 % / 138 ms | 93 % / 135 ms | 97 % / 126 ms | 89 % / **336 ms** | 84 % / 333 ms |
 | **1.11×** | 94 % / 173 ms | 95 % / 171 ms | 90 % / 154 ms | 97 % / 130 ms | 84 % / **369 ms** | 80 % / 367 ms |
 | **1.01×** | 92 % / **517 ms** | 92 % / 315 ms | 93 % / **229 ms** | 90 % / 570 ms **(1,035 CC)** | 79 % / 407 ms | 76 % / 405 ms |
 
-**There is no content cliff on the MoQ lane anywhere in this ladder, which was not the expected answer.**
-The condition was designed to find where content loss begins, and delivery declines gently from 95 % to
-92 % as headroom falls from 1.51× to 1.01× — with **0 continuity errors in all twelve MoQ cells**. Running
-a fixed 9.9 Mb/s feed through a 10 Mb/s pipe costs three points of content and no integrity. What responds
-to the margin instead is **standing delay**, and it responds sharply: flat at 113–114 ms through 1.51×,
-138 ms at 1.21×, 154–173 ms at 1.11×, and then 229–517 ms at 1.01×.
+**There is no content cliff on the MoQ lane anywhere in this ladder, which was not the expected answer.** The condition was designed to find where content loss begins, and delivery declines gently from 95 % to 92 % as headroom falls from 1.51× to 1.01× — with **0 continuity errors in all twelve MoQ cells**. Running a fixed 9.9 Mb/s feed through a 10 Mb/s pipe costs three points of content and no integrity. What responds to the margin instead is **standing delay**, and it responds sharply: flat at 113–114 ms through 1.51×, 138 ms at 1.21×, 154–173 ms at 1.11×, and then 229–517 ms at 1.01×.
 
-**So the deployable output of this whole experiment is a provisioning rule, not a controller.** Below
-about 1.2× headroom the FIFO begins to fill and the delay starts eating the receive buffer that absorbs
-the next transient; above it, every controller and both MoQ backends are indistinguishable and
-comfortable. That is a number an operator can act on, it is stable across the three conditions that
-measured it, and it makes the controller choice a tie-break rather than a decision.
+**So the deployable output of this whole experiment is a provisioning rule, not a controller.** Below about 1.2× headroom the FIFO begins to fill and the delay starts eating the receive buffer that absorbs the next transient; above it, every controller and both MoQ backends are indistinguishable and comfortable. That is a number an operator can act on, it is stable across the three conditions that measured it, and it makes the controller choice a tie-break rather than a decision.
 
-**The controllers separate only at 1.01×, and there they reproduce C1's ordering** — BBRv2 229 ms, BBRv1
-315 ms, CUBIC 517 ms — which is consistent rather than contradictory: C1 was also a thin-margin FIFO
-condition. The three-way disagreement across conditions is between *regimes*, not between replicates.
+**The controllers separate only at 1.01×, and there they reproduce C1's ordering** — BBRv2 229 ms, BBRv1 315 ms, CUBIC 517 ms — which is consistent rather than contradictory: C1 was also a thin-margin FIFO condition. The three-way disagreement across conditions is between _regimes_, not between replicates.
 
-**SRT's failure is a cliff where MoQ's is a slope.** It is the best lane in the ladder down to 1.11× —
-97 % delivered at 126–130 ms, better than any MoQ cell — and at 1.01× it breaks: 570 ms and **1,035
-continuity errors**. Graceful degradation against a sharp edge just above unity follows the same split as C1 — see
-Observations.
+**SRT's failure is a cliff where MoQ's is a slope.** It is the best lane in the ladder down to 1.11× — 97 % delivered at 126–130 ms, better than any MoQ cell — and at 1.01× it breaks: 570 ms and **1,035 continuity errors**. Graceful degradation against a sharp edge just above unity follows the same split as C1 — see Observations.
 
-**The segmented lane needs roughly 1.5× where MoQ needs 1.2×, and the reason is burst shape rather than
-average rate.** Its delay is already 129 ms at 1.51× and triples to 336 ms at 1.21×, where every MoQ cell
-is still at 138 ms — because each segment fetch is a line-rate burst into the bottleneck buffer
-irrespective of how much average headroom exists. It also delivers the least at every margin below 1.5×
-(89 %, 84 %, 79 %). This reproduces C1's independent reading of 337 ms at a 12 Mb/s cap to within 1 ms in
-a different session, which is the strongest cross-session agreement in the experiment. **A segmented trunk
-sharing a bottleneck hurts whatever shares it with, and needs provisioning against its bursts.**
+**The segmented lane needs roughly 1.5× where MoQ needs 1.2×, and the reason is burst shape rather than average rate.** Its delay is already 129 ms at 1.51× and triples to 336 ms at 1.21×, where every MoQ cell is still at 138 ms — because each segment fetch is a line-rate burst into the bottleneck buffer irrespective of how much average headroom exists. It also delivers the least at every margin below 1.5× (89 %, 84 %, 79 %). This reproduces C1's independent reading of 337 ms at a 12 Mb/s cap to within 1 ms in a different session, which is the strongest cross-session agreement in the experiment. **A segmented trunk sharing a bottleneck hurts whatever shares it with, and needs provisioning against its bursts.**
 
 ### C3 — coexistence, where the media-aware lane's one serious scaling result is
 
-N concurrent feeds of one transport through one 15 Mb/s bottleneck and one relay, 500 ms FIFO, 90 s per
-cell. The aggregate is a printed field of the cell (see Corrections). The `n=1` column is C5's
-cell at the identical cap and queue, so the ladder is one condition throughout.
+N concurrent feeds of one transport through one 15 Mb/s bottleneck and one relay, 500 ms FIFO, 90 s per cell. The aggregate is a printed field of the cell (see Corrections). The `n=1` column is C5's cell at the identical cap and queue, so the ladder is one condition throughout.
 
 | aggregate delivered, of the 15 Mb/s cap | n=1 | n=2 | n=3 |
-|---|---:|---:|---:|
+| --- | --: | --: | --: |
 | **MoQ, CUBIC** | 9.44 Mb/s (63 %) | **5.39 Mb/s (36 %)** | **4.48 Mb/s (30 %)** |
 | **MoQ, BBRv1** | 9.44 Mb/s (63 %) | **4.89 Mb/s (33 %)** | **4.02 Mb/s (27 %)** |
 | **SRT** | 9.63 Mb/s (64 %) | **12.65 Mb/s (84 %)** | **12.53 Mb/s (84 %)** |
 | MoQ continuity errors | 0 | 0 | 0 |
 | SRT continuity errors | 0 | 6,249 | 3,886 |
 
-At `n=1` nothing is congested — a 9.95 Mb/s feed cannot fill a 15 Mb/s cap, so 63 % is the source's own
-ceiling and all three transports sit on it. From `n=2` the offered load exceeds the cap and the lanes
-separate completely.
+At `n=1` nothing is congested — a 9.95 Mb/s feed cannot fill a 15 Mb/s cap, so 63 % is the source's own ceiling and all three transports sit on it. From `n=2` the offered load exceeds the cap and the lanes separate completely.
 
-**Adding a second media-aware feed reduces the total delivered below what a single feed delivered on its
-own** — 9.44 Mb/s at one flow, 4.89 at two — while SRT's total *rises* to 12.65 and then holds at 84 % of
-the cap however many feeds share it. This remains the one result in the experiment where the
-media-aware lane loses on something other than a filed upstream defect, and it is a *utilisation*
-problem rather than a fairness one: each flow's share falling below the fair 1/N is expected under
-contention; the sum falling below the single-flow figure is not.
+**Adding a second media-aware feed reduces the total delivered below what a single feed delivered on its own** — 9.44 Mb/s at one flow, 4.89 at two — while SRT's total _rises_ to 12.65 and then holds at 84 % of the cap however many feeds share it. This remains the one result in the experiment where the media-aware lane loses on something other than a filed upstream defect, and it is a _utilisation_ problem rather than a fairness one: each flow's share falling below the fair 1/N is expected under contention; the sum falling below the single-flow figure is not.
 
-**The controller is not the cause.** The explanation once on record was that a delay-sensing controller
-behind a permanently saturated 500 ms FIFO reads a very large delay, every flow reads it at once, and they
-all back off together. Loss-based CUBIC does not sense delay, and it collapses to **30 % against BBRv1's
-27 %** at three flows and 36 % against 33 % at two — inside the spread between them at every N. So the
-collapse is common to both QUIC controllers and absent from SRT on the same queue at the same RTT
-(p50 549–594 ms across all six cells).
+**The controller is not the cause.** The explanation once on record was that a delay-sensing controller behind a permanently saturated 500 ms FIFO reads a very large delay, every flow reads it at once, and they all back off together. Loss-based CUBIC does not sense delay, and it collapses to **30 % against BBRv1's 27 %** at three flows and 36 % against 33 % at two — inside the spread between them at every N. So the collapse is common to both QUIC controllers and absent from SRT on the same queue at the same RTT (p50 549–594 ms across all six cells).
 
 #### C3 under `cake` — the AQM counterfactual, and it does not rescue the lane
 
-The same nine cells — three transports by three flow counts — with one thing changed: the leaf queue at
-the bottleneck is `cake` instead of the 500 ms FIFO, which is C4's AQM. Cap, window, clip, flow counts, transports and the grading are C3's, and
-the loop publisher was stopped for both ladders.
+The same nine cells — three transports by three flow counts — with one thing changed: the leaf queue at the bottleneck is `cake` instead of the 500 ms FIFO, which is C4's AQM. Cap, window, clip, flow counts, transports and the grading are C3's, and the loop publisher was stopped for both ladders.
 
-| aggregate, of the 15 Mb/s cap | n=1 | n=2 | n=3 | | n=1 | n=2 | n=3 |
-|---|---:|---:|---:|---|---:|---:|---:|
-| | **FIFO** | | | | **cake** | | |
-| **MoQ, CUBIC** | 9.44 (63 %) | 5.39 (36 %) | 4.48 (30 %) | | 9.44 (63 %) | **7.17 (48 %)** | **6.04 (40 %)** |
-| **MoQ, BBRv1** | 9.44 (63 %) | 4.89 (33 %) | 4.02 (27 %) | | 9.44 (63 %) | **5.77 (38 %)** | **5.25 (35 %)** |
-| **SRT** | 9.63 (64 %) | 12.65 (84 %) | 12.53 (84 %) | | 9.71 (65 %) | **12.64 (84 %)** | **13.29 (89 %)** |
-| MoQ continuity errors | 0 | 0 | 0 | | 0 | 0 | 0 |
-| SRT continuity errors | 0 | 6,249 | 3,886 | | 0 | **26,211** | **27,256** |
-| RTT p50 / p95 (ms) | 522–596 / 594–602 | | | | **100 / 101** | | |
+| aggregate, of the 15 Mb/s cap | n=1 | n=2 | n=3 |  | n=1 | n=2 | n=3 |
+| --- | --: | --: | --: | --- | --: | --: | --: |
+|  | **FIFO** |  |  |  | **cake** |  |  |
+| **MoQ, CUBIC** | 9.44 (63 %) | 5.39 (36 %) | 4.48 (30 %) |  | 9.44 (63 %) | **7.17 (48 %)** | **6.04 (40 %)** |
+| **MoQ, BBRv1** | 9.44 (63 %) | 4.89 (33 %) | 4.02 (27 %) |  | 9.44 (63 %) | **5.77 (38 %)** | **5.25 (35 %)** |
+| **SRT** | 9.63 (64 %) | 12.65 (84 %) | 12.53 (84 %) |  | 9.71 (65 %) | **12.64 (84 %)** | **13.29 (89 %)** |
+| MoQ continuity errors | 0 | 0 | 0 |  | 0 | 0 | 0 |
+| SRT continuity errors | 0 | 6,249 | 3,886 |  | 0 | **26,211** | **27,256** |
+| RTT p50 / p95 (ms) | 522–596 / 594–602 |  |  |  | **100 / 101** |  |  |
 
-**The AQM did its job and the collapse survived it.** RTT is the proof that `cake` worked: p50 falls from
-522–596 ms to 100 ms — the base 2×50 ms and essentially nothing else — so ~450–500 ms of standing queue
-was removed from every cell. The aggregate improves by about a third in relative terms (CUBIC `n=2`
-5.39 → 7.17) and stays far below the single-flow rate: at `n=2` and `n=3` two and three media-aware feeds
-still deliver **less in total than one feed delivered unopposed**. C4's prediction that removing the
-queueing pathology would remove this was therefore wrong, and that is worth having as a falsification
-rather than an untested caveat: whatever causes C3 is not bufferbloat.
+**The AQM did its job and the collapse survived it.** RTT is the proof that `cake` worked: p50 falls from 522–596 ms to 100 ms — the base 2×50 ms and essentially nothing else — so ~450–500 ms of standing queue was removed from every cell. The aggregate improves by about a third in relative terms (CUBIC `n=2` 5.39 → 7.17) and stays far below the single-flow rate: at `n=2` and `n=3` two and three media-aware feeds still deliver **less in total than one feed delivered unopposed**. C4's prediction that removing the queueing pathology would remove this was therefore wrong, and that is worth having as a falsification rather than an untested caveat: whatever causes C3 is not bufferbloat.
 
-Two side results. SRT's scaling is unchanged (84 → 84 → 89 %) and the separation from MoQ is intact —
-**13.29 against 6.04 Mb/s at `n=3`, a factor of 2.2**. But SRT's continuity errors rise **four- to sevenfold** under
-the AQM, to 26,211 and 27,256, while MoQ records zero in all four of its contended cells — by construction, since
-its exporter writes its own counters. So SRT's larger total is not more delivered programme; it is the same
-shortfall taken as corruption instead of as absence.
+Two side results. SRT's scaling is unchanged (84 → 84 → 89 %) and the separation from MoQ is intact — **13.29 against 6.04 Mb/s at `n=3`, a factor of 2.2**. But SRT's continuity errors rise **four- to sevenfold** under the AQM, to 26,211 and 27,256, while MoQ records zero in all four of its contended cells — by construction, since its exporter writes its own counters. So SRT's larger total is not more delivered programme; it is the same shortfall taken as corruption instead of as absence.
 
 #### The mechanism: the shed tracks the subscriber's latency budget
 
-With bufferbloat eliminated the remaining candidates were independent per-deliverer shedding driven by the
-latency budget, or a loss below the deliverers in the shared lane. Only the first predicts that the
-aggregate moves when the budget moves. MoQ `n=2` under `cake`, everything as above, varying only the
-subscribers' `--latency-max` (both flows together — moving one would make it a claim about one flow of N):
+With bufferbloat eliminated the remaining candidates were independent per-deliverer shedding driven by the latency budget, or a loss below the deliverers in the shared lane. Only the first predicts that the aggregate moves when the budget moves. MoQ `n=2` under `cake`, everything as above, varying only the subscribers' `--latency-max` (both flows together — moving one would make it a claim about one flow of N):
 
 | `--latency-max` | 500 ms | 2 s | 8 s | 30 s |
-|---|---:|---:|---:|---:|
+| --- | --: | --: | --: | --: |
 | **MoQ, CUBIC** aggregate | 4.29 Mb/s (29 %) | 5.50 Mb/s (37 %) | **9.30 Mb/s (62 %)** | **10.35 Mb/s (69 %)** |
 | **MoQ, BBRv1** aggregate | 4.75 Mb/s (32 %) | — | — | **10.43 Mb/s (70 %)** |
 | continuity errors | 0 | 0 | 0 | 0 |
 
-**The shed tracks the budget, and at a deep enough budget there is no collapse at all.** The aggregate
-rises monotonically by a factor of **2.4** across the sweep on one controller and 2.2 on the other, and at
-30 s the `n=2` aggregate (10.35 Mb/s) *exceeds* the `n=1` single-flow rate (9.44). Continuity stays at
-zero throughout, which is what says this is shedding rather than damage: the subscriber is discarding
-whole groups that missed its deadline, cleanly, exactly as `--latency-max` specifies.
+**The shed tracks the budget, and at a deep enough budget there is no collapse at all.** The aggregate rises monotonically by a factor of **2.4** across the sweep on one controller and 2.2 on the other, and at 30 s the `n=2` aggregate (10.35 Mb/s) _exceeds_ the `n=1` single-flow rate (9.44). Continuity stays at zero throughout, which is what says this is shedding rather than damage: the subscriber is discarding whole groups that missed its deadline, cleanly, exactly as `--latency-max` specifies.
 
-So C3 is not an unexplained utilisation defect. It is the release deadline binding: under contention each
-subscriber independently drops groups that arrive too late for its own budget, N subscribers do so
-independently, and the sum of what survives falls below what one unopposed subscriber delivered. The knob
-is the budget, and it is a deployment choice rather than a protocol property. **What the ladder at
-`--latency-max 2s` measures is a 2-second trunk, not a ceiling on the transport** — and it puts SRT's
-larger total in its place. SRT ran at `--latency 2000`, the same budget, and met the shortfall by
-discarding individual late packets rather than whole groups, which is what its 26,211 and 27,256
-continuity errors are. Both lanes shed at the same deadline; one sheds in units a decoder can survive
-and the other in units it cannot.
+So C3 is not an unexplained utilisation defect. It is the release deadline binding: under contention each subscriber independently drops groups that arrive too late for its own budget, N subscribers do so independently, and the sum of what survives falls below what one unopposed subscriber delivered. The knob is the budget, and it is a deployment choice rather than a protocol property. **What the ladder at `--latency-max 2s` measures is a 2-second trunk, not a ceiling on the transport** — and it puts SRT's larger total in its place. SRT ran at `--latency 2000`, the same budget, and met the shortfall by discarding individual late packets rather than whole groups, which is what its 26,211 and 27,256 continuity errors are. Both lanes shed at the same deadline; one sheds in units a decoder can survive and the other in units it cannot.
 
-**Three things do not reproduce, and the third retires the ladder above as a quantity.** Per-flow shares
-move freely between runs: SRT's flow 1 was 90 % of source at `n=2` in the first pass and 35 % in the
-second; BBRv1's was 46 % and then 26 %. The *aggregate* was recorded as reproducing to about ±15 % from
-the two cells run at CUBIC `n=2` under `cake` at `--latency-max 2s` — the matrix cell and the sweep's own
-2 s point — which gave **7.17 and 5.50 Mb/s**. **Five replicates say that spread was optimistic.** At
-`n=2` under `cake`, `--latency-max 2s`, everything pinned, the aggregate ranges **5.11–9.14 Mb/s** across
-five runs of one binary, and at 500 ms it ranges **6.78–8.94**. The 500 ms and 2 s distributions overlap
-almost completely, so **the monotone budget ladder is not recoverable from replicated cells**: its two
-tight-budget rungs are one sample each from distributions this wide, and the sweep's own 500 ms figure of
-4.29 Mb/s falls below everything five replicates produced.
+**Three things do not reproduce, and the third retires the ladder above as a quantity.** Per-flow shares move freely between runs: SRT's flow 1 was 90 % of source at `n=2` in the first pass and 35 % in the second; BBRv1's was 46 % and then 26 %. The _aggregate_ was recorded as reproducing to about ±15 % from the two cells run at CUBIC `n=2` under `cake` at `--latency-max 2s` — the matrix cell and the sweep's own 2 s point — which gave **7.17 and 5.50 Mb/s**. **Five replicates say that spread was optimistic.** At `n=2` under `cake`, `--latency-max 2s`, everything pinned, the aggregate ranges **5.11–9.14 Mb/s** across five runs of one binary, and at 500 ms it ranges **6.78–8.94**. The 500 ms and 2 s distributions overlap almost completely, so **the monotone budget ladder is not recoverable from replicated cells**: its two tight-budget rungs are one sample each from distributions this wide, and the sweep's own 500 ms figure of 4.29 Mb/s falls below everything five replicates produced.
 
-**What survives, and what does not.** The *mechanism* stands — the shed is per-subscriber deadline
-shedding, and the two cells where nothing sheds reproduce tightly (uncontended `n=1` at 9.49 against the
-recorded 9.44; `n=2` at a 30 s budget at 10.01 against 10.35). The **magnitudes do not**: no cell in
-which the subscriber is actively shedding reproduced to better than a factor of two, so the ladder should
-be read as "a deep budget removes the collapse" and never as a rate at a budget. The steepness question
-this section used to leave open is therefore not open but ill-posed: there was no stable marginal cost to
-explain.
+**What survives, and what does not.** The _mechanism_ stands — the shed is per-subscriber deadline shedding, and the two cells where nothing sheds reproduce tightly (uncontended `n=1` at 9.49 against the recorded 9.44; `n=2` at a 30 s budget at 10.01 against 10.35). The **magnitudes do not**: no cell in which the subscriber is actively shedding reproduced to better than a factor of two, so the ladder should be read as "a deep budget removes the collapse" and never as a rate at a budget. The steepness question this section used to leave open is therefore not open but ill-posed: there was no stable marginal cost to explain.
 
 #### The re-check against upstream #3271, and the subscriber death it found
 
-[#3271](https://github.com/moq-dev/moq/pull/3271) (merged 1 Sep) rewrote the exact gate this section
-attributes C3 to. Before it, `Consumer::poll_read` skipped a missing lower group as soon as any newer
-group was buffered — the pre-#3271 source says so outright, *"on a live track a buffered higher sequence
-means the missing one was evicted (the relay delivers in order), not merely late, so waiting is
-futile"* — and after it the gap is held until `max_timestamp - next_start >= latency`, i.e. until the
-budget expires. `moq export ts --latency-max` reaches that gate, so C3's mechanism is inside the change.
+[#3271](https://github.com/moq-dev/moq/pull/3271) (merged 1 Sep) rewrote the exact gate this section attributes C3 to. Before it, `Consumer::poll_read` skipped a missing lower group as soon as any newer group was buffered — the pre-#3271 source says so outright, _"on a live track a buffered higher sequence means the missing one was evicted (the relay delivers in order), not merely late, so waiting is futile"_ — and after it the gap is held until `max_timestamp - next_start >= latency`, i.e. until the budget expires. `moq export ts --latency-max` reaches that gate, so C3's mechanism is inside the change.
 
-Graded as the isolating pair `bec7c4b59^` against `bec7c4b59`, which differ by one file and carry the
-rest of the delivery path identically. **Uncontended, it is a perfect null: 9.49 Mb/s on both arms, zero
-evictions on both.** Contended, it does something worse than change a rate — but not, as this file
-first recorded, only on the post arm.
+Graded as the isolating pair `bec7c4b59^` against `bec7c4b59`, which differ by one file and carry the rest of the delivery path identically. **Uncontended, it is a perfect null: 9.49 Mb/s on both arms, zero evictions on both.** Contended, it does something worse than change a rate — but not, as this file first recorded, only on the post arm.
 
 | contended cells, isolating pair, old relay | pre (`8206a35a6`) | post (`bec7c4b59`) |
-|---|---:|---:|
+| --- | --: | --: |
 | cells run | 15 | 15 |
 | cells where a `moq export ts` **exited with `Error: hang: moq error: old`** | **3** | **9** |
 | "current group evicted" warnings per surviving cell | 807–1113 | 11–80 |
 | continuity errors, every cell | 0 | 0 |
 
-Fisher exact on 9/15 against 3/15 gives **p ≈ 0.060** — the direction is consistent with #3271
-aggravating the failure, and the sample does not establish it. **This corrects a 6-against-0 split
-this file previously reported at p ≈ 0.016**, which was a counting error rather than a measurement:
-each contended cell runs two subscribers and writes `sub.log` and `sub.2.log`, and the death detector
-read only the first. All three pre-arm deaths are in `sub.2.log`, with `sub.log` clean in every one.
+Fisher exact on 9/15 against 3/15 gives **p ≈ 0.060** — the direction is consistent with #3271 aggravating the failure, and the sample does not establish it. **This corrects a 6-against-0 split this file previously reported at p ≈ 0.016**, which was a counting error rather than a measurement: each contended cell runs two subscribers and writes `sub.log` and `sub.2.log`, and the death detector read only the first. All three pre-arm deaths are in `sub.2.log`, with `sub.log` clean in every one.
 
 **#3271 is not the cause, on three independent grounds.**
 
-1. **The pre-#3271 client dies too**, 3 of 15 cells on the same relay, once the second subscriber's log
-   is read.
-2. **The failure predates the comparison entirely** — the same exit appears on an older client in an
-   earlier C3 cell (`sub.3.log`; build `eab96019`).
-3. **It reproduces on the current relay.** Every cell in the table shares `moq-relay`
-   **0.13.7-5e0e98c1**, a July build pinned for C2's controller comparison, and the mechanism runs
-   through the *relay's* group eviction. Crossed over both versions, 5 replicates each:
+1. **The pre-#3271 client dies too**, 3 of 15 cells on the same relay, once the second subscriber's log is read.
+2. **The failure predates the comparison entirely** — the same exit appears on an older client in an earlier C3 cell (`sub.3.log`; build `eab96019`).
+3. **It reproduces on the current relay.** Every cell in the table shares `moq-relay` **0.13.7-5e0e98c1**, a July build pinned for C2's controller comparison, and the mechanism runs through the _relay's_ group eviction. Crossed over both versions, 5 replicates each:
 
-   | | pre-#3271 client | post-#3271 client |
-   |---|---:|---:|
-   | `moq-relay` 0.13.7 | 2 / 5 cells | 2 / 5 |
-   | `moq-relay` 0.14.14 | 4 / 5 | 3 / 5 |
+   |                     | pre-#3271 client | post-#3271 client |
+   | ------------------- | ---------------: | ----------------: |
+   | `moq-relay` 0.13.7  |      2 / 5 cells |             2 / 5 |
+   | `moq-relay` 0.14.14 |            4 / 5 |             3 / 5 |
 
-   **6 of 10 pre against 5 of 10 post settles it: there is no client-side effect.** By relay it is
-   7 of 10 new against 4 of 10 old, which at this n is not a relay effect either (p ≈ 0.37). Eviction
-   counts, meanwhile, differ by two orders of magnitude between relay versions — 39–1973 per cell on
-   0.13.7 against 2–7 on 0.14.14 — while the exit rate does not follow them, so **the trigger is not
-   simply "many evictions"**.
+   **6 of 10 pre against 5 of 10 post settles it: there is no client-side effect.** By relay it is 7 of 10 new against 4 of 10 old, which at this n is not a relay effect either (p ≈ 0.37). Eviction counts, meanwhile, differ by two orders of magnitude between relay versions — 39–1973 per cell on 0.13.7 against 2–7 on 0.14.14 — while the exit rate does not follow them, so **the trigger is not simply "many evictions"**.
 
-So the failure mode is real, current, and frequent, and it belongs to the contended path rather than to
-any one commit. On the current released pair (`moq` 0.9.15 / `moq-relay` 0.14.14) it takes **6 of 8
-cells and 7 of 16 subscribers**, at `cc=0` in every graded capture, with one cell losing both
-subscribers 16 s apart. The drafted upstream issue attributing it to #3271 was withdrawn; the
-reproduction-framed report that replaces it is below.
+So the failure mode is real, current, and frequent, and it belongs to the contended path rather than to any one commit. On the current released pair (`moq` 0.9.15 / `moq-relay` 0.14.14) it takes **6 of 8 cells and 7 of 16 subscribers**, at `cc=0` in every graded capture, with one cell losing both subscribers 16 s apart. The drafted upstream issue attributing it to #3271 was withdrawn; the reproduction-framed report that replaces it is below.
 
-The eviction asymmetry between the client arms is real and still worth recording: on the old relay the
-pre arm evicts **constantly** — 807 to 1113 per 90 s cell — and mostly survives, because it has already
-skipped past everything it loses, whereas the post arm evicts one to two orders of magnitude less and
-dies more often, consistent with waiting for a specific group inside its budget while the relay evicts
-it. That remains a plausible aggravating mechanism at p ≈ 0.060. It is not a sufficient one, and it is
-not the cause.
+The eviction asymmetry between the client arms is real and still worth recording: on the old relay the pre arm evicts **constantly** — 807 to 1113 per 90 s cell — and mostly survives, because it has already skipped past everything it loses, whereas the post arm evicts one to two orders of magnitude less and dies more often, consistent with waiting for a specific group inside its budget while the relay evicts it. That remains a plausible aggravating mechanism at p ≈ 0.060. It is not a sufficient one, and it is not the cause.
 
-Two things this is *not*. It is not a continuity failure: every cell on both arms records 0 continuity
-errors, so what the delivered bytes carry stays conformant right up to the exit. And it is not visible in
-PCR-derived measures — the exported PCR is a regenerated uniform grid, so the arm delivering 40 % fewer
-bytes reads a *better* `keep_up`, which is the T24 property showing up again and the reason delivered
-programme on this lane needs per-PID access-unit counting rather than PCR.
+Two things this is _not_. It is not a continuity failure: every cell on both arms records 0 continuity errors, so what the delivered bytes carry stays conformant right up to the exit. And it is not visible in PCR-derived measures — the exported PCR is a regenerated uniform grid, so the arm delivering 40 % fewer bytes reads a _better_ `keep_up`, which is the T24 property showing up again and the reason delivered programme on this lane needs per-PID access-unit counting rather than PCR.
 
-For primary distribution this matters more than the rate it was looking for: a subscriber that sheds is
-degraded, and a subscriber that exits is off air. It is also a re-opening of the failure class
-[T6](test-6-relay-resilience.md) closed — the exporter used to die on session loss, which was fixed
-upstream as the most consequential resilience gap on this lane, and this is a new route to the same
-outcome.
+For primary distribution this matters more than the rate it was looking for: a subscriber that sheds is degraded, and a subscriber that exits is off air. It is also a re-opening of the failure class [T6](test-6-relay-resilience.md) closed — the exporter used to die on session loss, which was fixed upstream as the most consequential resilience gap on this lane, and this is a new route to the same outcome.
 
 #### #3491 survives on the catalog track: the fix reached the media consumer and not the JSON one
 
-P0-i re-ran the failure as its own experiment rather than as a by-product of the #3271 comparison,
-with the two guards the withdrawn report lacked: **every** subscriber's log is classified, and a cell
-capturing under 200 kB is scored *void* rather than as a survivor. Rig
-[`t8b-export-death.sh`](scripts/t8b-export-death.sh); three concurrent flows of the ~9.95 Mb/s clip
-through one relay at a 15 Mb/s cap, 100 ms base RTT, `bfifo` 500 ms, 90 s cells, `--max-age 2s`,
-five replicates per arm interleaved in one session.
+P0-i re-ran the failure as its own experiment rather than as a by-product of the #3271 comparison, with the two guards the withdrawn report lacked: **every** subscriber's log is classified, and a cell capturing under 200 kB is scored _void_ rather than as a survivor. Rig [`t8b-export-death.sh`](scripts/t8b-export-death.sh); three concurrent flows of the ~9.95 Mb/s clip through one relay at a 15 Mb/s cap, 100 ms base RTT, `bfifo` 500 ms, 90 s cells, `--max-age 2s`, five replicates per arm interleaved in one session.
 
 | arm | contains [#3515](https://github.com/moq-dev/moq/pull/3515) | subscribers exited | exit message | track |
-|---|---|---:|---|---|
+| --- | --- | --: | --- | --- |
 | `moq 0.9.15` (`046893254`) | **no** — positive control | 4 / 15 | `Error: hang: moq error: old` | a media container track |
 | `moq 0.11.2-615d166d` (current `main`) | **yes** | **1 / 15** | `Error: json: old` | `catalog.json` |
 
-**The build ordering is the whole result, and it was nearly misread.** `#3515` — the fix that closed
-[#3491](https://github.com/moq-dev/moq/issues/3491) — is *not* an ancestor of the 0.9.15 release, so
-the `old` arm is **pre-fix** and its 4 of 15 is the known defect behaving as reported. That makes it a
-valid positive control rather than a second finding. The `new` arm **does** contain #3515, and it
-still lost a subscriber — through a different consumer.
+**The build ordering is the whole result, and it was nearly misread.** `#3515` — the fix that closed [#3491](https://github.com/moq-dev/moq/issues/3491) — is _not_ an ancestor of the 0.9.15 release, so the `old` arm is **pre-fix** and its 4 of 15 is the known defect behaving as reported. That makes it a valid positive control rather than a second finding. The `new` arm **does** contain #3515, and it still lost a subscriber — through a different consumer.
 
-**The fix reached the container consumer and not the JSON one.** `#3515` gave
-`moq-mux/src/container/consumer.rs` a skip for a transport-evicted group, and corrected `moq-net` so
-the skip actually triggers. But `moq export ts` reads **one JSON catalog track alongside seven media
-tracks**, and the catalog consumer has no equivalent. `Error: json: old` is
-`moq_mux::Error::Json(moq_json::Error::Net(moq_net::Error::Old))`, where `moq-json`'s `Net` variant is
-declared `#[error(transparent)]` over `moq_net::Error` — so a lost catalog group propagates out with
-no classification attempted and nothing logged. On a snapshot track this is the easiest case to
-argue: `Error::Old` means *the value you hold has been superseded*, and the correct response is to
-take the newer group, which is what the reader wanted.
+**The fix reached the container consumer and not the JSON one.** `#3515` gave `moq-mux/src/container/consumer.rs` a skip for a transport-evicted group, and corrected `moq-net` so the skip actually triggers. But `moq export ts` reads **one JSON catalog track alongside seven media tracks**, and the catalog consumer has no equivalent. `Error: json: old` is `moq_mux::Error::Json(moq_json::Error::Net(moq_net::Error::Old))`, where `moq-json`'s `Net` variant is declared `#[error(transparent)]` over `moq_net::Error` — so a lost catalog group propagates out with no classification attempted and nothing logged. On a snapshot track this is the easiest case to argue: `Error::Old` means _the value you hold has been superseded_, and the correct response is to take the newer group, which is what the reader wanted.
 
-**Three fatal sites in this path, none of which logs.** The catalog route above; the container
-consumer's early `return Poll::Ready(Err(e))`, whose explanatory `warn!` sits *after* it so only the
-handled case is logged; and `poll_read_finish`'s `track.poll_recv_group(waiter)?`, which has no skip
-path by construction. From outside they are indistinguishable, which is why this took three sessions
-and one withdrawn issue to characterise.
+**Three fatal sites in this path, none of which logs.** The catalog route above; the container consumer's early `return Poll::Ready(Err(e))`, whose explanatory `warn!` sits _after_ it so only the handled case is logged; and `poll_read_finish`'s `track.poll_recv_group(waiter)?`, which has no skip path by construction. From outside they are indistinguishable, which is why this took three sessions and one withdrawn issue to characterise.
 
-On the pre-fix arm the log timeline suggests the two media routes are connected rather than
-independent: a dying subscriber's entire 90 s log contains **exactly one** `container::Consumer`
-event — the *handled* eviction, `error=Hang(Moq(Old))` — and **4.7 ms later the process is tearing
-down**, everything between being `Drop` noise from the local producers unwinding. The skip does
-`pending.pop_front()`; if that empties `pending`, the next iteration goes straight to the track-level
-`?`. Consistent with #3515's diagnosis, and not separable without ask (2)'s logging.
+On the pre-fix arm the log timeline suggests the two media routes are connected rather than independent: a dying subscriber's entire 90 s log contains **exactly one** `container::Consumer` event — the _handled_ eviction, `error=Hang(Moq(Old))` — and **4.7 ms later the process is tearing down**, everything between being `Drop` noise from the local producers unwinding. The skip does `pending.pop_front()`; if that empties `pending`, the next iteration goes straight to the track-level `?`. Consistent with #3515's diagnosis, and not separable without ask (2)'s logging.
 
-**A registered prediction was tested and did not hold.** If the fatal `Old` were the frame-level
-drift-budget expiry in `moq-net/src/model/frame.rs` — whose own comment calls that park "the stall the
-drift budget exists to bound" — the death rate should fall monotonically as the budget rises. Held at
-three concurrent flows on the pre-fix build, varying only `--max-age`:
+**A registered prediction was tested and did not hold.** If the fatal `Old` were the frame-level drift-budget expiry in `moq-net/src/model/frame.rs` — whose own comment calls that park "the stall the drift budget exists to bound" — the death rate should fall monotonically as the budget rises. Held at three concurrent flows on the pre-fix build, varying only `--max-age`:
 
 | `--max-age` | subscribers exited | evictions per subscriber |
-|---|---:|---|
-| 500 ms | **6 / 9** | 1–6 |
-| 2 s | 4 / 15 | 1–12 |
-| 8 s | 3 / 9 | 0–18 |
+| ----------- | -----------------: | ------------------------ |
+| 500 ms      |          **6 / 9** | 1–6                      |
+| 2 s         |             4 / 15 | 1–12                     |
+| 8 s         |              3 / 9 | 0–18                     |
 
-The shortest budget is clearly the worst, and **2 s against 8 s shows no trend at this n**. Deaths
-persist at an 8 s budget, where a stall would have to exceed eight seconds to expire a frame, so the
-drift budget aggravates the failure without explaining it. Eviction counts do not track the death
-rate in either direction, which also rules out "many evictions" as the trigger — the same conclusion
-the relay-version cross above reached.
+The shortest budget is clearly the worst, and **2 s against 8 s shows no trend at this n**. Deaths persist at an 8 s budget, where a stall would have to exceed eight seconds to expire a frame, so the drift budget aggravates the failure without explaining it. Eviction counts do not track the death rate in either direction, which also rules out "many evictions" as the trigger — the same conclusion the relay-version cross above reached.
 
-**What P0-i settles and what it does not.** Settled: the failure survives #3515 on current `main`
-through the catalog consumer; the pre-fix build reproduces the original defect, so the rig is known to
-provoke the condition; three fatal sites in this path log nothing; and the stream behind the exit is
-conformant (`cc = 0`) right to the last byte. Not settled: which producer raises the `Error::Old`,
-which cannot be established from outside precisely because none of the sites logs. The upstream draft
-is written around that boundary — it asks for the catalog consumer to get the skip #3515 gave the
-container consumer, and for the three sites to log — and neither ask depends on the unknown.
-**Filed as [#3897](https://github.com/moq-dev/moq/issues/3897)**, as a new issue rather than a
-comment because [#3491](https://github.com/moq-dev/moq/issues/3491) is closed, and **closed the same
-day** by [#3907](https://github.com/moq-dev/moq/pull/3907).
+**What P0-i settles and what it does not.** Settled: the failure survives #3515 on current `main` through the catalog consumer; the pre-fix build reproduces the original defect, so the rig is known to provoke the condition; three fatal sites in this path log nothing; and the stream behind the exit is conformant (`cc = 0`) right to the last byte. Not settled: which producer raises the `Error::Old`, which cannot be established from outside precisely because none of the sites logs. The upstream draft is written around that boundary — it asks for the catalog consumer to get the skip #3515 gave the container consumer, and for the three sites to log — and neither ask depends on the unknown. **Filed as [#3897](https://github.com/moq-dev/moq/issues/3897)**, as a new issue rather than a comment because [#3491](https://github.com/moq-dev/moq/issues/3491) is closed, and **closed the same day** by [#3907](https://github.com/moq-dev/moq/pull/3907).
 
-*One rig-hygiene note from this pass, because it cost an hour of misdirected debugging: the run
-completed all ten cells and then emitted `line 172: re: command not found` and skipped its own summary
-block, while both copies of the script passed `bash -n` afterwards. `bash` reads a script
-incrementally by byte offset, and the file had been redeployed mid-run. Never edit a running shell
-script — see [method-notes](method-notes.md).*
+_One rig-hygiene note from this pass, because it cost an hour of misdirected debugging: the run completed all ten cells and then emitted `line 172: re: command not found` and skipped its own summary block, while both copies of the script passed `bash -n` afterwards. `bash` reads a script incrementally by byte offset, and the file had been redeployed mid-run. Never edit a running shell script — see [method-notes](method-notes.md)._
 
 ### C6 — permanence: the transport passes, and the memory prediction does not
 
-BBRv1/quinn at a 15 Mb/s cap, **14.006 h unattended** (50,424 s, 829 one-minute samples), chosen because
-C1's unexplained bimodality is exactly what a 120 s window cannot rule on. Grades in flight rather than
-storing, since a 15 Mb/s feed is 162 GB a day.
+BBRv1/quinn at a 15 Mb/s cap, **14.006 h unattended** (50,424 s, 829 one-minute samples), chosen because C1's unexplained bimodality is exactly what a 120 s window cannot rule on. Grades in flight rather than storing, since a 15 Mb/s feed is 162 GB a day.
 
 **The delivery arms pass without qualification.**
 
-| | Result |
-|---|---|
+|  | Result |
+| --- | --- |
 | Continuity errors | **0** over 14 h |
 | Respawns | **0** — one publisher and one subscriber for the whole run |
 | Throughput | 9.512 Mb/s mean, no sample below half the median rate, so no stall |
@@ -743,78 +391,37 @@ storing, since a 15 Mb/s feed is 162 GB a day.
 | Importer RSS | 110.1 MB mean, **+0.14 MB/h** over 13 h, 8 MB range |
 | Exporter RSS | 99.6 MB mean, **+0.06 MB/h**, 13 MB range |
 
-**So C1's bimodality is a transient, not a standing fault.** One replicate in three bloating to 591 ms
-over 120 s does not become an outage over 14 hours: the run neither lost integrity nor needed a restart,
-and BBRv1 remains the controller C2 says to prefer. That is the question C6 existed to answer.
+**So C1's bimodality is a transient, not a standing fault.** One replicate in three bloating to 591 ms over 120 s does not become an outage over 14 hours: the run neither lost integrity nor needed a restart, and BBRv1 remains the controller C2 says to prefer. That is the question C6 existed to answer.
 
-**Relay memory refutes the prediction this file registered in advance, and the miss is instructive.**
-The criterion said the slope would break at baseline + ~99 MB — T9's `quinn-proto` per-stream slot
-ceiling — and that a slope running straight through that knee would be the reportable outcome. Neither
-happened. The relay went from 19.7 MB to **220.2 MB, or baseline + 200.5 MB, which is 2.03× the
-predicted ceiling**, crossing it at 0.83 h and continuing for another thirteen hours. But it did not run
-straight either: the slope decayed monotonically and by a factor of thirteen.
+**Relay memory refutes the prediction this file registered in advance, and the miss is instructive.** The criterion said the slope would break at baseline + ~99 MB — T9's `quinn-proto` per-stream slot ceiling — and that a slope running straight through that knee would be the reportable outcome. Neither happened. The relay went from 19.7 MB to **220.2 MB, or baseline + 200.5 MB, which is 2.03× the predicted ceiling**, crossing it at 0.83 h and continuing for another thirteen hours. But it did not run straight either: the slope decayed monotonically and by a factor of thirteen.
 
-| Window | Relay RSS slope | Mean |
-|---|---:|---:|
-| 0–2 h | +24.60 MB/h | 115.5 MB |
-| 2–4 h | +12.17 MB/h | 151.5 MB |
-| 4–6 h | +9.30 MB/h | 171.3 MB |
-| 6–8 h | +5.98 MB/h | 184.5 MB |
-| 8–10 h | +5.21 MB/h | 195.3 MB |
-| 10–12 h | +3.98 MB/h | 203.9 MB |
-| 12–14 h | +3.53 MB/h | 211.8 MB |
-| final hour | +1.82 MB/h | 213.7 MB |
+| Window     | Relay RSS slope |     Mean |
+| ---------- | --------------: | -------: |
+| 0–2 h      |     +24.60 MB/h | 115.5 MB |
+| 2–4 h      |     +12.17 MB/h | 151.5 MB |
+| 4–6 h      |      +9.30 MB/h | 171.3 MB |
+| 6–8 h      |      +5.98 MB/h | 184.5 MB |
+| 8–10 h     |      +5.21 MB/h | 195.3 MB |
+| 10–12 h    |      +3.98 MB/h | 203.9 MB |
+| 12–14 h    |      +3.53 MB/h | 211.8 MB |
+| final hour |      +1.82 MB/h | 213.7 MB |
 
-Per-quarter growth is 139.4, 24.3, 13.6 and 9.1 MB: converging, but asymptotically rather than at a
-knee, and not converged when the run ended.
+Per-quarter growth is 139.4, 24.3, 13.6 and 9.1 MB: converging, but asymptotically rather than at a knee, and not converged when the run ended.
 
-**What the 2.03× is, and what it is not.** It is not connection scaling, and the temptation to read it
-that way has to be resisted against evidence this campaign itself produced. This rig put exactly two QUIC
-connections through the relay — `conn id=0` Publisher, `conn id=1` Subscriber, confirmed in the relay log
-with no third for 14 h — so 2× a per-publisher figure on two connections *looks* like a per-connection
-cost. But [#2745](https://github.com/moq-dev/moq/issues/2745) already measured the thing that reading
-predicts and found the opposite twice over: the pre-knee slope is flat across N = 0, 1, 2 and 4
-subscribers at ~+28 MB/h, and a 4 h leg carrying **four** subscribers (five connections, default slots)
-reached baseline + 108.1 MB at its knee and 189.5 MB total at 4 h — nowhere near five times anything, and
-in the same range this two-connection run occupies. Strong linear per-connection scaling is therefore
-ruled out by data already posted upstream. The mechanism agrees: `quinn-proto` pre-allocates
-`StreamsState::recv` slots for streams the *peer* may open, and a subscriber connection is one the relay
-opens streams *on*, so its receive pool has little reason to fill.
+**What the 2.03× is, and what it is not.** It is not connection scaling, and the temptation to read it that way has to be resisted against evidence this campaign itself produced. This rig put exactly two QUIC connections through the relay — `conn id=0` Publisher, `conn id=1` Subscriber, confirmed in the relay log with no third for 14 h — so 2× a per-publisher figure on two connections _looks_ like a per-connection cost. But [#2745](https://github.com/moq-dev/moq/issues/2745) already measured the thing that reading predicts and found the opposite twice over: the pre-knee slope is flat across N = 0, 1, 2 and 4 subscribers at ~+28 MB/h, and a 4 h leg carrying **four** subscribers (five connections, default slots) reached baseline + 108.1 MB at its knee and 189.5 MB total at 4 h — nowhere near five times anything, and in the same range this two-connection run occupies. Strong linear per-connection scaling is therefore ruled out by data already posted upstream. The mechanism agrees: `quinn-proto` pre-allocates `StreamsState::recv` slots for streams the _peer_ may open, and a subscriber connection is one the relay opens streams _on_, so its receive pool has little reason to fill.
 
-**The reading that fits both runs is the one we ourselves left open on #2745: the slot arithmetic is not
-the whole ceiling.** 10,000 slots × ~9.9 KiB ≈ 99 MB predicts where growth should stop, and both the 4 h
-leg and this one sail past it — the "soft plateau" flagged there as question 1, *"is there anything else
-expected to grow per-group once the slot table is full, or should we read that as noise plus allocator
-drift?"*, with an offer to run a 12 h leg. **This is that leg, and the answer is that it is not noise:**
-over the 13 h after the knee it adds another ~100 MB, doubling the predicted ceiling, while decaying
-monotonically by a factor of thirteen and still not flat at 14 h. So the operational figure is ~2× the
-slot arithmetic, arriving over ten-plus hours rather than three.
+**The reading that fits both runs is the one we ourselves left open on #2745: the slot arithmetic is not the whole ceiling.** 10,000 slots × ~9.9 KiB ≈ 99 MB predicts where growth should stop, and both the 4 h leg and this one sail past it — the "soft plateau" flagged there as question 1, _"is there anything else expected to grow per-group once the slot table is full, or should we read that as noise plus allocator drift?"_, with an offer to run a 12 h leg. **This is that leg, and the answer is that it is not noise:** over the 13 h after the knee it adds another ~100 MB, doubling the predicted ceiling, while decaying monotonically by a factor of thirteen and still not flat at 14 h. So the operational figure is ~2× the slot arithmetic, arriving over ten-plus hours rather than three.
 
-**What remains genuinely open is narrower than "per connection or per publisher", and cheaper to
-settle.** It is whether that second term is bounded at all, and what it scales in. The controls exist:
-`--server-quic-max-streams 1024` (T9: plateaued at 91.4 MB against 189.5 MB) isolates the slot-dependent
-part, and a logged group count plus `/proc/pressure/memory` distinguishes a real second term from
-allocator drift and kernel reclaim. One capped 14 h arm answers it.
+**What remains genuinely open is narrower than "per connection or per publisher", and cheaper to settle.** It is whether that second term is bounded at all, and what it scales in. The controls exist: `--server-quic-max-streams 1024` (T9: plateaued at 91.4 MB against 189.5 MB) isolates the slot-dependent part, and a logged group count plus `/proc/pressure/memory` distinguishes a real second term from allocator drift and kernel reclaim. One capped 14 h arm answers it.
 
-One qualification on the instrument. The rig sampled RSS but not reclaim or pressure counters, so a
-decaying slope cannot be *fully* separated from the kernel reclaiming pages under load. Two things argue
-it is real: `avail_mb` fell 3,010 → 2,606 MB, which closes to within ~46 MB of the summed growth of all
-three roles, and 2.6 GB was still free at the end, so the run never entered a pressure regime. A future
-soak should log `/proc/pressure/memory` beside RSS and settle it outright.
+One qualification on the instrument. The rig sampled RSS but not reclaim or pressure counters, so a decaying slope cannot be _fully_ separated from the kernel reclaiming pages under load. Two things argue it is real: `avail_mb` fell 3,010 → 2,606 MB, which closes to within ~46 MB of the summed growth of all three roles, and 2.6 GB was still free at the end, so the run never entered a pressure regime. A future soak should log `/proc/pressure/memory` beside RSS and settle it outright.
 
 ### C7 — random loss with no bottleneck, and a subscriber regression on upstream `main`
 
-C1–C5 impose a rate cap, so the loss they produce is congestive. The condition
-[noq #768](https://github.com/n0-computer/noq/issues/768) was reported under is uniform *random*
-loss, which none of them reproduces. C7 applies it on its own: 10 % `netem` loss on the relay's
-media direction, 25 ms each way, no rate limit, the real clip through relay → `moq export ts
---max-age 2s` for 120 s (`lab/scripts/t8b-loss-point.sh`, namespace rig). The prediction fixed before
-running was that neither build aborts and that 10 % loss delivers at least 90 % of the 0 % control.
-Three builds were run, all on noq: the standing `84b34f54`, and upstream `main` at `9d2a4f6e` and
-at `6f1a9e33`. `SUB_BIN` crosses the subscriber's build against the relay's.
+C1–C5 impose a rate cap, so the loss they produce is congestive. The condition [noq #768](https://github.com/n0-computer/noq/issues/768) was reported under is uniform _random_ loss, which none of them reproduces. C7 applies it on its own: 10 % `netem` loss on the relay's media direction, 25 ms each way, no rate limit, the real clip through relay → `moq export ts --max-age 2s` for 120 s (`lab/scripts/t8b-loss-point.sh`, namespace rig). The prediction fixed before running was that neither build aborts and that 10 % loss delivers at least 90 % of the 0 % control. Three builds were run, all on noq: the standing `84b34f54`, and upstream `main` at `9d2a4f6e` and at `6f1a9e33`. `SUB_BIN` crosses the subscriber's build against the relay's.
 
 | Arm (relay / subscriber, controller) | Loss | Mean delivered | Second half | Aborts |
-|---|---:|---:|---:|---|
+| --- | --: | --: | --: | --- |
 | `84b34f54` / `84b34f54`, BBRv3 | 0 % | 9.86 Mb/s | 9.90 | none |
 | `9d2a4f6e` / `9d2a4f6e`, BBRv3 | 0 % | 9.81 Mb/s | 9.82 | none |
 | `84b34f54` / `84b34f54`, BBRv3 | 10 % | 7.21, 8.15 Mb/s | 8.05, 8.99 | none |
@@ -826,67 +433,34 @@ at `6f1a9e33`. `SUB_BIN` crosses the subscriber's build against the relay's.
 | `6f1a9e33` / `6f1a9e33`, BBRv3 | 0 % | 9.84 Mb/s | 9.92 | none |
 | `6f1a9e33` / `6f1a9e33`, BBRv3 | 10 % | **1.77, 1.52 Mb/s** | **0.97, 1.32** | none |
 
-*Measured, P1, wire domain, all roles on one 8-vCPU host. The `84b34f54` and `9d2a4f6e` cells ran
-beside a 2 h importer soak and the `6f1a9e33` cells beside the standing units only. One run per cell
-except the BBRv3 loss cells on `main`, which have two.*
+_Measured, P1, wire domain, all roles on one 8-vCPU host. The `84b34f54` and `9d2a4f6e` cells ran beside a 2 h importer soak and the `6f1a9e33` cells beside the standing units only. One run per cell except the BBRv3 loss cells on `main`, which have two._
 
-**No arm aborted and no log carries a panic, so #768 did not reproduce at 10 % random loss on either
-build.** That does not clear BBRv3: C1's collapse to 11–13 % was under a rate cap with a 500 ms FIFO, a
-different regime, and 120 s is a short window for a fault that is intermittent by report.
+**No arm aborted and no log carries a panic, so #768 did not reproduce at 10 % random loss on either build.** That does not clear BBRv3: C1's collapse to 11–13 % was under a rate cap with a 500 ms FIFO, a different regime, and 120 s is a short window for a fault that is intermittent by report.
 
-**Upstream `main`'s subscriber collapses under random loss, and the crossed arms place the defect on
-the receiving side.** `main` delivers a fifth of what `84b34f54` does at 10 % loss, and its delivery
-decays through the window instead of settling: the second half runs at a tenth of the older build's.
-It is not the controller, because CUBIC collapses as BBRv3 does. It is not the relay, because a `main`
-relay feeding the older subscriber delivers the full rate. And it is not the negotiated protocol,
-because the older relay limits the session to `moq-lite-05` and `main`'s subscriber still collapses
-on it. At 0 % loss the two builds are indistinguishable. Every subscriber connected over QUIC, since
-the WebSocket fallback was refused in every arm, so this is not TCP's loss response either. Both
-builds log `failed to decode unidirectional stream err=WebTransportError(UnknownSession)` under loss
-and never without it, but the count does not track the collapse (603 on a healthy `84b34f54` run, 267
-on a collapsed `main` run), so it is a symptom of loss rather than the mechanism.
+**Upstream `main`'s subscriber collapses under random loss, and the crossed arms place the defect on the receiving side.** `main` delivers a fifth of what `84b34f54` does at 10 % loss, and its delivery decays through the window instead of settling: the second half runs at a tenth of the older build's. It is not the controller, because CUBIC collapses as BBRv3 does. It is not the relay, because a `main` relay feeding the older subscriber delivers the full rate. And it is not the negotiated protocol, because the older relay limits the session to `moq-lite-05` and `main`'s subscriber still collapses on it. At 0 % loss the two builds are indistinguishable. Every subscriber connected over QUIC, since the WebSocket fallback was refused in every arm, so this is not TCP's loss response either. Both builds log `failed to decode unidirectional stream err=WebTransportError(UnknownSession)` under loss and never without it, but the count does not track the collapse (603 on a healthy `84b34f54` run, 267 on a collapsed `main` run), so it is a symptom of loss rather than the mechanism.
 
-Against the prediction, the no-abort half held on both builds and the delivery half failed on both:
-`84b34f54` delivered 73–83 % of its control on BBRv3 and 70 % on CUBIC, and `main` 17 % and 8 %. The
-older build's shortfall is modest and was not investigated. The `main` relay feeding the older
-subscriber delivered slightly more than either 0 % control, from one run.
+Against the prediction, the no-abort half held on both builds and the delivery half failed on both: `84b34f54` delivered 73–83 % of its control on BBRv3 and 70 % on CUBIC, and `main` 17 % and 8 %. The older build's shortfall is modest and was not investigated. The `main` relay feeding the older subscriber delivered slightly more than either 0 % control, from one run.
 
-**Bisected to one commit: the media-time interleave,
-[#4001](https://github.com/moq-dev/moq/pull/4001) (`66440a6c`).** With relay and importer held at
-`84b34f54` and only the subscriber's build varied, under the same 10 % loss and BBRv3:
+**Bisected to one commit: the media-time interleave, [#4001](https://github.com/moq-dev/moq/pull/4001) (`66440a6c`).** With relay and importer held at `84b34f54` and only the subscriber's build varied, under the same 10 % loss and BBRv3:
 
 | Subscriber build | Position after `84b34f54` | Mean delivered | Second half |
-|---|---:|---:|---:|
+| --- | --: | --: | --: |
 | `ffa5b81b` | 89 commits | 10.69 Mb/s | 11.04 |
 | `044ca571` (parent of #4001) | 140 | 10.40 Mb/s | 10.50 |
 | `66440a6c` (#4001) | 141 | **0.67, 0.49 Mb/s** | **0.35, 0.25** |
 | `2b689c24` | 288 | **0.54 Mb/s** | **0.40** |
 | `9d2a4f6e` | 354 | **0.73 Mb/s** | **0.26** |
 
-*Measured, P1, wire domain, one host, one run per build except #4001, which has two.*
+_Measured, P1, wire domain, one host, one run per build except #4001, which has two._
 
-**It is still present on `main` at `6f1a9e33`**, which delivers 15–18 % of its 0 % control at 10 %
-loss, where `9d2a4f6e` delivered 17 %. Reported as
-[#4613](https://github.com/moq-dev/moq/issues/4613).
+**It is still present on `main` at `6f1a9e33`**, which delivers 15–18 % of its 0 % control at 10 % loss, where `9d2a4f6e` delivered 17 %. Reported as [#4613](https://github.com/moq-dev/moq/issues/4613).
 
-**The mechanism: a rewind renews the hold, and the renewed hold causes the next rewind.** #4001 makes
-the earliest pending frame wait, bounded by `max_age`, until every other track has shown that it
-cannot precede it. On its own that costs a quiet track one hold. Under loss, though, a source that
-skips over a hole bumps its discontinuity counter, and the exporter answers every such bump with `rewind()`,
-which on `main` resets the stall, restarts the held frame's wait and clears every track's high-water
-timeline. The sparse data PIDs, and video while it waits on a retransmission, then cannot show, so
-the next frame is held for the full 2 s again. That is the same budget the sources skip on. After the
-hold every source sits a budget behind the newest content, its next stall skips at once, and the skip
-is another rewind.
+**The mechanism: a rewind renews the hold, and the renewed hold causes the next rewind.** #4001 makes the earliest pending frame wait, bounded by `max_age`, until every other track has shown that it cannot precede it. On its own that costs a quiet track one hold. Under loss, though, a source that skips over a hole bumps its discontinuity counter, and the exporter answers every such bump with `rewind()`, which on `main` resets the stall, restarts the held frame's wait and clears every track's high-water timeline. The sparse data PIDs, and video while it waits on a retransmission, then cannot show, so the next frame is held for the full 2 s again. That is the same budget the sources skip on. After the hold every source sits a budget behind the newest content, its next stall skips at once, and the skip is another rewind.
 
-The arms that separate this ran on one instrumented build for every role: upstream `main` at
-`5124f8134` with debug logging on the hold and on the consumer's skip decisions, plus an environment
-override of the hold budget that the CLI does not have (`lab/scripts/t8b-4613-diag.patch`, run as
-`RUST_LOG=info,diag4613=debug [MOQ_TS_HOLD_MS=<ms>] t8b-loss-point.sh`). The fix arms add #4618's
-change to the same patch. Same rig, 10 % loss unless stated:
+The arms that separate this ran on one instrumented build for every role: upstream `main` at `5124f8134` with debug logging on the hold and on the consumer's skip decisions, plus an environment override of the hold budget that the CLI does not have (`lab/scripts/t8b-4613-diag.patch`, run as `RUST_LOG=info,diag4613=debug [MOQ_TS_HOLD_MS=<ms>] t8b-loss-point.sh`). The fix arms add #4618's change to the same patch. Same rig, 10 % loss unless stated:
 
 | Hold behaviour | Mean delivered | Second half | Holds started |
-|---|---:|---:|---:|
+| --- | --: | --: | --: |
 | as on `main` (budget = `max_age`, 2 s) | **1.13 Mb/s** | **0.36** | 56 |
 | disabled (arrival order) | 9.80 Mb/s | 9.95 | 0 |
 | capped at 200 ms | 8.37 Mb/s | 8.54 | 80 |
@@ -895,107 +469,30 @@ change to the same patch. Same rig, 10 % loss unless stated:
 | merged, `main` at `83ce47fe`, uninstrumented, 10 % loss | 9.68, 10.82 Mb/s | 10.05, 11.00 | — |
 | merged, `main` at `83ce47fe`, uninstrumented, 0 % loss | 9.84 Mb/s | 9.91 | — |
 
-*Measured, P1, wire domain, all roles on one 8-vCPU host beside the standing units only, 120 s per
-run, BBRv3 on noq, one run per cell except the fixed and merged builds at 10 % loss, which have two.
-Delivered rate is egress bytes, as in every C7 cell: the exporter pads to the declared mux rate and
-catches up after its early holds, so a figure above the clip's rate compares builds on this rig and
-is not a measure of content delivered. Neither process died in any merged-build run, and TSDuck
-counted every packet written.*
+_Measured, P1, wire domain, all roles on one 8-vCPU host beside the standing units only, 120 s per run, BBRv3 on noq, one run per cell except the fixed and merged builds at 10 % loss, which have two. Delivered rate is egress bytes, as in every C7 cell: the exporter pads to the declared mux rate and catches up after its early holds, so a figure above the clip's rate compares builds on this rig and is not a measure of content delivered. Neither process died in any merged-build run, and TSDuck counted every packet written._
 
-**Graded on content, the merged build loses the programme at 10 % loss.** Two more runs a cell on
-`83ce47fe`, same rig, graded with [`t28-content-lost.py`](scripts/t28-content-lost.py): at 0 % each
-carries all 4,262 access units; at 10 % the egress stays at the mux rate, mostly null packets,
-carrying 8.0 % and 2.6 % of the video ([T48](test-48-passthrough-export.md) § *Under 10 % loss* has
-the rows). The hold fix ends the exporter's stall; what reaches it under loss is set upstream of the
-exporter, as T48's controls inferred.
+**Graded on content, the merged build loses the programme at 10 % loss.** Two more runs a cell on `83ce47fe`, same rig, graded with [`t28-content-lost.py`](scripts/t28-content-lost.py): at 0 % each carries all 4,262 access units; at 10 % the egress stays at the mux rate, mostly null packets, carrying 8.0 % and 2.6 % of the video ([T48](test-48-passthrough-export.md) § _Under 10 % loss_ has the rows). The hold fix ends the exporter's stall; what reaches it under loss is set upstream of the exporter, as T48's controls inferred.
 
-Disabling the hold alone restores the full rate, so the hold is the cause. The unfixed run's log
-shows why it compounds rather than costing a fixed latency. Of 56 holds, 2 ended with the lagging
-track catching up, and a rewind restarted all the rest at the full 2 s. The sources' distance
-behind the newest content grew from 2 s to 25 s within the first 35 s and reached 105 s by the end,
-so the exporter wrote about 14 s of media in two minutes. A 200 ms cap shrinks the loop without
-breaking it, because each rewind still renews whatever budget there is. Keeping the stall and the
-held frame's wait across a rewind leaves a quiet track costing one hold. After that the mux runs
-around the track until it catches up. The fixed build loses its first 15–20 s to the early holds and
-runs at the source rate from then on. Because a rewind still clears every timeline, a sparse track
-cannot show again while the skips continue, so under sustained loss the stall stays expired and the
-mux runs in arrival order, the pre-#4001 behaviour. One interleave order across exporters therefore
-holds only on a clean path.
+Disabling the hold alone restores the full rate, so the hold is the cause. The unfixed run's log shows why it compounds rather than costing a fixed latency. Of 56 holds, 2 ended with the lagging track catching up, and a rewind restarted all the rest at the full 2 s. The sources' distance behind the newest content grew from 2 s to 25 s within the first 35 s and reached 105 s by the end, so the exporter wrote about 14 s of media in two minutes. A 200 ms cap shrinks the loop without breaking it, because each rewind still renews whatever budget there is. Keeping the stall and the held frame's wait across a rewind leaves a quiet track costing one hold. After that the mux runs around the track until it catches up. The fixed build loses its first 15–20 s to the early holds and runs at the source rate from then on. Because a rewind still clears every timeline, a sparse track cannot show again while the skips continue, so under sustained loss the stall stays expired and the mux runs in arrival order, the pre-#4001 behaviour. One interleave order across exporters therefore holds only on a clean path.
 
-#4618 merged into `main` as `e488e699`. Its change to `rewind()` is the one the fix arms measured. The
-merged commit adds one change the arms did not carry: `resume()` now clears the stall, so a
-replacement broadcast starts with a fresh budget. Before the merge, a receiver on `main` had to choose
-between #4001's deterministic multi-track interleave ([T12](test-12-dual-path-handoff.md)) and
-delivery under loss, because pinning the subscriber to #4001's parent gave up the interleave. A
-subscriber at or after `e488e699` keeps the full egress rate under loss, falling back to arrival order
-while the loss lasts: the merged build at `83ce47fe` measures 9.68 and 10.82 Mb/s at 10 % loss against
-9.84 Mb/s at 0 %, matching the pre-merge arms. How much of that is content is not measured
-(§ *Corrections*). That it keeps the interleave on a clean path is
-#4001's result and is not re-measured here. These are the figures the hardware-window rehearsal
-build should be checked against.
+#4618 merged into `main` as `e488e699`. Its change to `rewind()` is the one the fix arms measured. The merged commit adds one change the arms did not carry: `resume()` now clears the stall, so a replacement broadcast starts with a fresh budget. Before the merge, a receiver on `main` had to choose between #4001's deterministic multi-track interleave ([T12](test-12-dual-path-handoff.md)) and delivery under loss, because pinning the subscriber to #4001's parent gave up the interleave. A subscriber at or after `e488e699` keeps the full egress rate under loss, falling back to arrival order while the loss lasts: the merged build at `83ce47fe` measures 9.68 and 10.82 Mb/s at 10 % loss against 9.84 Mb/s at 0 %, matching the pre-merge arms. How much of that is content is not measured (§ _Corrections_). That it keeps the interleave on a clean path is #4001's result and is not re-measured here. These are the figures the hardware-window rehearsal build should be checked against.
 
 ## Observations
 
-- **CUBIC bloats, reliably — and the bloat belongs to the FIFO, not to CUBIC.** Both backends fill the
-  500 ms FIFO to ~520–570 ms on every replicate, and C4 then shows every controller sitting at 100–108 ms
-  against a 100 ms base once the bottleneck runs `codel` or `cake`. So "CUBIC bloats" is really "a
-  tail-drop buffer bloats, and CUBIC is the controller that fills it fastest"; the deployment lever is
-  the queue discipline, which is usually someone else's to set.
-- **The controller is a second-order term for this feed, and it took three conditions to see it.** C1,
-  C2 and C4 rank the controllers in three different orders. Under an under-provisioned cap (C1) BBRv2 on
-  quiche is the stable, complete performer and BBRv1 on quinn is bimodal; on a provisioned path with a
-  transient (C2) BBRv2 is the worst row on the page — shedding 28–35 % of the feed and needing 11–13 s to
-  recover — while BBRv1 loses 0.4–2 % and recovers inside 4 s; under an AQM (C4) the spread closes to
-  43–59 % of cap with 0 CC everywhere and no ordering worth quoting. **What each condition actually
-  measures is how readily the controller yields, and for a feed that cannot slow down, yielding is content
-  lost.** Whether that is the right thing to do depends on whether the bottleneck is permanently too small,
-  briefly shared, or never allowed to fill — so it is a provisioning and queue-discipline question, and
-  the open question to the maintainer on #2432 (whether BBRv2 on quiche is supported for continuous
-  operation) matters less than it did.
-- **BBRv3 (noq) is out** — it both bloats and collapses delivery to ~12 %, the #768 overflow biting
-  under sustained pressure. A controller that can abort the relay is an outage by definition here.
-- **BBRv1's C1 bimodality is still unexplained and still matters.** C2 shows it is the best-behaved
-  controller under a transient, which is an argument for running it, and C1 shows one replicate in
-  three bloating to 591 ms, which is an argument against — consistent with the maintainer's own "quinn
-  BBR is kind of bugged" note. The two are not in conflict: an intermittent fault that appears on a
-  third of short runs is exactly what a soak resolves and a 120 s window cannot, which is why C6 runs
-  BBRv1 rather than the C2 winner-on-paper.
-- **MoQ and SRT fail in opposite directions, and this is the result that holds in every condition.**
-  MoQ sheds *whole groups* and emits a syntactically clean TS — **0 continuity errors in every MoQ cell
-  of C1, C2 and C4**, across four controllers, three queue disciplines and two provisioning levels,
-  which its exporter guarantees whatever arrived — paying instead in content, visible as PCR gaps up
-  to 7.1 s. SRT keeps the most bytes of any lane and
-  damages them: 4,279 continuity errors under a FIFO, and **17,652–22,365 under an AQM**, because early
-  deliberate drops defeat its ARQ where a full tail-drop buffer merely delayed it. **SRT's failure mode
-  gets four to five times worse on exactly the queue discipline a well-run network is most likely to
-  deploy**, which is the sharpest form of this finding the campaign has.
-- **On the segmented lane, congestion behaviour is a receiver property, not a transport property.**
-  The same lane under the same shortfall either dies at 43 s or thins cleanly at 99 % of the cap
-  depending only on what the client does with a 404. This is the sharpest instance in the campaign of
-  something the whole segmented arm keeps running into: **on a lane whose transport holds no session
-  state, almost every behaviour worth measuring has been pushed up into the client**, so a figure
-  attributed to "segmented HTTP" is very often a figure about one client's error handling. T6 found
-  the same thing for failover; here it is worth a factor of three in delivered rate and the difference
-  between a live feed and a dead one.
-- **Where MoQ and SRT trade content for liveness and integrity for content, in-order fetching refuses
-  both trades — and that refusal is what kills it.** An idempotent `GET` for an immutable object has
-  no thinning behaviour of its own, so a client that will not skip has nowhere to go under sustained
-  shortfall but backwards through the window. This is [T5](test-5-network-impairment.md)'s "sheds
-  time, not bytes" followed far enough to find what happens when there is no more time to shed. The
-  thinning has to be *implemented* by the receiver; on the media-aware lane it comes with the
-  transport.
-- **The re-anchoring client's higher delivered fraction is bought with latency and granularity, and
-  should not be quoted without them.** 99 % of the cap against MoQ's 45–81 % is real, but it is
-  measured ~12 s behind the live edge with content lost in 12 s holes, against MoQ's 2 s buffer and
-  group-sized losses. For a distribution hand-off that is the wrong side of both trades.
-- **Delivered fraction is noisy; the qualitative ordering is not.** With 2–3 replicates the goodput
-  numbers swing ~20 points, so treat them as indicative; the completeness/stability *ranking* is the
-  firm result.
+- **CUBIC bloats, reliably — and the bloat belongs to the FIFO, not to CUBIC.** Both backends fill the 500 ms FIFO to ~520–570 ms on every replicate, and C4 then shows every controller sitting at 100–108 ms against a 100 ms base once the bottleneck runs `codel` or `cake`. So "CUBIC bloats" is really "a tail-drop buffer bloats, and CUBIC is the controller that fills it fastest"; the deployment lever is the queue discipline, which is usually someone else's to set.
+- **The controller is a second-order term for this feed, and it took three conditions to see it.** C1, C2 and C4 rank the controllers in three different orders. Under an under-provisioned cap (C1) BBRv2 on quiche is the stable, complete performer and BBRv1 on quinn is bimodal; on a provisioned path with a transient (C2) BBRv2 is the worst row on the page — shedding 28–35 % of the feed and needing 11–13 s to recover — while BBRv1 loses 0.4–2 % and recovers inside 4 s; under an AQM (C4) the spread closes to 43–59 % of cap with 0 CC everywhere and no ordering worth quoting. **What each condition actually measures is how readily the controller yields, and for a feed that cannot slow down, yielding is content lost.** Whether that is the right thing to do depends on whether the bottleneck is permanently too small, briefly shared, or never allowed to fill — so it is a provisioning and queue-discipline question, and the open question to the maintainer on #2432 (whether BBRv2 on quiche is supported for continuous operation) matters less than it did.
+- **BBRv3 (noq) is out** — it both bloats and collapses delivery to ~12 %, the #768 overflow biting under sustained pressure. A controller that can abort the relay is an outage by definition here.
+- **BBRv1's C1 bimodality is still unexplained and still matters.** C2 shows it is the best-behaved controller under a transient, which is an argument for running it, and C1 shows one replicate in three bloating to 591 ms, which is an argument against — consistent with the maintainer's own "quinn BBR is kind of bugged" note. The two are not in conflict: an intermittent fault that appears on a third of short runs is exactly what a soak resolves and a 120 s window cannot, which is why C6 runs BBRv1 rather than the C2 winner-on-paper.
+- **MoQ and SRT fail in opposite directions, and this is the result that holds in every condition.** MoQ sheds _whole groups_ and emits a syntactically clean TS — **0 continuity errors in every MoQ cell of C1, C2 and C4**, across four controllers, three queue disciplines and two provisioning levels, which its exporter guarantees whatever arrived — paying instead in content, visible as PCR gaps up to 7.1 s. SRT keeps the most bytes of any lane and damages them: 4,279 continuity errors under a FIFO, and **17,652–22,365 under an AQM**, because early deliberate drops defeat its ARQ where a full tail-drop buffer merely delayed it. **SRT's failure mode gets four to five times worse on exactly the queue discipline a well-run network is most likely to deploy**, which is the sharpest form of this finding the campaign has.
+- **On the segmented lane, congestion behaviour is a receiver property, not a transport property.** The same lane under the same shortfall either dies at 43 s or thins cleanly at 99 % of the cap depending only on what the client does with a 404. This is the sharpest instance in the campaign of something the whole segmented arm keeps running into: **on a lane whose transport holds no session state, almost every behaviour worth measuring has been pushed up into the client**, so a figure attributed to "segmented HTTP" is very often a figure about one client's error handling. T6 found the same thing for failover; here it is worth a factor of three in delivered rate and the difference between a live feed and a dead one.
+- **Where MoQ and SRT trade content for liveness and integrity for content, in-order fetching refuses both trades — and that refusal is what kills it.** An idempotent `GET` for an immutable object has no thinning behaviour of its own, so a client that will not skip has nowhere to go under sustained shortfall but backwards through the window. This is [T5](test-5-network-impairment.md)'s "sheds time, not bytes" followed far enough to find what happens when there is no more time to shed. The thinning has to be _implemented_ by the receiver; on the media-aware lane it comes with the transport.
+- **The re-anchoring client's higher delivered fraction is bought with latency and granularity, and should not be quoted without them.** 99 % of the cap against MoQ's 45–81 % is real, but it is measured ~12 s behind the live edge with content lost in 12 s holes, against MoQ's 2 s buffer and group-sized losses. For a distribution hand-off that is the wrong side of both trades.
+- **Delivered fraction is noisy; the qualitative ordering is not.** With 2–3 replicates the goodput numbers swing ~20 points, so treat them as indicative; the completeness/stability _ranking_ is the firm result.
 
 ## Verdict against the pass criteria
 
 | # | Criterion | Scored |
-|---|---|---|
+| --- | --- | --- |
 | 1 | Complete and reconstructable (C2–C5) | **On C2: MoQ passes on integrity at every controller (0 CC) and recovers on every controller, but only BBRv1 passes on completeness** — CUBIC loses 6–15 % of the feed through the transient and BBRv2 28–35 %, which is a hole, not deferred rate. SRT fails on damage again (53 and 5 CC) while over-delivering |
 | 2 | Stable indefinitely (C6) | **Passed on delivery, 14.006 h unattended**: 0 continuity errors, 0 respawns, no stall, ~84 source-loop wraps crossed, importer and exporter RSS flat to +0.14 and +0.06 MB/h. **Relay memory is the exception and it failed the prediction, not the criterion**: converged asymptotically on baseline + 200.5 MB, 2.03× the ceiling registered in advance, on a rig running exactly two QUIC connections |
 | 3 | Fails gracefully when under-provisioned (C1) | **MoQ passes on every controller except BBRv3**; SRT fails on damage (4,279 continuity errors); segmented HTTP passes or fails on the client — it thins cleanly under a receiver that re-anchors, and loses the session at 43 s under the one that does not |
@@ -1003,132 +500,43 @@ build should be checked against.
 
 ## Conclusion
 
-**The controller that looks best depends on which condition you run, three conditions have produced
-three orders, and so this experiment does not yield a controller recommendation — it yields a reason not
-to trust one.** Under a cap permanently too small for the feed behind a tail-drop buffer (C1), BBRv2 on
-quiche is stable and complete where CUBIC bloats and BBRv1 is bimodal. On a properly provisioned path
-with a competing flow passing through (C2), BBRv2 sheds 28–35 % of the feed and takes 11–13 s to recover,
-CUBIC sheds 6–15 %, and BBRv1 — C1's bimodal reject — barely registers it. Put an AQM at the bottleneck
-(C4) and the spread closes to 43–59 % of cap with zero continuity errors everywhere and no ordering worth
-quoting. All three readings are sound, and the reason they disagree is the same each time: **a controller
-that yields to a full queue is right when the queue is full because the link is too small, wrong when it
-is full because a neighbour is briefly busy, and irrelevant when the queue is never allowed to fill.**
-For a feed that cannot slow down, the middle case turns politeness into missing content. BBRv3 (noq) is
-excluded in every condition by [#768](https://github.com/moq-dev/moq/issues/768).
+**The controller that looks best depends on which condition you run, three conditions have produced three orders, and so this experiment does not yield a controller recommendation — it yields a reason not to trust one.** Under a cap permanently too small for the feed behind a tail-drop buffer (C1), BBRv2 on quiche is stable and complete where CUBIC bloats and BBRv1 is bimodal. On a properly provisioned path with a competing flow passing through (C2), BBRv2 sheds 28–35 % of the feed and takes 11–13 s to recover, CUBIC sheds 6–15 %, and BBRv1 — C1's bimodal reject — barely registers it. Put an AQM at the bottleneck (C4) and the spread closes to 43–59 % of cap with zero continuity errors everywhere and no ordering worth quoting. All three readings are sound, and the reason they disagree is the same each time: **a controller that yields to a full queue is right when the queue is full because the link is too small, wrong when it is full because a neighbour is briefly busy, and irrelevant when the queue is never allowed to fill.** For a feed that cannot slow down, the middle case turns politeness into missing content. BBRv3 (noq) is excluded in every condition by [#768](https://github.com/moq-dev/moq/issues/768).
 
-**The two things that did move the outcome are the provisioning margin and the bottleneck's queue
-discipline.** An AQM takes standing delay from 554–584 ms to 101–119 ms for every controller and every
-transport at once — a larger effect than any controller choice in any condition here — which reframes the
-"bufferbloat" framing this test inherited from upstream: the delay was the buffer's, and the controller
-only determined how fast it was filled. And C5 turns the margin into the one number this experiment can
-hand an operator: **provision at ≥ 1.2× content rate for the MoQ lane and ≥ 1.5× for a segmented one**,
-above which every controller is comfortable and below which delay climbs steeply toward the receive
-buffer that has to absorb the next transient. The segmented figure is higher for a structural reason —
-each segment fetch is a line-rate burst, so its queueing is set by burst shape rather than average
-headroom, which C5 and C1 independently measured at 336 and 337 ms.
+**The two things that did move the outcome are the provisioning margin and the bottleneck's queue discipline.** An AQM takes standing delay from 554–584 ms to 101–119 ms for every controller and every transport at once — a larger effect than any controller choice in any condition here — which reframes the "bufferbloat" framing this test inherited from upstream: the delay was the buffer's, and the controller only determined how fast it was filled. And C5 turns the margin into the one number this experiment can hand an operator: **provision at ≥ 1.2× content rate for the MoQ lane and ≥ 1.5× for a segmented one**, above which every controller is comfortable and below which delay climbs steeply toward the receive buffer that has to absorb the next transient. The segmented figure is higher for a structural reason — each segment fetch is a line-rate burst, so its queueing is set by burst shape rather than average headroom, which C5 and C1 independently measured at 336 and 337 ms.
 
-**The MoQ lane's one serious loss in this experiment is concurrency — and it is the subscriber's release
-deadline, not the transport's ceiling.** At a 2 s budget, aggregate delivery falls from 9.44 Mb/s at one
-feed to 4.89 at two and 4.02 at three while SRT rises to 12.65 and holds at 84 % of the cap. Three
-candidate causes were tested and two were eliminated: it is not the controller (loss-based CUBIC
-collapses to within the BBRv1 spread at both flow counts, 36 %/30 % against 33 %/27 %) and it is not
-bufferbloat (`cake` cut RTT from ~550 ms to 100 ms and the collapse survived, at 48 %/40 % of cap).
-What does move it is `--latency-max`: at `n=2` under `cake`, 500 ms → 30 s takes the aggregate from
-4.29 to 10.35 Mb/s — past the uncontended single-flow rate — at zero continuity errors throughout.
-**So the shed is each subscriber independently discarding groups that missed its own deadline**, N of
-them at once, and the ladder above measures a 2-second trunk rather than a limit of the lane. An
-operator who can spend buffer does not have this problem; one who cannot must provision for it. What
-remains open is narrower than the question this cell opened with: why the marginal cost of a short
-budget is so steep, and whether the knee sits at the RTT, the group duration or the relay's buffering.
+**The MoQ lane's one serious loss in this experiment is concurrency — and it is the subscriber's release deadline, not the transport's ceiling.** At a 2 s budget, aggregate delivery falls from 9.44 Mb/s at one feed to 4.89 at two and 4.02 at three while SRT rises to 12.65 and holds at 84 % of the cap. Three candidate causes were tested and two were eliminated: it is not the controller (loss-based CUBIC collapses to within the BBRv1 spread at both flow counts, 36 %/30 % against 33 %/27 %) and it is not bufferbloat (`cake` cut RTT from ~550 ms to 100 ms and the collapse survived, at 48 %/40 % of cap). What does move it is `--latency-max`: at `n=2` under `cake`, 500 ms → 30 s takes the aggregate from 4.29 to 10.35 Mb/s — past the uncontended single-flow rate — at zero continuity errors throughout. **So the shed is each subscriber independently discarding groups that missed its own deadline**, N of them at once, and the ladder above measures a 2-second trunk rather than a limit of the lane. An operator who can spend buffer does not have this problem; one who cannot must provision for it. What remains open is narrower than the question this cell opened with: why the marginal cost of a short budget is so steep, and whether the knee sits at the RTT, the group duration or the relay's buffering.
 
-**What does not vary is the failure mode** — see Observations. **Under congestion the three data planes
-fail three different ways — but only two of those failures belong to a transport.** Segmented HTTP does
-whatever its receiver does: `tsp -I hls` slides backwards
-through the live window and loses the session at 43 s, while a client that re-anchors on a 404 thins
-in whole segments at 99 % of the cap with a clean TS. **The lane is not fragile under congestion; the
-shipped client is.** That is the finding, and it is a different claim from the one the `tsp` row on
-its own would support.
+**What does not vary is the failure mode** — see Observations. **Under congestion the three data planes fail three different ways — but only two of those failures belong to a transport.** Segmented HTTP does whatever its receiver does: `tsp -I hls` slides backwards through the live window and loses the session at 43 s, while a client that re-anchors on a 404 thins in whole segments at 99 % of the cap with a clean TS. **The lane is not fragile under congestion; the shipped client is.** That is the finding, and it is a different claim from the one the `tsp` row on its own would support.
 
-Two things still separate the lanes once the client is matched. The re-anchoring client's
-completeness is bought at ~12 s behind the live edge with content lost in 12 s holes, against MoQ's
-2 s buffer and group-sized losses — better numbers, worse properties for a hand-off. And the thinning
-that MoQ gets from its transport has to be built into the receiver here, which is precisely the work
-that the two available clients have not done.
+Two things still separate the lanes once the client is matched. The re-anchoring client's completeness is bought at ~12 s behind the live edge with content lost in 12 s holes, against MoQ's 2 s buffer and group-sized losses — better numbers, worse properties for a hand-off. And the thinning that MoQ gets from its transport has to be built into the receiver here, which is precisely the work that the two available clients have not done.
 
-The controller wording in [`docs/architecture.md`](../docs/architecture.md) §8.4 / §8.5 is **not**
-changed to name a controller, because the finding promoted from here is that no single condition can
-name one. What is promotable is the provisioning rule, the AQM result, and the failure-mode split.
+The controller wording in [`docs/architecture.md`](../docs/architecture.md) §8.4 / §8.5 is **not** changed to name a controller, because the finding promoted from here is that no single condition can name one. What is promotable is the provisioning rule, the AQM result, and the failure-mode split.
 
 ## Next steps
 
-- **Locate the latency knee in C3.** The budget sweep is coarse (500 ms, 2 s, 8 s, 30 s) and the
-  aggregate is already at 62 % of cap by 8 s. Points at 1, 3, 4 and 6 s at `n=2` and `n=3` would say
-  whether the knee tracks the RTT, the group duration, or the relay's own buffering — the only C3
-  question left, and the one an operator would actually ask when sizing a trunk.
-- **Add replicates to C3.** The aggregate reproduces to about ±15 % (7.17 against 5.50 Mb/s for the same
-  cell run twice), so any claim resting on a difference smaller than a third needs two more replicates
-  before it is worth stating.
-- **Re-run the segmented C2 cells with the competing flow's own throughput recorded**, so a delivery
-  collapse can be attributed to the impairment rather than inferred from it.
-- **Re-run C6 with streams capped and the group count logged**, to bound the second term rather than
-  merely observe it. C6 converged on 2.03× the predicted ceiling and was still creeping at 14 h;
-  `--server-quic-max-streams 1024` plus a logged group count and `/proc/pressure/memory` beside RSS
-  separates the slot-dependent part from a genuine second term from kernel reclaim in one run. Worth
-  ~100 MB per channel of sizing accuracy — not the orders of magnitude it appeared to be worth while
-  per-connection scaling was still a live reading of the 2.03×.
-- Add **replicates** (≥ 5) for delivered-fraction confidence; the qualitative ranking is already clear
-  at 2, and C2's separation between controllers (0.4 % against 35 %) is far wider than the replicate
-  spread.
-- **Never let a cleanup job run against a live results tree again — and the durable fix is not a better
-  janitor.** A janitor deleting captures to protect the disk destroyed four of six C3 aggregates, the
-  most valuable data in the matrix. The reason it could is that the aggregate was never an output of the
-  cell: the extra flows were subscribed and written to disk, but only flow 1 was graded and printed, so
-  the aggregate existed solely as a by-product of files that happened to survive. The cell now sums them
-  at grade time and prints `agg_bytes`/`agg_mbps`/`agg_pct_cap`, then deletes the extra captures itself
-  — after which no cleanup job needs to touch the tree and peak disk for a C3 pass is one cell's worth.
-- **Run the segmented lane long enough at 8 Mb/s to see the `tsp` client die**, since 60 s only shows
-  the trajectory. The prediction is a 404 at roughly the point four segments per minute of lost ground
-  consumes a nine-segment window, and it is worth having the number rather than the extrapolation.
-- **Hold the latency budget equal before quoting the 99 %.** The re-anchoring client sits ~12 s behind
-  the edge; capping it near MoQ's 2 s would say whether the delivery advantage survives a matched
-  liveness target or was only ever the extra buffer.
+- **Locate the latency knee in C3.** The budget sweep is coarse (500 ms, 2 s, 8 s, 30 s) and the aggregate is already at 62 % of cap by 8 s. Points at 1, 3, 4 and 6 s at `n=2` and `n=3` would say whether the knee tracks the RTT, the group duration, or the relay's own buffering — the only C3 question left, and the one an operator would actually ask when sizing a trunk.
+- **Add replicates to C3.** The aggregate reproduces to about ±15 % (7.17 against 5.50 Mb/s for the same cell run twice), so any claim resting on a difference smaller than a third needs two more replicates before it is worth stating.
+- **Re-run the segmented C2 cells with the competing flow's own throughput recorded**, so a delivery collapse can be attributed to the impairment rather than inferred from it.
+- **Re-run C6 with streams capped and the group count logged**, to bound the second term rather than merely observe it. C6 converged on 2.03× the predicted ceiling and was still creeping at 14 h; `--server-quic-max-streams 1024` plus a logged group count and `/proc/pressure/memory` beside RSS separates the slot-dependent part from a genuine second term from kernel reclaim in one run. Worth ~100 MB per channel of sizing accuracy — not the orders of magnitude it appeared to be worth while per-connection scaling was still a live reading of the 2.03×.
+- Add **replicates** (≥ 5) for delivered-fraction confidence; the qualitative ranking is already clear at 2, and C2's separation between controllers (0.4 % against 35 %) is far wider than the replicate spread.
+- **Never let a cleanup job run against a live results tree again — and the durable fix is not a better janitor.** A janitor deleting captures to protect the disk destroyed four of six C3 aggregates, the most valuable data in the matrix. The reason it could is that the aggregate was never an output of the cell: the extra flows were subscribed and written to disk, but only flow 1 was graded and printed, so the aggregate existed solely as a by-product of files that happened to survive. The cell now sums them at grade time and prints `agg_bytes`/`agg_mbps`/`agg_pct_cap`, then deletes the extra captures itself — after which no cleanup job needs to touch the tree and peak disk for a C3 pass is one cell's worth.
+- **Run the segmented lane long enough at 8 Mb/s to see the `tsp` client die**, since 60 s only shows the trajectory. The prediction is a 404 at roughly the point four segments per minute of lost ground consumes a nine-segment window, and it is worth having the number rather than the extrapolation.
+- **Hold the latency budget equal before quoting the 99 %.** The re-anchoring client sits ~12 s behind the edge; capping it near MoQ's 2 s would say whether the delivery advantage survives a matched liveness target or was only ever the extra buffer.
 
 ## Corrections
 
-**Believed:** C3's aggregate over N receivers could be recovered from per-flow captures after grading
-flow 1 only. **True:** four of six aggregates were lost when a disk cleanup ran against the results
-tree. **Rule:** every statistic the cell claims must be printed at grade time; do not rely on files
-that a janitor may delete.
+**Believed:** C3's aggregate over N receivers could be recovered from per-flow captures after grading flow 1 only. **True:** four of six aggregates were lost when a disk cleanup ran against the results tree. **Rule:** every statistic the cell claims must be printed at grade time; do not rely on files that a janitor may delete.
 
-**Believed:** the `moq export ts` exit under contention was a [#3271](https://github.com/moq-dev/moq/pull/3271)
-regression (6/14 against 0/14, p ≈ 0.016). **True:** it is **not** #3271 — the exit occurs on both
-client arms (9/15 against 3/15, p ≈ 0.060), on both relay versions, and predates #3271; the clean split
-was a **counting error** (only `sub.log` read of two or three per cell). **Rules:** **a detector must
-read every instance of the thing it is detecting**; and **a pinned component the proposed mechanism runs
-through must be crossed, not trusted**.
+**Believed:** the `moq export ts` exit under contention was a [#3271](https://github.com/moq-dev/moq/pull/3271) regression (6/14 against 0/14, p ≈ 0.016). **True:** it is **not** #3271 — the exit occurs on both client arms (9/15 against 3/15, p ≈ 0.060), on both relay versions, and predates #3271; the clean split was a **counting error** (only `sub.log` read of two or three per cell). **Rules:** **a detector must read every instance of the thing it is detecting**; and **a pinned component the proposed mechanism runs through must be crossed, not trusted**.
 
-**Believed** (C7, reasoned from #4001's diff and labelled as such): each interleave hold spends the
-consumer's skip budget and so turns into skipped content. **True:** a hold on its own costs a quiet
-track one wait. The collapse needs `rewind()` to renew the hold at every source skip. A reading of
-the diff never reached that, because the renewal sits in another function, reached only through the
-consumer's discontinuity counter. **Rule:** see
-[method notes § a mechanism read from a diff names the component, not the loop](method-notes.md#4-attribution-naming-a-mechanism-from-the-evidence).
+**Believed** (C7, reasoned from #4001's diff and labelled as such): each interleave hold spends the consumer's skip budget and so turns into skipped content. **True:** a hold on its own costs a quiet track one wait. The collapse needs `rewind()` to renew the hold at every source skip. A reading of the diff never reached that, because the renewal sits in another function, reached only through the consumer's discontinuity counter. **Rule:** see [method notes § a mechanism read from a diff names the component, not the loop](method-notes.md#4-attribution-naming-a-mechanism-from-the-evidence).
 
-**Believed** (C7): a build delivering at least 90 % of its 0 % egress rate at 10 % loss delivers the
-programme. **True:** the export pads to the mux rate, and graded on content `84b34f54`'s 7.21 Mb/s at
-10 % loss is 95.9 % null packets carrying 2.7 % of the video, against 100 % at 0 % loss
-([T48](test-48-passthrough-export.md) § *Under 10 % loss*). C7's rates compare how much each build's
-export pads; the #4001 bisection and #4618's mechanism stand as findings about the exporter's output
-stalling, not about content delivered; the merged build, re-graded, carries 2.6–8.0 % of the video at
-10 % loss (§ *C7*). **Rule:** the existing one, grade a padding exporter on its content PIDs
-([method notes](method-notes.md), from T20 4a).
+**Believed** (C7): a build delivering at least 90 % of its 0 % egress rate at 10 % loss delivers the programme. **True:** the export pads to the mux rate, and graded on content `84b34f54`'s 7.21 Mb/s at 10 % loss is 95.9 % null packets carrying 2.7 % of the video, against 100 % at 0 % loss ([T48](test-48-passthrough-export.md) § _Under 10 % loss_). C7's rates compare how much each build's export pads; the #4001 bisection and #4618's mechanism stand as findings about the exporter's output stalling, not about content delivered; the merged build, re-graded, carries 2.6–8.0 % of the video at 10 % loss (§ _C7_). **Rule:** the existing one, grade a padding exporter on its content PIDs ([method notes](method-notes.md), from T20 4a).
 
 ## References
 
-- Upstream discussion this test came from, and where the C1 numbers were reported:
-  [#2432](https://github.com/moq-dev/moq/pull/2432) (CC knob + methodology).
+- Upstream discussion this test came from, and where the C1 numbers were reported: [#2432](https://github.com/moq-dev/moq/pull/2432) (CC knob + methodology).
 - Extends [test-8-srt-vs-moq.md](test-8-srt-vs-moq.md) (over-provisioned matrix, CC knob, backends).
 - Impairment method and SSH-safe lane: [test-5-network-impairment.md](test-5-network-impairment.md).
-- Upstream: [#2468](https://github.com/moq-dev/moq/pull/2468) (backend-specific CC defaults),
-  [noq #768](https://github.com/n0-computer/noq/issues/768) (BBRv3 panic).
+- Upstream: [#2468](https://github.com/moq-dev/moq/pull/2468) (backend-specific CC defaults), [noq #768](https://github.com/n0-computer/noq/issues/768) (BBRv3 panic).
 - Findings destination (once settled): [`evidence.md`](evidence.md) §3.3.

@@ -1,66 +1,33 @@
 # Laboratory notebook — MoQ ⇄ MPEG-TS validation campaign
 
-This directory is the engineering notebook for the MoQ MPEG-TS primary-distribution evaluation. It
-holds the campaign **plan** — the objective, the gate mapping and the pass criteria fixed before the
-numbers were known — and the campaign **record**: for each experiment, the objective, environment,
-exact procedure, measured results and conclusion, written so that an external engineer can reproduce
-it. It is the executable companion to [evidence](evidence.md) §1.2, which defines the
-validation pyramid and the acceptance gates.
+This directory is the engineering notebook for the MoQ MPEG-TS primary-distribution evaluation. It holds the campaign **plan** — the objective, the gate mapping and the pass criteria fixed before the numbers were known — and the campaign **record**: for each experiment, the objective, environment, exact procedure, measured results and conclusion, written so that an external engineer can reproduce it. It is the executable companion to [evidence](evidence.md) §1.2, which defines the validation pyramid and the acceptance gates.
 
-Four other files here are not experiments. [`evidence.md`](evidence.md) gathers the results by
-question, with the method, the instruments and the limits of the evidence; where an observation here
-has become a finding, a test file points to it rather than restating it.
-[`method-notes.md`](method-notes.md) is the rulebook to consult before designing or grading an
-experiment. [`upstream-contributions.md`](upstream-contributions.md) records what was found, reported
-and verified in other people's projects, including the review of the MSFTS carriage specification.
-[`planned-experiments.md`](planned-experiments.md) is the roadmap of what remains. The paper in
-[`docs/`](../docs/) states what has been learned, and cites `evidence.md` for it.
+Four other files here are not experiments. [`evidence.md`](evidence.md) gathers the results by question, with the method, the instruments and the limits of the evidence; where an observation here has become a finding, a test file points to it rather than restating it. [`method-notes.md`](method-notes.md) is the rulebook to consult before designing or grading an experiment. [`upstream-contributions.md`](upstream-contributions.md) records what was found, reported and verified in other people's projects, including the review of the MSFTS carriage specification. [`planned-experiments.md`](planned-experiments.md) is the roadmap of what remains. The paper in [`docs/`](../docs/) states what has been learned, and cites `evidence.md` for it.
 
-> **On honesty.** The plan is written to be disproven. Results that reached the wrong conclusion and
-> were later corrected are recorded in the per-test files, which state the current finding and, where
-> the correction carries a lesson, why the earlier reading was wrong.
+> **On honesty.** The plan is written to be disproven. Results that reached the wrong conclusion and were later corrected are recorded in the per-test files, which state the current finding and, where the correction carries a lesson, why the earlier reading was wrong.
 
-> Machine-specific detail — addresses, the EC2 host IP, absolute paths, TLS fingerprints, build
-> locations, credentials — is not in this public notebook. It lives in the git-ignored
-> `INSTRUCTIONS.local.md`, and public commands use placeholders such as `<EC2_IP>` and
-> `<subscriber-home-ip>`. Every rig script is committed.
+> Machine-specific detail — addresses, the EC2 host IP, absolute paths, TLS fingerprints, build locations, credentials — is not in this public notebook. It lives in the git-ignored `INSTRUCTIONS.local.md`, and public commands use placeholders such as `<EC2_IP>` and `<subscriber-home-ip>`. Every rig script is committed.
 
 ## Objective
 
-Validate whether MPEG-TS transported via MoQ can meet professional broadcast distribution
-requirements — specifically, whether a groomed MoQ egress is **bit-transparent** to the transport
-stream, **timing-conformant** to TR 101 290 P1/P2 on real hardware, and **resilient** under realistic
-network impairment and infrastructure failure.
+Validate whether MPEG-TS transported via MoQ can meet professional broadcast distribution requirements — specifically, whether a groomed MoQ egress is **bit-transparent** to the transport stream, **timing-conformant** to TR 101 290 P1/P2 on real hardware, and **resilient** under realistic network impairment and infrastructure failure.
 
 The thesis fails if any of the following holds and cannot be remedied:
 
-- MoQ carriage is *not* bit-transparent (continuity errors, dropped signalling, or structural
-  corruption survive a lossless path).
-- Groomed egress cannot pass **TR 101 290 P1/P2 on a hardware IRD** (the make-or-break gate —
-  [evidence](evidence.md) §1.2, Gate 2).
-- Impairment or failure behaviour is qualitatively worse than the incumbent IP transports
-  (SRT/Zixi/RIST) it would replace, at matched conditions.
+- MoQ carriage is _not_ bit-transparent (continuity errors, dropped signalling, or structural corruption survive a lossless path).
+- Groomed egress cannot pass **TR 101 290 P1/P2 on a hardware IRD** (the make-or-break gate — [evidence](evidence.md) §1.2, Gate 2).
+- Impairment or failure behaviour is qualitatively worse than the incumbent IP transports (SRT/Zixi/RIST) it would replace, at matched conditions.
 
-The campaign does not attempt to prove economic superiority, which is a separate, route-specific
-exercise ([economics](../docs/economics.md)); its desk working is kept here as an analysis
-([cost-model.md](cost-model.md)).
+The campaign does not attempt to prove economic superiority, which is a separate, route-specific exercise ([economics](../docs/economics.md)); its desk working is kept here as an analysis ([cost-model.md](cost-model.md)).
 
-**Ordering.** Run cheap-and-decisive first: T1 (reference) → T2 (media-aware fidelity) → T3 (opaque
-fidelity, Gate 1) → T7 file-based, then T7 hardware (Gate 2, make-or-break) → T4/T5/T6 (real path,
-impairment, resilience — Gate 3). If Gate 2 fails, stop and fix grooming before investing in scale
-work: a resilient path that a hardware IRD rejects is not a product.
+**Ordering.** Run cheap-and-decisive first: T1 (reference) → T2 (media-aware fidelity) → T3 (opaque fidelity, Gate 1) → T7 file-based, then T7 hardware (Gate 2, make-or-break) → T4/T5/T6 (real path, impairment, resilience — Gate 3). If Gate 2 fails, stop and fix grooming before investing in scale work: a resilient path that a hardware IRD rejects is not a product.
 
 ## Experiments
 
-Every experiment the campaign has specified, run or not, has its own file, structured as Objective /
-Environment / Procedure / Results / Observations / Conclusion / References. **The file is
-authoritative** for its measurements, scope and qualifications, and its `State:` line for how far it
-has got. The *Current finding* column is an index entry, not a summary of the evidence: one line, and
-no number without the conditions its file states. The rung and gate are from
-[evidence](evidence.md) §1.2.
+Every experiment the campaign has specified, run or not, has its own file, structured as Objective / Environment / Procedure / Results / Observations / Conclusion / References. **The file is authoritative** for its measurements, scope and qualifications, and its `State:` line for how far it has got. The _Current finding_ column is an index entry, not a summary of the evidence: one line, and no number without the conditions its file states. The rung and gate are from [evidence](evidence.md) §1.2.
 
 | # | Experiment | Rung · gate | State | Current finding | File |
-|---|---|---|---|---|---|
+| --- | --- | --- | --- | --- | --- |
 | T1 | Baseline TS characterisation (P0 reference) | reference · precondition for Gate 1 | complete | The four-clip source set is clean and representative, so downstream deltas are honest | [test-1](test-1-baseline-ts.md) |
 | T2 | Transport transparency — media-aware lane | 1–3 · Gate 1 (reference lane) | complete | Every elementary stream and the DVB service layer round-trip; the lane's own PCR cadence does not | [test-2](test-2-media-aware-transparency.md) |
 | T3 | Transport transparency — the opaque lane and segmented HTTP | 1–3 · **Gate 1 (product lane)** | complete | `moq-dev`'s passthrough is byte-identical on all three inventory clips, PCR accuracy at 481 ns included; segmented HTTP adds one PAT/PMT pair per segment | [test-3](test-3-opaque-transparency.md) |
@@ -140,72 +107,34 @@ no number without the conditions its file states. The rung and gate are from
 | T78 | A segmented origin under 4–128 synthetic edges | 5 · R2 | run; no knee | **At 128 edges, 3.2 Gb/s, nginx took 2.4 % of a core and the host 3.8 %, fetches at 18 ms p99** (private network, one run) | [test-78](test-78-origin-under-many-edges.md) |
 | T79 | What the receiver's log, CMCD v2, TR 101 290 and per-PID liveness say about the segmented lane's faults | R8 · P1-ak | run; telemetry half | **Dead video stops the segmenter, so every source sees only an absence; CMCD names only the origin outage** (laptop, two runs a fault) | [test-79](test-79-hls-telemetry-faults.md) |
 
-**Retired roadmap IDs** resolve to the experiment that discharged or holds them: P0-e → [T42](test-42-h3-receiver-fidelity.md), P0-f → [T22](test-22-silent-media-plane-failure.md)
-and [T24](test-24-partial-media-plane-stall.md), P0-g → [T21](test-21-permanence-soak.md), P0-i → [T8b](test-8b-congestion-control.md), P0-j → [T34](test-34-real-encoder-severity.md),
-P0-l and P1-u → [T45](test-45-live-tstd-remux.md), P0-m → [T47](test-47-fixed-delay-export.md), P1-a, P1-c, P1-am and P2-l → [T30](test-30-segmented-distributed-resilience.md), P1-ag → [T68](test-68-segmented-chain-cushion-faults.md), [P1-aj](planned-experiments.md#p1--establishes-where-one-architecture-is-superior), P1-d and P2-e → [T31](test-31-congestion-capacity-ladders.md), P1-e and P2-m → [T10](test-10-mpts-multiservice.md),
-P1-f → [T26](test-26-cross-host-fanout.md), P1-g → [T9](test-9-performance.md), P1-h → [T11](test-11-interop.md), P1-i → [T14](test-14-data-plane-comparison.md), P1-k → [T38](test-38-entitlement-estate.md), P1-m, P1-q, P1-y and P1-z → [T28](test-28-failure-injection-matrix.md),
-P1-aa → [T57](test-57-cross-host-timing.md), P1-ab → [T56](test-56-media-aware-failover.md), P1-ad → [T71](test-71-long-lossy-path.md), P1-af → [T58](test-58-receiver-select.md), P1-ah → [T70](test-70-segmented-latency-budget.md), P1-ai → [T59](test-59-segmented-1plus1-cloudfront.md), [T61](test-61-origin-group-failover.md) and [T63](test-63-pdt-anchored-release.md), P1-al → [T66](test-66-scrambled-carriage.md) and [T69](test-69-segmented-access-and-scrambling.md), P1-an → [T67](test-67-import-step-restart.md), P1-ap → [T74](test-74-time-correlated-burst-loss.md), P1-n → [T13](test-13-downstream-grooming.md), P1-o → [T50](test-50-deterministic-ts-legs.md), P1-p → [T6](test-6-relay-resilience.md), P1-r, P1-s, P1-w and P1-x → [T41](test-41-import-reanchor-coverage.md),
-P1-v → [T14](test-14-data-plane-comparison.md), P2-b → [T25](test-25-isolation-under-abuse.md), P2-d → [P1-b](planned-experiments.md#p1--establishes-where-one-architecture-is-superior), P2-h and P1-t → [T48](test-48-passthrough-export.md), P2-n → [T54](test-54-dependency-risk.md), P2-i → [T12](test-12-dual-path-handoff.md).
+**Retired roadmap IDs** resolve to the experiment that discharged or holds them: P0-e → [T42](test-42-h3-receiver-fidelity.md), P0-f → [T22](test-22-silent-media-plane-failure.md) and [T24](test-24-partial-media-plane-stall.md), P0-g → [T21](test-21-permanence-soak.md), P0-i → [T8b](test-8b-congestion-control.md), P0-j → [T34](test-34-real-encoder-severity.md), P0-l and P1-u → [T45](test-45-live-tstd-remux.md), P0-m → [T47](test-47-fixed-delay-export.md), P1-a, P1-c, P1-am and P2-l → [T30](test-30-segmented-distributed-resilience.md), P1-ag → [T68](test-68-segmented-chain-cushion-faults.md), [P1-aj](planned-experiments.md#p1--establishes-where-one-architecture-is-superior), P1-d and P2-e → [T31](test-31-congestion-capacity-ladders.md), P1-e and P2-m → [T10](test-10-mpts-multiservice.md), P1-f → [T26](test-26-cross-host-fanout.md), P1-g → [T9](test-9-performance.md), P1-h → [T11](test-11-interop.md), P1-i → [T14](test-14-data-plane-comparison.md), P1-k → [T38](test-38-entitlement-estate.md), P1-m, P1-q, P1-y and P1-z → [T28](test-28-failure-injection-matrix.md), P1-aa → [T57](test-57-cross-host-timing.md), P1-ab → [T56](test-56-media-aware-failover.md), P1-ad → [T71](test-71-long-lossy-path.md), P1-af → [T58](test-58-receiver-select.md), P1-ah → [T70](test-70-segmented-latency-budget.md), P1-ai → [T59](test-59-segmented-1plus1-cloudfront.md), [T61](test-61-origin-group-failover.md) and [T63](test-63-pdt-anchored-release.md), P1-al → [T66](test-66-scrambled-carriage.md) and [T69](test-69-segmented-access-and-scrambling.md), P1-an → [T67](test-67-import-step-restart.md), P1-ap → [T74](test-74-time-correlated-burst-loss.md), P1-n → [T13](test-13-downstream-grooming.md), P1-o → [T50](test-50-deterministic-ts-legs.md), P1-p → [T6](test-6-relay-resilience.md), P1-r, P1-s, P1-w and P1-x → [T41](test-41-import-reanchor-coverage.md), P1-v → [T14](test-14-data-plane-comparison.md), P2-b → [T25](test-25-isolation-under-abuse.md), P2-d → [P1-b](planned-experiments.md#p1--establishes-where-one-architecture-is-superior), P2-h and P1-t → [T48](test-48-passthrough-export.md), P2-n → [T54](test-54-dependency-risk.md), P2-i → [T12](test-12-dual-path-handoff.md).
 
 ### Pass criteria (agreed in advance)
 
-These are the criteria fixed for T1–T8 before they ran. Later experiments state theirs the same way,
-at the top of their own files.
+These are the criteria fixed for T1–T8 before they ran. Later experiments state theirs the same way, at the top of their own files.
 
-- **T1 — Baseline.** No pass/fail: T1 defines the reference. Met if the source set is clean (0
-  CC/transport/discontinuity errors) and representative (synthetic + broadcast mux + real
-  contribution captures).
-- **T2 — Media-aware transparency.** (a) All clips round-trip, all elementary components carry with
-  0 CC, the open-GOP feed round-trips deterministically; (b) downstream timing conformance
-  (`mpegts-pacer`): exact CBR, ≈ 0 % of PCR intervals > 40 ms, 0 `pcrverify` violations at 500 µs at
-  P1.
-- **T3 — Opaque transparency (Gate 1).** Bit-transparency at P1 — TSID/ONID, service name/type, all
-  PSI/SI (PAT/PMT/SDT/NIT/TDT/CAT), PMT PID, PCR PID, every elementary stream and every SCTE-35 PID
-  preserved verbatim; 0 CC/transport errors; CBR and PCR conformance (0 % > 40 ms) preserved when fed
-  the raw source.
-- **T4 — Remote E2E + SRT.** Relay reachable over the internet; live SRT contribution chain completes
-  end-to-end with 0 CC.
-- **T5 — Network impairment.** Loss behaviour is *graceful and bounded* (proportionate throughput
-  reduction, recovery observed), not catastrophic; where loss exceeds recovery capacity within the
-  buffer, the redundancy path (T6 / ST 2022-7) is the mitigation, not the transport alone.
-- **T6 — Serving-node resilience (Gate 3).** ST 2022-7 dual-path drill is **hitless** at the IRD under
-  single-path loss (the two egress legs' RTP datagrams identical, header and payload); relay-failover recovery
-  is bounded and documented, re-establishing without operator intervention; subscriber-reconnect join
-  latency is bounded with defined catch-up behaviour.
-- **T7 — Timing integrity (Gate 2, make-or-break).** A clean **TR 101 290 P1/P2 pass on a real
-  hardware IRD, on the live wire (P2), sustained** (≥ 72 h, set by the PCR base's 26.51 h wrap period
-  rather than chosen), including ST 2022-7 behaviour under loss, with the T-STD buffer model confirmed
-  valid under drift/discontinuity. Until this exists, the grooming design is "structurally sound and
-  software-validated," not "proven broadcast-acceptable."
-- **T8 — SRT against MoQ (comparative, not pass/fail).** Latency competitive if MoQ + pacer delivery
-  latency is within a stated margin of SRT at matched buffer; loss recovery competitive if recovery
-  and delivered-rate curves are within a stated margin and the failure mode is no worse; egress
-  quality at least matches (P1); overhead/CPU recorded as economic inputs.
+- **T1 — Baseline.** No pass/fail: T1 defines the reference. Met if the source set is clean (0 CC/transport/discontinuity errors) and representative (synthetic + broadcast mux + real contribution captures).
+- **T2 — Media-aware transparency.** (a) All clips round-trip, all elementary components carry with 0 CC, the open-GOP feed round-trips deterministically; (b) downstream timing conformance (`mpegts-pacer`): exact CBR, ≈ 0 % of PCR intervals > 40 ms, 0 `pcrverify` violations at 500 µs at P1.
+- **T3 — Opaque transparency (Gate 1).** Bit-transparency at P1 — TSID/ONID, service name/type, all PSI/SI (PAT/PMT/SDT/NIT/TDT/CAT), PMT PID, PCR PID, every elementary stream and every SCTE-35 PID preserved verbatim; 0 CC/transport errors; CBR and PCR conformance (0 % > 40 ms) preserved when fed the raw source.
+- **T4 — Remote E2E + SRT.** Relay reachable over the internet; live SRT contribution chain completes end-to-end with 0 CC.
+- **T5 — Network impairment.** Loss behaviour is _graceful and bounded_ (proportionate throughput reduction, recovery observed), not catastrophic; where loss exceeds recovery capacity within the buffer, the redundancy path (T6 / ST 2022-7) is the mitigation, not the transport alone.
+- **T6 — Serving-node resilience (Gate 3).** ST 2022-7 dual-path drill is **hitless** at the IRD under single-path loss (the two egress legs' RTP datagrams identical, header and payload); relay-failover recovery is bounded and documented, re-establishing without operator intervention; subscriber-reconnect join latency is bounded with defined catch-up behaviour.
+- **T7 — Timing integrity (Gate 2, make-or-break).** A clean **TR 101 290 P1/P2 pass on a real hardware IRD, on the live wire (P2), sustained** (≥ 72 h, set by the PCR base's 26.51 h wrap period rather than chosen), including ST 2022-7 behaviour under loss, with the T-STD buffer model confirmed valid under drift/discontinuity. Until this exists, the grooming design is "structurally sound and software-validated," not "proven broadcast-acceptable."
+- **T8 — SRT against MoQ (comparative, not pass/fail).** Latency competitive if MoQ + pacer delivery latency is within a stated margin of SRT at matched buffer; loss recovery competitive if recovery and delivered-rate curves are within a stated margin and the failure mode is no worse; egress quality at least matches (P1); overhead/CPU recorded as economic inputs.
 
 ### Desk analyses
 
 | Analysis | Purpose | State | File |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | Always-on cost model (v1) | Price the T9/T8 capacity constants at public list rates: MoQ vs SRT vs MediaConnect vs Cloudflare vs DIY, 1 channel and a transponder's worth, 1+1 | complete, list prices only | [cost-model.md](cost-model.md), rerun with `python3 lab/cost-model.py` |
 
-Every rate is a constant at the top of the script, so re-pricing against a different tariff is a
-one-line edit.
+Every rate is a constant at the top of the script, so re-pricing against a different tariff is a one-line edit.
 
 ## Where the campaign stands, and what is left
 
-What is and is not established is stated once, in [evidence](evidence.md) §2, and the limits
-of the evidence in §4. What is outstanding, what blocks it and in what order to run it is stated
-once, in [planned-experiments.md](planned-experiments.md), ranked P0/P1/P2 by what a result could
-change. Neither is restated here. Read every row of the table above against the limits in
-evidence §4, above all that **nothing has been fed to a hardware IRD or graded by a hardware
-analyser**: "complete" means complete in software.
+What is and is not established is stated once, in [evidence](evidence.md) §2, and the limits of the evidence in §4. What is outstanding, what blocks it and in what order to run it is stated once, in [planned-experiments.md](planned-experiments.md), ranked P0/P1/P2 by what a result could change. Neither is restated here. Read every row of the table above against the limits in evidence §4, above all that **nothing has been fed to a hardware IRD or graded by a hardware analyser**: "complete" means complete in software.
 
-The programme has two strands: the original asks which of two data planes can be run permanently, at
-scale, by an operations team; the second scores against [control-plane.md](../docs/control-plane.md).
-**Three milestones lie beyond the gates, and a deployment decision needs each:** *operations*, a
-platform a broadcast NOC can monitor and support under an SLA (R8); *entitlement and security*,
-whose enforcement is measured and whose remainder is design; and *dependency risk*, a lane built on
-a fast-moving upstream that speaks draft protocol versions.
+The programme has two strands: the original asks which of two data planes can be run permanently, at scale, by an operations team; the second scores against [control-plane.md](../docs/control-plane.md). **Three milestones lie beyond the gates, and a deployment decision needs each:** _operations_, a platform a broadcast NOC can monitor and support under an SLA (R8); _entitlement and security_, whose enforcement is measured and whose remainder is design; and _dependency risk_, a lane built on a fast-moving upstream that speaks draft protocol versions.
 
 ## Shared test environment and conventions
 
@@ -224,20 +153,13 @@ Source TS (file or live SRT/RTP)
 ### Measurement points
 
 - **P0 — Source.** Input TS before the publisher; establishes the reference (T1).
-- **P1 — Egress (file).** Subscriber's groomed output captured to file, analysed with TSDuck.
-  Cheap; catches gross faults; **not** sufficient for hardware acceptance: it grades the bytes of a
-  stage that may have run offline, and nothing about arrival.
-- **P2 — Egress (live wire).** The output as it leaves the gateway in real time: in software, a socket
-  capture graded from its bytes; for acceptance, the input of a hardware IRD and TR 101 290 analyser
-  (T7). PCR repetition (interval between PCR values) and accuracy (±500 ns, value against byte
-  position) grade the same bytes identically at P1 and P2. Only P2 with arrival timestamps grades
-  arrival regularity (PCR overall jitter, the delay factor, frequency offset and drift), and only
-  hardware decides IRD lock and acceptance.
+- **P1 — Egress (file).** Subscriber's groomed output captured to file, analysed with TSDuck. Cheap; catches gross faults; **not** sufficient for hardware acceptance: it grades the bytes of a stage that may have run offline, and nothing about arrival.
+- **P2 — Egress (live wire).** The output as it leaves the gateway in real time: in software, a socket capture graded from its bytes; for acceptance, the input of a hardware IRD and TR 101 290 analyser (T7). PCR repetition (interval between PCR values) and accuracy (±500 ns, value against byte position) grade the same bytes identically at P1 and P2. Only P2 with arrival timestamps grades arrival regularity (PCR overall jitter, the delay factor, frequency offset and drift), and only hardware decides IRD lock and acceptance.
 
 ### Tooling
 
 | Purpose | Tool |
-|---|---|
+| --- | --- |
 | TS structural / conformance analysis | **TSDuck** 3.44-4676 (`tsp`, `pcrverify`, `pcrextract`, `analyze`, `continuity`, `pat`/`pmt`/`sdt`) |
 | Real-time source pacing | TSDuck `regulate` (PCR-based; `--pcr-synchronous` for looped files) |
 | Media-aware lane | `moq-dev` `moq` (import/export) + `moq-relay` (public reference implementation) |
@@ -266,19 +188,13 @@ awk -F, 'NR>1{cur=$7; if(prev!=""){d=(cur-prev)/27000; n++; sum+=d;
 
 ### Conventions
 
-- Every result records **units**, the **measurement point** (P0/P1/P2), the **tool + version**,
-  the **source clip**, and the **build under test**.
+- Every result records **units**, the **measurement point** (P0/P1/P2), the **tool + version**, the **source clip**, and the **build under test**.
 - Unmeasured quantities are `TBM` (to be measured) — never blank, never guessed.
-- Raw captures and analyser exports are the evidence of record; they are large binaries and are not
-  committed. The commands above regenerate them from the source clips.
-- A result table too large to read inline is committed as CSV in [`results/`](results/) and
-  summarised in its per-test file. The rigs are in [`scripts/`](scripts/), named per test; only
-  machine-specific values are held out, in `INSTRUCTIONS.local.md`.
+- Raw captures and analyser exports are the evidence of record; they are large binaries and are not committed. The commands above regenerate them from the source clips.
+- A result table too large to read inline is committed as CSV in [`results/`](results/) and summarised in its per-test file. The rigs are in [`scripts/`](scripts/), named per test; only machine-specific values are held out, in `INSTRUCTIONS.local.md`.
 
 ### macOS loopback gotchas (local runs)
 
 - Disable UDP GSO on relay and clients, or QUIC handshakes time out on loopback.
-- Connect over `https://` and pin the relay's certificate fingerprint explicitly; the `http://`
-  fingerprint bootstrap is broken in recent builds.
-- Start the publisher before the subscriber, or subscribing to a not-yet-announced broadcast returns
-  relay `code=4`.
+- Connect over `https://` and pin the relay's certificate fingerprint explicitly; the `http://` fingerprint bootstrap is broken in recent builds.
+- Start the publisher before the subscriber, or subscribing to a not-yet-announced broadcast returns relay `code=4`.

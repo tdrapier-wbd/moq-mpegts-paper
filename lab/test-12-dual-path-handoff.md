@@ -2,56 +2,21 @@
 
 ## Objective
 
-Grade what a broadcast head-end actually receives at a contribution or distribution hand-off: **two
-complete, concurrently live delivery legs carrying one programme**, terminated by a receiver that
-selects between them — hitlessly by RTP sequence number (ST 2022-7) or by input failover on leg
-loss. The metric is what the *receiver* sees, not when a leg resumes.
+Grade what a broadcast head-end actually receives at a contribution or distribution hand-off: **two complete, concurrently live delivery legs carrying one programme**, terminated by a receiver that selects between them — hitlessly by RTP sequence number (ST 2022-7) or by input failover on leg loss. The metric is what the _receiver_ sees, not when a leg resumes.
 
-**Why this is not [T6](test-6-relay-resilience.md).** Every redundancy number measured before this
-was a single-leg recovery time — how long until bytes resumed on the one output being watched, which
-is break-before-make by construction. T6 ran two legs and compared them byte-wise, and characterised
-groomer determinism offline, on files. It stopped before RTP packetisation, before any receiver, and
-before skew. T12 adds the four things a 1+1 claim needs: a dual RTP egress, a receiver that selects,
-a switch metric denominated in lost packets rather than seconds, and a measured differential-delay
-window.
+**Why this is not [T6](test-6-relay-resilience.md).** Every redundancy number measured before this was a single-leg recovery time — how long until bytes resumed on the one output being watched, which is break-before-make by construction. T6 ran two legs and compared them byte-wise, and characterised groomer determinism offline, on files. It stopped before RTP packetisation, before any receiver, and before skew. T12 adds the four things a 1+1 claim needs: a dual RTP egress, a receiver that selects, a switch metric denominated in lost packets rather than seconds, and a measured differential-delay window.
 
-**A note on scope.** The arms below carry their legs over MoQ, because that is the lane the claim was
-first made for. The determinism that makes a pair mergeable belongs to the groomer rather than to the
-carriage, so it should hold on any data plane — and a section at the end puts that to the segmented
-lane. It holds there too, at eight times the cushion.
+**A note on scope.** The arms below carry their legs over MoQ, because that is the lane the claim was first made for. The determinism that makes a pair mergeable belongs to the groomer rather than to the carriage, so it should hold on any data plane — and a section at the end puts that to the segmented lane. It holds there too, at eight times the cushion.
 
 ## Environment
 
-- One EC2 host (2 vCPU, 3.8 GB, Ubuntu, no swap), everything on loopback. `moq` 0.9.9 /
-  `moq-relay` 0.14.9 release binaries, `mpegts-pacer` 0.1.0, TSDuck 3.44, negotiated wire
-  `moq-lite-05`.
-- Source: a **video-only, tightly VBV-constrained 2 Mbps** remux of the 600 s reference clip
-  (300 s, H.264 1080i25, 2 s GOP, no B-frames, `vbv-bufsize=500` kbit, CBR TS at exactly
-  2.000 Mbps, PCR every ~20 ms, 0 continuity errors). Video-only because `moq import` aborts on
-  the audio frame-sync loss at a loop wrap ([T9](test-9-performance.md)); tight VBV because a
-  loose one puts I-frame excursions, not transport behaviour, into the PCR statistics (see
-  [Corrections](#corrections)).
-- Egress CBR rate 4 Mbps for a 1.9 Mbps feed (55–60 % stuffing) — headroom, not realism: the
-  groomer drops content when the target rate does not exceed the arriving content rate.
-- The groomer runs with stall detection on: `--stall-ms 1000 --on-stall mute`, so a leg whose
-  content stops arriving stops transmitting one second later while its output byte clock keeps
-  running. Grooming otherwise decouples carrier liveness from content liveness, and every
-  failure-detection scheme in this campaign keys on the carrier (see [Corrections](#corrections)).
-- Rig: [`t12-dual-leg.sh`](scripts/t12-dual-leg.sh), receiver
-  [`t12-merge-oracle.py`](scripts/t12-merge-oracle.py), grading
-  [`t12-grade.sh`](scripts/t12-grade.sh), matrix [`t12-matrix.sh`](scripts/t12-matrix.sh),
-  divergence analysis [`t12-conflict-anatomy.py`](scripts/t12-conflict-anatomy.py), resume
-  behaviour [`t12-resume.py`](scripts/t12-resume.py). The later re-run against candidate exporter
-  fixes uses a second, smaller rig on a laptop —
-  [`t12-armd-join-local.sh`](scripts/t12-armd-join-local.sh) with
-  [`t12-rtpcmp.py`](scripts/t12-rtpcmp.py) — which drops to one publisher and one relay so that the
-  only asymmetry between the legs is when each exporter tuned in; its sources are stated with its
-  results. Grading reads only the capture, so the whole
-  campaign is re-graded from the pcaps whenever the receiver changes — which it did, four times. The
-  standing loop publisher is stopped for the duration so CPU is attributable.
+- One EC2 host (2 vCPU, 3.8 GB, Ubuntu, no swap), everything on loopback. `moq` 0.9.9 / `moq-relay` 0.14.9 release binaries, `mpegts-pacer` 0.1.0, TSDuck 3.44, negotiated wire `moq-lite-05`.
+- Source: a **video-only, tightly VBV-constrained 2 Mbps** remux of the 600 s reference clip (300 s, H.264 1080i25, 2 s GOP, no B-frames, `vbv-bufsize=500` kbit, CBR TS at exactly 2.000 Mbps, PCR every ~20 ms, 0 continuity errors). Video-only because `moq import` aborts on the audio frame-sync loss at a loop wrap ([T9](test-9-performance.md)); tight VBV because a loose one puts I-frame excursions, not transport behaviour, into the PCR statistics (see [Corrections](#corrections)).
+- Egress CBR rate 4 Mbps for a 1.9 Mbps feed (55–60 % stuffing) — headroom, not realism: the groomer drops content when the target rate does not exceed the arriving content rate.
+- The groomer runs with stall detection on: `--stall-ms 1000 --on-stall mute`, so a leg whose content stops arriving stops transmitting one second later while its output byte clock keeps running. Grooming otherwise decouples carrier liveness from content liveness, and every failure-detection scheme in this campaign keys on the carrier (see [Corrections](#corrections)).
+- Rig: [`t12-dual-leg.sh`](scripts/t12-dual-leg.sh), receiver [`t12-merge-oracle.py`](scripts/t12-merge-oracle.py), grading [`t12-grade.sh`](scripts/t12-grade.sh), matrix [`t12-matrix.sh`](scripts/t12-matrix.sh), divergence analysis [`t12-conflict-anatomy.py`](scripts/t12-conflict-anatomy.py), resume behaviour [`t12-resume.py`](scripts/t12-resume.py). The later re-run against candidate exporter fixes uses a second, smaller rig on a laptop — [`t12-armd-join-local.sh`](scripts/t12-armd-join-local.sh) with [`t12-rtpcmp.py`](scripts/t12-rtpcmp.py) — which drops to one publisher and one relay so that the only asymmetry between the legs is when each exporter tuned in; its sources are stated with its results. Grading reads only the capture, so the whole campaign is re-graded from the pcaps whenever the receiver changes — which it did, four times. The standing loop publisher is stopped for the duration so CPU is attributable.
 
-**Topology.** One source, fanned by `tee` into two *independent* chains — no cluster peering, so the
-legs are disjoint by construction and relay reselect cannot mask a receiver-side result:
+**Topology.** One source, fanned by `tee` into two _independent_ chains — no cluster peering, so the legs are disjoint by construction and relay reselect cannot mask a receiver-side result:
 
 ```
                        ┌─ moq import ts ─ relay A ─ moq export ts ─ egress A ─ RTP/UDP :5100 ─┐
@@ -59,96 +24,52 @@ source (one feed) ─fan─┤                                                  
                        └─ moq import ts ─ relay B ─ moq export ts ─ egress B ─ RTP/UDP :5200 ─┘
 ```
 
-Both legs are captured by a single `tcpdump` on one interface, so the two arrival timestamps share a
-clock and skew is exact. The receiver is offline: a reference implementation of the two selection
-rules, computed over the same capture pair, so the policies are graded against identical inputs.
+Both legs are captured by a single `tcpdump` on one interface, so the two arrival timestamps share a clock and skew is exact. The receiver is offline: a reference implementation of the two selection rules, computed over the same capture pair, so the policies are graded against identical inputs.
 
 ## Procedure
 
 **Arms** differ only in how each leg turns delivered MoQ objects into RTP:
 
 | Arm | Egress per leg | What it tests |
-|---|---|---|
+| --- | --- | --- |
 | A — no pacer | `moq export ts` → `tsp --buffer-size-mb 1 -O ip <dest> --rtp --enforce-burst --packet-burst 7 --start-sequence-number 0 --ssrc-identifier <fixed>` | the ungroomed control: with RTP framing pinned identically on both legs, does content identity alone yield alignment? |
 | B — one pacer per leg | `mpegts-pacer` `moq_egress <dest> 4000000 --rtp --ssrc <fixed>` on each leg | the two-gateway topology of [architecture](../docs/architecture.md) §5.1, as the pacer is built today |
 | C — one pacer, duplicated | one groom, identical datagrams to both destinations (`dual_rtp`) | **positive control.** The standard ST 2022-7 sender pattern; must be hitless or the rig is invalid |
-| D — one *stream-clocked* pacer per leg | `moq_egress <dest> 4000000 --rtp --ssrc <fixed> --stream-clock --sequence-seed 0` on each leg | arm B's topology with the placement decision moved off the pacer's emit clock and onto the stream: can two independently groomed legs be a pair? |
+| D — one _stream-clocked_ pacer per leg | `moq_egress <dest> 4000000 --rtp --ssrc <fixed> --stream-clock --sequence-seed 0` on each leg | arm B's topology with the placement decision moved off the pacer's emit clock and onto the stream: can two independently groomed legs be a pair? |
 
-Arm C grooms once, so it has a single upstream chain and only ever protects the **last hop**: it is
-graded against the path injections, and the upstream ones do not apply — killing its publisher takes
-the whole arm down, which is the honest result, not a rig failure. That asymmetry is the
-architectural finding in miniature.
+Arm C grooms once, so it has a single upstream chain and only ever protects the **last hop**: it is graded against the path injections, and the upstream ones do not apply — killing its publisher takes the whole arm down, which is the honest result, not a rig failure. That asymmetry is the architectural finding in miniature.
 
-Arm D is arm B with one change of principle. Under `--stream-clock` the pacer places every packet on
-the absolute output slot its source PCR implies at the locked mux rate, and derives the emitted PCR,
-the RTP sequence number and the RTP timestamp from that slot, so what a leg sends is a function of
-the stream rather than of when the process started or when the OS ran its timer. It requires an
-explicit mux rate (an auto rate is measured from one process's arrival window) and regenerated PCR;
-both legs carry the same `--sequence-seed`.
+Arm D is arm B with one change of principle. Under `--stream-clock` the pacer places every packet on the absolute output slot its source PCR implies at the locked mux rate, and derives the emitted PCR, the RTP sequence number and the RTP timestamp from that slot, so what a leg sends is a function of the stream rather than of when the process started or when the OS ran its timer. It requires an explicit mux rate (an auto rate is measured from one process's arrival window) and regenerated PCR; both legs carry the same `--sequence-seed`.
 
-Three further comparisons are made for arm D, because a conflict at the receiver does not say which
-stage produced it, and because the oracle cannot grade a pair that is not byte-identical (below).
-[`t12-maskcmp.py`](scripts/t12-maskcmp.py) compares the legs datagram by datagram at equal sequence
-numbers with the continuity counter masked; [`t12-seqskew.py`](scripts/t12-seqskew.py) measures
-differential arrival at equal sequence numbers, without correlating; and
-[`t12-placement.py`](scripts/t12-placement.py) strips stuffing and asks where a leg's programme sits
-in its partner's output. Between them they separate *the groomer placed different bytes* from *an
-earlier stage renumbered the same bytes*.
+Three further comparisons are made for arm D, because a conflict at the receiver does not say which stage produced it, and because the oracle cannot grade a pair that is not byte-identical (below). [`t12-maskcmp.py`](scripts/t12-maskcmp.py) compares the legs datagram by datagram at equal sequence numbers with the continuity counter masked; [`t12-seqskew.py`](scripts/t12-seqskew.py) measures differential arrival at equal sequence numbers, without correlating; and [`t12-placement.py`](scripts/t12-placement.py) strips stuffing and asks where a leg's programme sits in its partner's output. Between them they separate _the groomer placed different bytes_ from _an earlier stage renumbered the same bytes_.
 
 **Selector policies**, both computed over the same capture:
 
-1. **Seq-merge (ST 2022-7).** Emit the payload for each RTP sequence number from whichever leg
-   supplied it; a gap on one leg is covered by the other with no output discontinuity.
-2. **Input-select (IRD-style input failover).** Follow one leg, switch after `k` ms of silence.
-   Swept at `k` = 50, 100, 250, 500 ms.
+1. **Seq-merge (ST 2022-7).** Emit the payload for each RTP sequence number from whichever leg supplied it; a gap on one leg is covered by the other with no output discontinuity.
+2. **Input-select (IRD-style input failover).** Follow one leg, switch after `k` ms of silence. Swept at `k` = 50, 100, 250, 500 ms.
 
-**Injections**, each applied to leg A at t+30 s of a 60 s capture window: RTP-path blackout (100 %
-loss), path loss at 1 % and 3 %, differential delay (10 / 50 / 200 ms), publisher `SIGKILL`,
-publisher `SIGTERM` (the graceful-exit path that terminates a *single* exporter), relay kill,
-egress kill, and a 15 s QUIC blackout that is then *cleared* — the one injection a leg is expected
-to survive, and the only way to observe a groomer resuming rather than merely stopping. Impairment
-is applied per leg through a `prio` + `u32` lane keyed on that leg's UDP
-port, the SSH-safe pattern of [T5](test-5-network-impairment.md), with a watchdog that removes the
-lane unattended. One further condition is a *start-order* rather than a failure: leg B's egress held
-back 20 s, the mid-stream join a restarted leg would perform.
+**Injections**, each applied to leg A at t+30 s of a 60 s capture window: RTP-path blackout (100 % loss), path loss at 1 % and 3 %, differential delay (10 / 50 / 200 ms), publisher `SIGKILL`, publisher `SIGTERM` (the graceful-exit path that terminates a _single_ exporter), relay kill, egress kill, and a 15 s QUIC blackout that is then _cleared_ — the one injection a leg is expected to survive, and the only way to observe a groomer resuming rather than merely stopping. Impairment is applied per leg through a `prio` + `u32` lane keyed on that leg's UDP port, the SSH-safe pattern of [T5](test-5-network-impairment.md), with a watchdog that removes the lane unattended. One further condition is a _start-order_ rather than a failure: leg B's egress held back 20 s, the mid-stream join a restarted leg would perform.
 
-**Metrics.** Alignment yield (fraction of sequence numbers whose payloads are identical on both legs,
-after cross-correlating for a constant sequence offset); lost TS packets and gap duration at the
-merged output; skew (differential arrival of matching sequence numbers); merged-stream conformance
-(TSDuck continuity, PCR interval distribution, `pcrverify` at ±500 ns); switch count and switch time
-per `k`. The first and third have a shared dependency worth stating up front: the sequence offset is
-recovered by voting on payload identity, and the skew is measured between datagrams paired through
-it, so both degrade to noise on a pair whose datagrams differ in *any* field. The oracle reports its
-vote share as a confidence, and arm D's join and recovery cells are where that matters.
+**Metrics.** Alignment yield (fraction of sequence numbers whose payloads are identical on both legs, after cross-correlating for a constant sequence offset); lost TS packets and gap duration at the merged output; skew (differential arrival of matching sequence numbers); merged-stream conformance (TSDuck continuity, PCR interval distribution, `pcrverify` at ±500 ns); switch count and switch time per `k`. The first and third have a shared dependency worth stating up front: the sequence offset is recovered by voting on payload identity, and the skew is measured between datagrams paired through it, so both degrade to noise on a pair whose datagrams differ in _any_ field. The oracle reports its vote share as a confidence, and arm D's join and recovery cells are where that matters.
 
 **Pass criteria (fixed in advance).**
 
-- **Arm C is a gate on the rig, not on MoQ:** 100 % alignment yield, and across every path injection
-  0 lost TS packets, 0 continuity errors and no PCR degradation against its own clean control. If arm
-  C is not hitless, no other arm's result may be reported.
-- **Arms A, B and D** are graded as *feasible* only at 100 % alignment yield. Below that, the
-  deliverable is the measured mechanism and the divergence onset, not a partial score.
-- **Graceful exit** — with two legs live, a `SIGTERM` to publisher A must produce **zero** lost
-  packets at the merged output under seq-merge.
-- **Input-select** — bounded and reported, not pass/fail: a break-before-make switch has an artefact
-  by definition.
-- **Skew** — reported as measured, against the differential-delay window of a named IRD once one is
-  chosen for Gate 2. No threshold asserted here.
+- **Arm C is a gate on the rig, not on MoQ:** 100 % alignment yield, and across every path injection 0 lost TS packets, 0 continuity errors and no PCR degradation against its own clean control. If arm C is not hitless, no other arm's result may be reported.
+- **Arms A, B and D** are graded as _feasible_ only at 100 % alignment yield. Below that, the deliverable is the measured mechanism and the divergence onset, not a partial score.
+- **Graceful exit** — with two legs live, a `SIGTERM` to publisher A must produce **zero** lost packets at the merged output under seq-merge.
+- **Input-select** — bounded and reported, not pass/fail: a break-before-make switch has an artefact by definition.
+- **Skew** — reported as measured, against the differential-delay window of a named IRD once one is chosen for Gate 2. No threshold asserted here.
 
 ## Results
 
-42 cells, each a 60 s capture of both legs, graded from the pcaps: [`t12-summary.csv`](results/t12-summary.csv)
-(one row per cell) and [`t12-input-select.csv`](results/t12-input-select.csv) (one row per cell per
-`k`). Every number below is from those two files, except the datagram comparisons and the
-equal-sequence skew, which come from the two scripts named above and are marked where they appear.
+42 cells, each a 60 s capture of both legs, graded from the pcaps: [`t12-summary.csv`](results/t12-summary.csv) (one row per cell) and [`t12-input-select.csv`](results/t12-input-select.csv) (one row per cell per `k`). Every number below is from those two files, except the datagram comparisons and the equal-sequence skew, which come from the two scripts named above and are marked where they appear.
 
 ### Arm C — one groomer, duplicated: the rig gate passes
 
-The positive control is hitless under every path injection, so receiver-side results from the other
-arms can be believed.
+The positive control is hitless under every path injection, so receiver-side results from the other arms can be believed.
 
 | Injection | Yield | Covered by B | Lost TS packets | CC errors | PCR > 40 ms | PCR accuracy fails | Skew \|max\| |
-|---|---|---|---|---|---|---|---|
+| --- | --- | --- | --- | --- | --- | --- | --- |
 | none (control) | 100 % | 0 | 0 | 0 | 1.386 % | 0 / 2598 | 0.18 ms |
 | blackout on A | 100 % | 11 388 | **0** | 0 | 1.504 % | 0 / 2594 | 0.34 ms |
 | 1 % loss on A | 100 % | 104 | **0** | 0 | 1.506 % | 0 / 2590 | 0.20 ms |
@@ -157,25 +78,16 @@ arms can be believed.
 | +50 ms on A | 100 % | 20 | **0** | 0 | 1.504 % | 0 / 2595 | 50.06 ms |
 | +200 ms on A | 100 % | 76 | **0** | 0 | 1.425 % | 0 / 2598 | 200.02 ms |
 
-A total blackout of one leg costs nothing: leg B supplies 11 388 datagrams, the merged output loses
-none, and continuity and PCR are indistinguishable from the clean control. PCR intervals above 40 ms
-sit at 1.4–1.6 % in *every* cell including the control, so that is the rig's floor, not switch damage
-(see [Corrections](#corrections)); no interval in any arm C cell is negative, i.e. the switch leaves
-no PCR discontinuity to absorb. Measured skew tracks injected delay to within 60 µs at 50 and 200 ms; the
-10 ms cell reads 13.1 ms, which is `netem`'s timer granularity, not stream behaviour.
+A total blackout of one leg costs nothing: leg B supplies 11 388 datagrams, the merged output loses none, and continuity and PCR are indistinguishable from the clean control. PCR intervals above 40 ms sit at 1.4–1.6 % in _every_ cell including the control, so that is the rig's floor, not switch damage (see [Corrections](#corrections)); no interval in any arm C cell is negative, i.e. the switch leaves no PCR discontinuity to absorb. Measured skew tracks injected delay to within 60 µs at 50 and 200 ms; the 10 ms cell reads 13.1 ms, which is `netem`'s timer granularity, not stream behaviour.
 
-The gate's cost is its scope. Arm C grooms once, so its two legs share one publisher, one relay and
-one exporter: it protects the **last hop only**, and the upstream injections do not apply because
-they take the whole arm down.
+The gate's cost is its scope. Arm C grooms once, so its two legs share one publisher, one relay and one exporter: it protects the **last hop only**, and the upstream injections do not apply because they take the whole arm down.
 
 ### Arm A — no pacer: mergeable, and not presentable
 
-The prediction was that two independently packetised legs would diverge in phase. They do not. With
-RTP framing pinned identically on both legs (fixed SSRC, sequence seed, 7-packet bursts) and both
-legs started together, alignment is exact in all 12 cells:
+The prediction was that two independently packetised legs would diverge in phase. They do not. With RTP framing pinned identically on both legs (fixed SSRC, sequence seed, 7-packet bursts) and both legs started together, alignment is exact in all 12 cells:
 
 | Injection | Offset | Yield | Covered by B | Lost TS packets | CC errors | Skew \|max\| |
-|---|---|---|---|---|---|---|
+| --- | --- | --- | --- | --- | --- | --- |
 | none ×3 (controls) | 0 | 100.0000 % | 0 | **0** | 0 | 2.9–6.1 ms |
 | publisher `SIGKILL` | 0 | 100 % | 5 339 | **0** | 0 | 3.4 ms |
 | publisher `SIGTERM` | 0 | 100 % | 5 339 | **0** | 0 | 3.6 ms |
@@ -185,87 +97,49 @@ legs started together, alignment is exact in all 12 cells:
 | 1 % / 3 % loss on A | 0 | 100 % | 27 / 170 | **0** | 0 | 4.4 / 2.8 ms |
 | +50 / +200 ms on A | 0 | 100 % | 0 / 21 | **0** | 0 | 52.9 / 202.9 ms |
 
-Every upstream failure at t+30 s stops leg A dead at 5 503 datagrams; leg B covers the remaining
-5 339 and the merged output loses **nothing**. This includes the graceful-exit case that single-leg
-failover cannot cover at all ([T6](test-6-relay-resilience.md)): a `SIGTERM` to publisher A is
-invisible at the receiver. The pass criterion fixed in advance — zero lost packets under seq-merge on
-graceful exit — is met.
+Every upstream failure at t+30 s stops leg A dead at 5 503 datagrams; leg B covers the remaining 5 339 and the merged output loses **nothing**. This includes the graceful-exit case that single-leg failover cannot cover at all ([T6](test-6-relay-resilience.md)): a `SIGTERM` to publisher A is invisible at the receiver. The pass criterion fixed in advance — zero lost packets under seq-merge on graceful exit — is met.
 
-What fails is conformance, not the merge. The merged stream carries 1 524 PCRs, of which **1 523 fall
-outside ±500 ns** of where a constant-rate transport would put them, because the ungroomed egress is
-not a constant-rate transport: it is the exporter's VBR packet sequence with no stuffing, so no single
-bitrate makes its PCRs accurate. (PCR *intervals* are clean — 0 % above 40 ms — because the interval
-is the encoder's own 20 ms grid.) An IRD recovers its clock from those PCRs, which is why
-[T7](test-7-timing-integrity.md) requires grooming. Arm A is therefore *mergeable but not
-presentable*: it satisfies ST 2022-7 and fails TR 101 290.
+What fails is conformance, not the merge. The merged stream carries 1 524 PCRs, of which **1 523 fall outside ±500 ns** of where a constant-rate transport would put them, because the ungroomed egress is not a constant-rate transport: it is the exporter's VBR packet sequence with no stuffing, so no single bitrate makes its PCRs accurate. (PCR _intervals_ are clean — 0 % above 40 ms — because the interval is the encoder's own 20 ms grid.) An IRD recovers its clock from those PCRs, which is why [T7](test-7-timing-integrity.md) requires grooming. Arm A is therefore _mergeable but not presentable_: it satisfies ST 2022-7 and fails TR 101 290.
 
-It is also fragile in a way arm C is not. The ungroomed leg is bursty — median inter-datagram gap
-0 ms, p99 ≈ 60 ms, **max 242 ms** — and that burstiness sets the failure-detection floor discussed
-below.
+It is also fragile in a way arm C is not. The ungroomed leg is bursty — median inter-datagram gap 0 ms, p99 ≈ 60 ms, **max 242 ms** — and that burstiness sets the failure-detection floor discussed below.
 
 ### Arm B — one pacer per leg: detectable, still not mergeable
 
-No cell reaches alignment. Yield is 30–53 %, the recovered sequence offset is unstable
-(−1, 0, +1), and 5 622–12 485 sequence numbers carry conflicting payloads:
+No cell reaches alignment. Yield is 30–53 %, the recovered sequence offset is unstable (−1, 0, +1), and 5 622–12 485 sequence numbers carry conflicting payloads:
 
 | Injection | Offset | Yield | Conflicts | CC errors | PCR > 40 ms | Backward PCR |
-|---|---|---|---|---|---|---|
+| --- | --- | --- | --- | --- | --- | --- |
 | none | −1 | 46.1 % | 12 485 | 0 | 1.582 % | 0 |
 | blackout on A | +1 | 52.3 % | 5 622 | 1 | 1.505 % | 0 |
 | 1 % loss on A | 0 | 53.4 % | 10 748 | 82 | 1.540 % | 0 |
 | 3 % loss on A | −1 | 49.4 % | 11 561 | 240 | 2.210 % | **7** |
 | +50 ms on A | 0 | 51.8 % | 11 172 | 1 | 1.507 % | 0 |
 
-Merging an unmergeable pair is worse than not merging it: the 3 % cell produces 240 continuity errors
-and seven *backward* PCR steps — a clock discontinuity no IRD will absorb — from two legs that are
-individually healthy.
+Merging an unmergeable pair is worse than not merging it: the 3 % cell produces 240 continuity errors and seven _backward_ PCR steps — a clock discontinuity no IRD will absorb — from two legs that are individually healthy.
 
-**Why they diverge is not PCR re-stamping.** The standing assumption (and this file's earlier
-prediction) was that two groomers would agree on content and differ only in the PCR bytes each
-stamped for itself, which a receiver could in principle ignore. Sampling 400 conflicting datagrams
-([`t12-conflict-anatomy.py`](scripts/t12-conflict-anatomy.py)) refutes it: **0 %** differ only in the
-PCR field, 100 % differ beyond it, only 60.5 % even carry the same PIDs in the same order, and 28.2 %
-carry a different number of null packets. The differing bytes cluster at offset 3 (continuity counter
-and adaptation-field control), across the PCR field at 6–11, and in the payload at 15, 24 and 187.
-Two independent groomers do not produce the same transport with different timestamps; they produce
-*different transports*. The divergence is structural — each groomer strips the arriving nulls, decides
-its own content/stuffing interleave against its own emit clock, and numbers its own nulls — so it
-cannot be patched at the receiver.
+**Why they diverge is not PCR re-stamping.** The standing assumption (and this file's earlier prediction) was that two groomers would agree on content and differ only in the PCR bytes each stamped for itself, which a receiver could in principle ignore. Sampling 400 conflicting datagrams ([`t12-conflict-anatomy.py`](scripts/t12-conflict-anatomy.py)) refutes it: **0 %** differ only in the PCR field, 100 % differ beyond it, only 60.5 % even carry the same PIDs in the same order, and 28.2 % carry a different number of null packets. The differing bytes cluster at offset 3 (continuity counter and adaptation-field control), across the PCR field at 6–11, and in the payload at 15, 24 and 187. Two independent groomers do not produce the same transport with different timestamps; they produce _different transports_. The divergence is structural — each groomer strips the arriving nulls, decides its own content/stuffing interleave against its own emit clock, and numbers its own nulls — so it cannot be patched at the receiver.
 
-**Upstream failure stops the leg.** With stall detection on, a groomer whose content stops arriving
-mutes one second later, and every upstream kill produces a leg that visibly dies:
+**Upstream failure stops the leg.** With stall detection on, a groomer whose content stops arriving mutes one second later, and every upstream kill produces a leg that visibly dies:
 
 | Injection to leg A | Leg A datagrams | Carrier after last content | Covered by B | Lost | Merged content |
-|---|---|---|---|---|---|
+| --- | --- | --- | --- | --- | --- |
 | none (control) | 23 175 | 0.61 s (end of run) | 2 | **0** | 48.1 % |
 | publisher `SIGKILL` | 13 271 | **0.0 s** | 9 906 | **0** | 51.7 % |
 | publisher `SIGTERM` | 13 271 | **0.0 s** | 9 903 | **0** | 51.8 % |
 | relay kill | 13 271 | **0.0 s** | 9 903 | **0** | 51.7 % |
 | egress kill | 11 781 | **0.0 s** | 11 393 | **0** | 48.1 % |
 
-Leg A stops at 13 271 datagrams instead of running the full 23 175, and the interval between its
-last programme packet and its last datagram is zero: the carrier ends with the content rather than
-outliving it. Leg B covers the remainder and the merged output loses nothing. Programme content at
-the merged output holds at ~52 % of datagrams across the failure — the second half of the window is
-leg B's real programme, not leg A's stuffing — against 48 % in the clean control.
+Leg A stops at 13 271 datagrams instead of running the full 23 175, and the interval between its last programme packet and its last datagram is zero: the carrier ends with the content rather than outliving it. Leg B covers the remainder and the merged output loses nothing. Programme content at the merged output holds at ~52 % of datagrams across the failure — the second half of the window is leg B's real programme, not leg A's stuffing — against 48 % in the clean control.
 
-That is what makes the leg *detectable*, which is the property input-select needs: every upstream
-kill produces exactly **one switch at every threshold** (50, 100, 250, 500 ms), at a cost of 1–3
-continuity errors, with the switch taken after ≈ `k` ms of silence.
+That is what makes the leg _detectable_, which is the property input-select needs: every upstream kill produces exactly **one switch at every threshold** (50, 100, 250, 500 ms), at a cost of 1–3 continuity errors, with the switch taken after ≈ `k` ms of silence.
 
-It does not make the pair *mergeable*. Conflicts stand at 5 978–7 910 and yield at 40–49 % in these
-cells: the two groomers emit different transports, and stall detection governs *when* a leg
-transmits, not *what* it transmits. Arm B fails the alignment criterion either way.
+It does not make the pair _mergeable_. Conflicts stand at 5 978–7 910 and yield at 40–49 % in these cells: the two groomers emit different transports, and stall detection governs _when_ a leg transmits, not _what_ it transmits. Arm B fails the alignment criterion either way.
 
 ### Recovery under arm B: a resumed leg does not rejoin the pair
 
-Stopping is only half of a failover. The 15 s QUIC blackout is the condition where leg A is expected
-to come back — every process stays alive, and only delivery is interrupted — so it measures the
-return path that the kill cells cannot.
+Stopping is only half of a failover. The 15 s QUIC blackout is the condition where leg A is expected to come back — every process stays alive, and only delivery is interrupted — so it measures the return path that the kill cells cannot.
 
-Leg A muted and resumed: a **23.0 s** silence, then 1 149 datagrams over the remaining 3.0 s, 496 of
-them carrying programme. Detection and recovery both work at the transport level. But the numbering
-does not survive the gap ([`t12-resume.py`](scripts/t12-resume.py)):
+Leg A muted and resumed: a **23.0 s** silence, then 1 149 datagrams over the remaining 3.0 s, 496 of them carrying programme. Detection and recovery both work at the transport level. But the numbering does not survive the gap ([`t12-resume.py`](scripts/t12-resume.py)):
 
 ```
 leg a: outage 23049 ms, then 1149 datagrams over 3.0 s
@@ -274,28 +148,18 @@ leg a: outage 23049 ms, then 1149 datagrams over 3.0 s
   numbering deficit       8756 datagrams (resumes misnumbered)
 ```
 
-Leg A resumes at the next sequence number it would have sent, having sent nothing for 23 s, while
-leg B advanced 8 757. The resumed leg is behind by the entire outage and no constant offset
-reconciles the pair afterwards — the same failure as a mid-stream join, arrived at from a leg that
-was aligned to begin with. The merged output records it as 3 continuity errors and **2 backward PCR
-steps**, the only cells in the campaign outside arm B's 3 % loss cell to show a clock discontinuity.
+Leg A resumes at the next sequence number it would have sent, having sent nothing for 23 s, while leg B advanced 8 757. The resumed leg is behind by the entire outage and no constant offset reconciles the pair afterwards — the same failure as a mid-stream join, arrived at from a leg that was aligned to begin with. The merged output records it as 3 continuity errors and **2 backward PCR steps**, the only cells in the campaign outside arm B's 3 % loss cell to show a clock discontinuity.
 
-Under arm D the same cell resumes with a numbering deficit of **0**; the mechanism and what remains
-are below.
+Under arm D the same cell resumes with a numbering deficit of **0**; the mechanism and what remains are below.
 
 ### Arm D — one stream-clocked pacer per leg: two groomers, one transport
 
-This is the arm that arm B's failure asked for, and it works. Two groomers that share no process, no
-clock and no messages emit the same bytes under the same numbers, because both compute placement
-from the stream instead of from themselves. The co-started control is **byte-identical on every
-datagram**: 23 175 on each leg, sequence offset 0, 100.00 % alignment yield, 0 conflicts, 0
-continuity errors, skew |max| 8.8 ms. Arm B's clean control, from the same topology, was 46.1 %.
+This is the arm that arm B's failure asked for, and it works. Two groomers that share no process, no clock and no messages emit the same bytes under the same numbers, because both compute placement from the stream instead of from themselves. The co-started control is **byte-identical on every datagram**: 23 175 on each leg, sequence offset 0, 100.00 % alignment yield, 0 conflicts, 0 continuity errors, skew |max| 8.8 ms. Arm B's clean control, from the same topology, was 46.1 %.
 
-That identity survives every injection, including the upstream-chain failures arm C — the positive
-control — cannot be subjected to at all, because arm C has only one upstream chain to fail:
+That identity survives every injection, including the upstream-chain failures arm C — the positive control — cannot be subjected to at all, because arm C has only one upstream chain to fail:
 
 | Injection on leg A | A's datagrams | Yield | Identical | Lost | CC | Covered by B | Skew \|max\| |
-|---|---:|---:|---:|---:|---:|---:|---:|
+| --- | --: | --: | --: | --: | --: | --: | --: |
 | none (control) | 23 175 | 100 % | 100 % | 0 | 0 | 1 | 8.8 ms |
 | `SIGKILL` publisher A | 12 334 | 100 % | 100 % | 0 | 0 | 10 841 | 2.4 ms |
 | `SIGTERM` publisher A | 12 333 | 100 % | 100 % | 0 | 0 | 10 842 | 3.1 ms |
@@ -306,18 +170,11 @@ control — cannot be subjected to at all, because arm C has only one upstream c
 | 3 % loss on leg A | 22 848 | 100 % | 100 % | 0 | 0 | 326 | 2.6 ms |
 | 50 ms differential delay | 23 155 | 100 % | 100 % | 0 | 0 | 16 | 46.9 ms |
 
-*Identical* is every datagram the two legs both sent, compared byte for byte
-([`t12-maskcmp.py`](scripts/t12-maskcmp.py)); *covered by B* is how many of the merged output's
-datagrams came only from leg B. Leg A dies where the injection says it should, leg B covers the
-remainder, and the merged output loses nothing and gains no continuity error. A groomed, TR 101
-290-conformant pair now protects the whole chain — publisher, relay and exporter — and not just the
-last hop. The 50 ms cell also confirms the pair is not merely co-timed: delay one leg by 50 ms and
-the bytes still match, because they were never a function of when they were sent.
+_Identical_ is every datagram the two legs both sent, compared byte for byte ([`t12-maskcmp.py`](scripts/t12-maskcmp.py)); _covered by B_ is how many of the merged output's datagrams came only from leg B. Leg A dies where the injection says it should, leg B covers the remainder, and the merged output loses nothing and gains no continuity error. A groomed, TR 101 290-conformant pair now protects the whole chain — publisher, relay and exporter — and not just the last hop. The 50 ms cell also confirms the pair is not merely co-timed: delay one leg by 50 ms and the bytes still match, because they were never a function of when they were sent.
 
 #### Recovery: the leg comes back into the numbering, and into the programme
 
-The 15 s QUIC blackout, where arm B returned 8 756 datagrams short, resumes exactly
-([`t12-resume.py`](scripts/t12-resume.py)):
+The 15 s QUIC blackout, where arm B returned 8 756 datagrams short, resumes exactly ([`t12-resume.py`](scripts/t12-resume.py)):
 
 ```
 leg a: outage 13650 ms, then 5658 datagrams over 14.9 s
@@ -327,228 +184,110 @@ leg a: outage 13650 ms, then 5658 datagrams over 14.9 s
   programme after resume  5526 of 5658 datagrams carry content
 ```
 
-Both halves matter and they were fixed separately. The numbering rejoins because a muted slot still
-consumes its place on the grid. The *programme* rejoins because a returning leg reads its source's
-forward PCR jump against the time it spent silent: an earlier build treated a jump larger than the
-5 s discontinuity threshold as a splice, re-anchored the grid to where its last run had ended, and
-placed everything it then received in slots that had already been transmitted. That leg came back
-with perfect numbering and **0 of 1 155 datagrams carrying programme** — a failure invisible to every
-metric except asking whether the carrier had anything in it.
+Both halves matter and they were fixed separately. The numbering rejoins because a muted slot still consumes its place on the grid. The _programme_ rejoins because a returning leg reads its source's forward PCR jump against the time it spent silent: an earlier build treated a jump larger than the 5 s discontinuity threshold as a splice, re-anchored the grid to where its last run had ended, and placed everything it then received in slots that had already been transmitted. That leg came back with perfect numbering and **0 of 1 155 datagrams carrying programme** — a failure invisible to every metric except asking whether the carrier had anything in it.
 
 #### What remains is upstream of the groomer, and most of it is a continuity counter
 
-The recovery cell scores 68.6 % alignment yield and the mid-stream join 0.08 %, which reads like
-arm B until the conflicts are opened up. Masking the continuity counter
-([`t12-maskcmp.py`](scripts/t12-maskcmp.py)):
+The recovery cell scores 68.6 % alignment yield and the mid-stream join 0.08 %, which reads like arm B until the conflicts are opened up. Masking the continuity counter ([`t12-maskcmp.py`](scripts/t12-maskcmp.py)):
 
 | Cell | Identical | Identical bar CC | Skew at equal sequence, median |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | none (co-started) | 100.00 % | 100.00 % | −1.7 ms |
 | relay kill on A | 100.00 % | 100.00 % | 2.6 ms |
 | 15 s QUIC blackout, cleared | 68.56 % | **98.22 %** | 3.2 ms |
 | leg B joins 20 s late | 0.09 % | **97.10 %** | 10.4 ms |
 | leg B joins 20 s late, 500 ms pacer latency | 0.07 % | **97.17 %** | −25.7 ms |
 
-The skew column is measured at equal sequence numbers
-([`t12-seqskew.py`](scripts/t12-seqskew.py)), not taken from the oracle, for a reason the last
-section of this arm explains.
+The skew column is measured at equal sequence numbers ([`t12-seqskew.py`](scripts/t12-seqskew.py)), not taken from the oracle, for a reason the last section of this arm explains.
 
-A leg that joined 20 s after its partner puts the same programme in the same slots under the same
-RTP sequence numbers, and 97 % of its datagrams differ from its partner's in one field: byte 3. The
-offset is **constant for the whole run** — +2 on the video PID, +8 on PAT and PMT — and it is
-produced upstream of the groomer. `moq export ts` reconstructs the transport stream from media
-objects and numbers each PID's continuity counter from its own process state, so two exporters that
-did not start together are permanently offset, and no groomer downstream can correct it without
-rewriting a field it was handed. Each leg is internally continuous — TSDuck reports 0 continuity
-errors on either — so this is invisible until the two are compared.
+A leg that joined 20 s after its partner puts the same programme in the same slots under the same RTP sequence numbers, and 97 % of its datagrams differ from its partner's in one field: byte 3. The offset is **constant for the whole run** — +2 on the video PID, +8 on PAT and PMT — and it is produced upstream of the groomer. `moq export ts` reconstructs the transport stream from media objects and numbers each PID's continuity counter from its own process state, so two exporters that did not start together are permanently offset, and no groomer downstream can correct it without rewriting a field it was handed. Each leg is internally continuous — TSDuck reports 0 continuity errors on either — so this is invisible until the two are compared.
 
-The counter is the largest of three exporter values minted per process rather than derived from the
-broadcast, and it accounts for the whole of the gap between the two columns. `Export` seeds a
-per-PID counter map empty at process start, so two exporters are offset by however many packets the
-older emitted first: read from the source, and confirmed upstream on
-[moq-dev/moq#2779](https://github.com/moq-dev/moq/issues/2779). It is not the whole of the row: the
-2.90 % that survives the mask is the second of the three, and is
-[attributed below](#three-values-the-exporter-mints-per-process-and-what-a-groomed-pair-sees-of-each).
+The counter is the largest of three exporter values minted per process rather than derived from the broadcast, and it accounts for the whole of the gap between the two columns. `Export` seeds a per-PID counter map empty at process start, so two exporters are offset by however many packets the older emitted first: read from the source, and confirmed upstream on [moq-dev/moq#2779](https://github.com/moq-dev/moq/issues/2779). It is not the whole of the row: the 2.90 % that survives the mask is the second of the three, and is [attributed below](#three-values-the-exporter-mints-per-process-and-what-a-groomed-pair-sees-of-each).
 
 #### A leg that joins 20 s late lands in phase, and the tooling said otherwise
 
-The oracle grades the mid-stream join at 0.08 % yield and 12 011 ms of skew, which reads as a leg
-sending the right bytes twelve seconds too late — content-aligned and still unusable, since no
-2022-7 receiver has that much differential buffer. Both figures are artefacts of the same field.
+The oracle grades the mid-stream join at 0.08 % yield and 12 011 ms of skew, which reads as a leg sending the right bytes twelve seconds too late — content-aligned and still unusable, since no 2022-7 receiver has that much differential buffer. Both figures are artefacts of the same field.
 
-The oracle recovers the sequence offset between the legs by voting on **payload identity**, and
-derives skew by pairing datagrams through that offset. When the continuity counter differs there is
-almost nothing to vote with: 15 identical datagrams out of 23 175, confidence 0.188, and the winning
-offset of 4 559 datagrams is noise. The 12 s is that offset expressed in time — 4 559 datagrams at
-2.6 ms each — rather than a measurement of when anything was sent. Comparing arrival times at
-**equal sequence numbers** instead, which needs no correlator
-([`t12-seqskew.py`](scripts/t12-seqskew.py)), a leg joining 20 s late sends the same sequence number
-a median of **10.4 ms** after its partner, over 23 171 sequence numbers the two legs share. At a
-500 ms pacer release latency it is −25.7 ms and at 2 000 ms it is −29.8 ms: pacer buffering shifts
-the phase by tens of milliseconds, and nothing in that range approaches a differential-delay budget.
+The oracle recovers the sequence offset between the legs by voting on **payload identity**, and derives skew by pairing datagrams through that offset. When the continuity counter differs there is almost nothing to vote with: 15 identical datagrams out of 23 175, confidence 0.188, and the winning offset of 4 559 datagrams is noise. The 12 s is that offset expressed in time — 4 559 datagrams at 2.6 ms each — rather than a measurement of when anything was sent. Comparing arrival times at **equal sequence numbers** instead, which needs no correlator ([`t12-seqskew.py`](scripts/t12-seqskew.py)), a leg joining 20 s late sends the same sequence number a median of **10.4 ms** after its partner, over 23 171 sequence numbers the two legs share. At a 500 ms pacer release latency it is −25.7 ms and at 2 000 ms it is −29.8 ms: pacer buffering shifts the phase by tens of milliseconds, and nothing in that range approaches a differential-delay budget.
 
-So a stream-clocked leg joining a running broadcast lands in phase as well as in numbering. Its
-groomer counters agree that nothing dramatic happened: `start_backlog` ≈ 3.5 s, `resyncs` 0,
-`dropped` 3. The whole of its remaining disagreement with its partner is the continuity counter
-above.
+So a stream-clocked leg joining a running broadcast lands in phase as well as in numbering. Its groomer counters agree that nothing dramatic happened: `start_backlog` ≈ 3.5 s, `resyncs` 0, `dropped` 3. The whole of its remaining disagreement with its partner is the continuity counter above.
 
-Two guards were added to the groomer for delivery shapes it *can* fix, and both are unit-tested: a
-leg starts at the live edge of whatever the relay hands it rather than at the head of it, and it
-moves its clock to the live edge if it ever finds itself holding more than `max_latency` of stream
-(`resyncs`). Neither fires in this rig, because the exporter feeds a joining leg at media rate rather
-than bursting a backlog at it. They are guards against a delivery shape this rig does not produce.
+Two guards were added to the groomer for delivery shapes it _can_ fix, and both are unit-tested: a leg starts at the live edge of whatever the relay hands it rather than at the head of it, and it moves its clock to the live edge if it ever finds itself holding more than `max_latency` of stream (`resyncs`). Neither fires in this rig, because the exporter feeds a joining leg at media rate rather than bursting a backlog at it. They are guards against a delivery shape this rig does not produce.
 
 ### Selection policy: seq-merge and input-select are not interchangeable
 
 Both policies were computed over the same captures, so the comparison is exact.
 
-| | Isolated loss on one leg | Total leg loss | Upstream content failure behind a groomer |
-|---|---|---|---|
+|  | Isolated loss on one leg | Total leg loss | Upstream content failure behind a groomer |
+| --- | --- | --- | --- |
 | **Seq-merge** (2022-7) | repaired: 0 lost, 0 CC (arms A, C and D at 1 %/3 %) | hitless: 0 lost | 0 lost, and under arm D the pair stays byte-identical through it |
-| **Input-select** | *not* repaired: 27 CC at 1 %, 170 CC at 3 % (arm A, k ≥ 250 ms) | 1 switch, ≈ 4 CC errors, gap ≈ k | 1 switch, 1–3 CC errors, gap ≈ k |
+| **Input-select** | _not_ repaired: 27 CC at 1 %, 170 CC at 3 % (arm A, k ≥ 250 ms) | 1 switch, ≈ 4 CC errors, gap ≈ k | 1 switch, 1–3 CC errors, gap ≈ k |
 
-Input-select cannot repair packet loss by construction — it selects a leg, it does not merge — so a
-1 % path costs 27 continuity errors that seq-merge removes entirely. On total leg loss it works, at a
-bounded price: one switch, a gap of about `k`, and roughly 4 continuity errors.
+Input-select cannot repair packet loss by construction — it selects a leg, it does not merge — so a 1 % path costs 27 continuity errors that seq-merge removes entirely. On total leg loss it works, at a bounded price: one switch, a gap of about `k`, and roughly 4 continuity errors.
 
-The third column is only answerable because the groomer mutes. A groomed leg whose content source
-has failed is indistinguishable from a healthy one by loss, continuity or PCR — it is a perfect
-carrier with no programme in it — so a selector keyed on packet arrival sees nothing to act on. What
-converts that into a detectable failure is the groomer declining to transmit, not anything the
-receiver can compute.
+The third column is only answerable because the groomer mutes. A groomed leg whose content source has failed is indistinguishable from a healthy one by loss, continuity or PCR — it is a perfect carrier with no programme in it — so a selector keyed on packet arrival sees nothing to act on. What converts that into a detectable failure is the groomer declining to transmit, not anything the receiver can compute.
 
 The viable threshold depends entirely on whether the leg is groomed:
 
 | Arm | Max inter-datagram gap (clean / under 3 % loss) | k = 50 ms | k = 100 ms | k = 250 ms |
-|---|---|---|---|---|
+| --- | --- | --- | --- | --- |
 | A (ungroomed) | 242 ms / 242 ms | 413–446 spurious switches | 12–20 spurious switches | 0 in control, 1 real |
 | B, C, D (groomed CBR) | 3.8–4.3 ms / 8.3–8.4 ms | 0 in control, 1 real | 0 in control, 1 real | 0 in control, 1 real |
 
-An ungroomed MoQ leg needs `k` ≥ 250 ms — anything faster mistakes its natural burstiness for failure
-— so failure detection cannot be quicker than ~300 ms. The groomed leg's gaps stay an order of
-magnitude below the smallest threshold tested, so `k` = 50 ms is safe and detection is 5× faster. **The pacer is what makes prompt failover
-detection possible**, independently of its TR 101 290 role.
+An ungroomed MoQ leg needs `k` ≥ 250 ms — anything faster mistakes its natural burstiness for failure — so failure detection cannot be quicker than ~300 ms. The groomed leg's gaps stay an order of magnitude below the smallest threshold tested, so `k` = 50 ms is safe and detection is 5× faster. **The pacer is what makes prompt failover detection possible**, independently of its TR 101 290 role.
 
-One subtlety worth keeping: in the three co-started arm A controls, flapping 413–446 times at
-`k` = 50 ms causes **zero** continuity errors, because the legs are packet-identical and
-sequence-aligned — switching between identical streams is free. In the mid-stream-join run the same
-flapping causes 543. Spurious switching is only harmless while the pair is aligned.
+One subtlety worth keeping: in the three co-started arm A controls, flapping 413–446 times at `k` = 50 ms causes **zero** continuity errors, because the legs are packet-identical and sequence-aligned — switching between identical streams is free. In the mid-stream-join run the same flapping causes 543. Spurious switching is only harmless while the pair is aligned.
 
 ### Start order: what it costs, and what fixes it
 
-Under arms A and B, bringing leg B up 20 s late destroys mergeability outright. Arm A goes from a 0
-offset and 100 % yield to an offset of −3 542 datagrams and **0.42 %** yield; arm B, already
-unmergeable, degrades further (offset 4 591, 30.1 %). Nothing recovers this at the receiver: the two
-legs are numbering the same programme differently and no constant offset reconciles them. Under
-those arms a 1+1 pair must be **started together**, and a leg that restarts alone re-enters as an
-unaligned stream that only input-select can use.
+Under arms A and B, bringing leg B up 20 s late destroys mergeability outright. Arm A goes from a 0 offset and 100 % yield to an offset of −3 542 datagrams and **0.42 %** yield; arm B, already unmergeable, degrades further (offset 4 591, 30.1 %). Nothing recovers this at the receiver: the two legs are numbering the same programme differently and no constant offset reconciles them. Under those arms a 1+1 pair must be **started together**, and a leg that restarts alone re-enters as an unaligned stream that only input-select can use.
 
-Their recovery cells show that this is not really a property of start *order*. A leg that was
-aligned, muted and came back is misnumbered by its outage exactly as a late-joining leg is
-misnumbered by its start delay: one defect, that RTP numbering counts what the groomer sent rather
-than where it is in the stream. Arm D removes that defect. A leg that joins 20 s late, or that mutes
-and returns, comes back on its partner's numbering, in its partner's slots and within tens of
-milliseconds of its partner's timing; what still separates the pair is upstream of the groomer
-entirely, and that is below.
+Their recovery cells show that this is not really a property of start _order_. A leg that was aligned, muted and came back is misnumbered by its outage exactly as a late-joining leg is misnumbered by its start delay: one defect, that RTP numbering counts what the groomer sent rather than where it is in the stream. Arm D removes that defect. A leg that joins 20 s late, or that mutes and returns, comes back on its partner's numbering, in its partner's slots and within tens of milliseconds of its partner's timing; what still separates the pair is upstream of the groomer entirely, and that is below.
 
 ### Three values the exporter mints per process, and what a groomed pair sees of each
 
-`moq export ts` renders three things from its own process state rather than from the broadcast. Each
-is a separate defect, and grooming does not absorb any of them — it only changes which ones a given
-source can expose.
+`moq export ts` renders three things from its own process state rather than from the broadcast. Each is a separate defect, and grooming does not absorb any of them — it only changes which ones a given source can expose.
 
-**1. The continuity counter** is a constant per-PID offset between two exporters that did not start
-together (+2 video, +8 PSI above). It is masked out of every figure in this section and filed as
-[#2779](https://github.com/moq-dev/moq/issues/2779).
+**1. The continuity counter** is a constant per-PID offset between two exporters that did not start together (+2 video, +8 PSI above). It is masked out of every figure in this section and filed as [#2779](https://github.com/moq-dev/moq/issues/2779).
 
-**2. The SI cadence was anchored to process start.** `export.rs` decided when to re-emit a table by
-measuring forward from its own last emission, so two legs put the tables on different frames.
-Measured at the exporter with the groomer removed ([`export-determinism.sh`](scripts/export-determinism.sh),
-`contrib-10m.ts`, second subscriber joining 20 s late),
-[`ts-table-anchor.py`](scripts/ts-table-anchor.py) tags each emission with the PTS of the frame that
-triggered it and reports frames where both legs emitted over frames where either did:
+**2. The SI cadence was anchored to process start.** `export.rs` decided when to re-emit a table by measuring forward from its own last emission, so two legs put the tables on different frames. Measured at the exporter with the groomer removed ([`export-determinism.sh`](scripts/export-determinism.sh), `contrib-10m.ts`, second subscriber joining 20 s late), [`ts-table-anchor.py`](scripts/ts-table-anchor.py) tags each emission with the PTS of the frame that triggered it and reports frames where both legs emitted over frames where either did:
 
-| | PAT/PMT | SDT | NIT |
-|---|---|---|---|
+|  | PAT/PMT | SDT | NIT |
+| --- | --- | --- | --- |
 | before [#2825](https://github.com/moq-dev/moq/pull/2825) | 95.51 % | **0.00 %** | **0.00 %** |
 | with #2825 | 96.36 % | 92.74 % | 95.71 % |
 
-PAT and PMT largely escape it because they are also re-emitted at every video keyframe, a boundary
-both legs share; SDT and NIT have no such anchor and, over a 45 s overlap, never once landed on a
-common frame.
+PAT and PMT largely escape it because they are also re-emitted at every video keyframe, a boundary both legs share; SDT and NIT have no such anchor and, over a 45 s overlap, never once landed on a common frame.
 
-**This is exactly what the 2.90 % residue in the arm D join cell is**, and it is visible in the
-original capture: re-grading it with a PID census ([`t12-maskcmp.py`](scripts/t12-maskcmp.py)) shows
-both legs emitting the same tables — PAT 123/123, PMT 123/123, SDT 31/31 — while **31 of the 31 SDT
-emissions land on a slot where the other leg has video**, and PAT and PMT disagree on 16 of 123. A
-misplaced table displaces everything after it by one packet, which is the 2 561 video packets and
-1 351 video/stuffing swaps that make up the rest of the residue. The groomer places by stream
-position, so it faithfully carries the displacement rather than hiding it.
+**This is exactly what the 2.90 % residue in the arm D join cell is**, and it is visible in the original capture: re-grading it with a PID census ([`t12-maskcmp.py`](scripts/t12-maskcmp.py)) shows both legs emitting the same tables — PAT 123/123, PMT 123/123, SDT 31/31 — while **31 of the 31 SDT emissions land on a slot where the other leg has video**, and PAT and PMT disagree on 16 of 123. A misplaced table displaces everything after it by one packet, which is the 2 561 video packets and 1 351 video/stuffing swaps that make up the rest of the residue. The groomer places by stream position, so it faithfully carries the displacement rather than hiding it.
 
-**3. The audio/video interleave is a function of arrival timing.** `pick_next_track` takes the
-smallest timestamp among tracks that *currently hold* a frame, and a track only holds one once its
-own read has returned — so the exporter emits the earliest *available* frame, not the earliest frame.
-Two legs with different arrival timing order the same media differently. Comparing raw exporter
-outputs packet by packet ([`ts-legcmp.py`](scripts/ts-legcmp.py)) the longest run they share is
-**32 packets** even with the counter masked. Filed as
-[#2829](https://github.com/moq-dev/moq/issues/2829).
+**3. The audio/video interleave is a function of arrival timing.** `pick_next_track` takes the smallest timestamp among tracks that _currently hold_ a frame, and a track only holds one once its own read has returned — so the exporter emits the earliest _available_ frame, not the earliest frame. Two legs with different arrival timing order the same media differently. Comparing raw exporter outputs packet by packet ([`ts-legcmp.py`](scripts/ts-legcmp.py)) the longest run they share is **32 packets** even with the counter masked. Filed as [#2829](https://github.com/moq-dev/moq/issues/2829).
 
-**Consequence for 1+1.** A byte-identical pair needs all three. Grooming is what makes the pair
-comparable at all — it rebuilds placement from stream position, so the legs share a slot grid — but
-it neither creates nor conceals these differences. Which of them a run exposes depends on the
-source: a single-track feed cannot show the interleave, and a feed carrying no standalone SI can
-barely show the cadence.
+**Consequence for 1+1.** A byte-identical pair needs all three. Grooming is what makes the pair comparable at all — it rebuilds placement from stream position, so the legs share a slot grid — but it neither creates nor conceals these differences. Which of them a run exposes depends on the source: a single-track feed cannot show the interleave, and a feed carrying no standalone SI can barely show the cadence.
 
 ### What the fixes are worth, measured on the pair
 
-The arm D join cell re-run against candidate fixes, on
-[`t12-armd-join-local.sh`](scripts/t12-armd-join-local.sh): the same topology reduced to one
-publisher and one relay, so the only asymmetry left is when each exporter tuned in, graded by
-[`t12-rtpcmp.py`](scripts/t12-rtpcmp.py). Builds are upstream `main` (`6d3c51d7`), #2825 as proposed,
-and #2825 with `!=` → `>` in `due` — the one-character change from the review, which stops a
-backwards timestamp counting as a new slot. **#2825 merged in the `>` form**, so the last column is
-the merged code and the middle one is a build that never shipped. Slots identical with the
-continuity counter masked, leg B joining 20 s late:
+The arm D join cell re-run against candidate fixes, on [`t12-armd-join-local.sh`](scripts/t12-armd-join-local.sh): the same topology reduced to one publisher and one relay, so the only asymmetry left is when each exporter tuned in, graded by [`t12-rtpcmp.py`](scripts/t12-rtpcmp.py). Builds are upstream `main` (`6d3c51d7`), #2825 as proposed, and #2825 with `!=` → `>` in `due` — the one-character change from the review, which stops a backwards timestamp counting as a new slot. **#2825 merged in the `>` form**, so the last column is the merged code and the middle one is a build that never shipped. Slots identical with the continuity counter masked, leg B joining 20 s late:
 
 | Source | pre-merge `main` | #2825 as proposed (`!=`) | monotonic `due` (`>`) | stock `main`, merged |
-|---|---|---|---|---|
+| --- | --- | --- | --- | --- |
 | video-only 2 Mb/s, 1.8 s GOP | 96.43 % | **100.00 %** | 100.00 % | **100.00 %** |
 | video-only 2 Mb/s, 2 s GOP | 100.00 % | 100.00 % | — | — |
 | `contrib-10m.ts` — 2 audio, B-frames, SDT + NIT | 87.75 % | 89.72 % | **95.62 %** | **94.09 %** |
 
-The first three columns are hand-built approximations (upstream `6d3c51d7` plus the patch under
-review); the last is a stock build of `main` at `eab960192`, which is the one to quote. The
-multi-track pair moves between 94 % and 96 % from run to run because what it is now measuring is
-the interleave, which is a race; the single-track pair is 100 % every time.
+The first three columns are hand-built approximations (upstream `6d3c51d7` plus the patch under review); the last is a stock build of `main` at `eab960192`, which is the one to quote. The multi-track pair moves between 94 % and 96 % from run to run because what it is now measuring is the interleave, which is a race; the single-track pair is 100 % every time.
 
-- **On single-track content #2825 closes the pair.** The two legs become byte-identical bar the
-  counter, which is what the arm D cell was one defect short of. The 2 s GOP row is not a rule —
-  the campaign's own source has a 2 s GOP and scores 97.10 % — it is the reminder that two legs
-  coinciding is incidental, so a source that shows nothing proves nothing.
-- **On multi-track content it does not**, and the shortfall is not about joining late: with both legs
-  co-started the residue is 4.82 %, against 4.38 % for the late joiner. Over 62 073 shared slots the
-  tables agree exactly (PAT 111/111, PMT 111/111, SDT 22/22, NIT 5/5) while the legs place different
-  numbers of media packets — video +19, the two audio PIDs −72 and −51. That is [#2829](https://github.com/moq-dev/moq/issues/2829).
-- **The PSI inflation in the form first proposed reaches the receiver**, which is why it was changed
-  before merging. Over the same span it emits PAT
-  1 959/1 946 and SDT 818/803 across the two legs, where the monotonic variant emits 111/111 and
-  22/22 — so the surplus tables are not only overhead, they land inconsistently and cost 5.9 points
-  of agreement.
-- **The publisher is not implicated.** Running the same cell with two importers fed by one `tee`,
-  the topology the campaign used, gives 100.00 % on the single-track source, unchanged.
+- **On single-track content #2825 closes the pair.** The two legs become byte-identical bar the counter, which is what the arm D cell was one defect short of. The 2 s GOP row is not a rule — the campaign's own source has a 2 s GOP and scores 97.10 % — it is the reminder that two legs coinciding is incidental, so a source that shows nothing proves nothing.
+- **On multi-track content it does not**, and the shortfall is not about joining late: with both legs co-started the residue is 4.82 %, against 4.38 % for the late joiner. Over 62 073 shared slots the tables agree exactly (PAT 111/111, PMT 111/111, SDT 22/22, NIT 5/5) while the legs place different numbers of media packets — video +19, the two audio PIDs −72 and −51. That is [#2829](https://github.com/moq-dev/moq/issues/2829).
+- **The PSI inflation in the form first proposed reaches the receiver**, which is why it was changed before merging. Over the same span it emits PAT 1 959/1 946 and SDT 818/803 across the two legs, where the monotonic variant emits 111/111 and 22/22 — so the surplus tables are not only overhead, they land inconsistently and cost 5.9 points of agreement.
+- **The publisher is not implicated.** Running the same cell with two importers fed by one `tee`, the topology the campaign used, gives 100.00 % on the single-track source, unchanged.
 
 ### After the media-time interleave: the legs agree on order and on SI, and the slots still do not
 
-[#4001](https://github.com/moq-dev/moq/pull/4001) (`66440a6c`) orders the export by media time
-rather than arrival and puts unchanged SI repeats on the media-time grid, closing
-[#2829](https://github.com/moq-dev/moq/issues/2829) and
-[#3948](https://github.com/moq-dev/moq/issues/3948). It was graded against the standing `84b34f54`
-on the primary, two replicates each, `contrib-10m.ts`, leg B joining 20 s late, the export unpadded
-(`--mux-rate 0`), by three instruments that each ask one question of the raw exporter output
-([`export-determinism.sh`](scripts/export-determinism.sh)):
+[#4001](https://github.com/moq-dev/moq/pull/4001) (`66440a6c`) orders the export by media time rather than arrival and puts unchanged SI repeats on the media-time grid, closing [#2829](https://github.com/moq-dev/moq/issues/2829) and [#3948](https://github.com/moq-dev/moq/issues/3948). It was graded against the standing `84b34f54` on the primary, two replicates each, `contrib-10m.ts`, leg B joining 20 s late, the export unpadded (`--mux-rate 0`), by three instruments that each ask one question of the raw exporter output ([`export-determinism.sh`](scripts/export-determinism.sh)):
 
 | Question | Instrument | `84b34f54` | `66440a6c` (#4001) |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | Same access-unit order across PIDs | [`ts-interleave.py`](scripts/ts-interleave.py), cross-PID adjacent pairs | 98.33 %, 98.90 % | **100.00 %, 100.00 %** |
 | SDT on a shared grid | [`ts-table-anchor.py`](scripts/ts-table-anchor.py) | 0.00 %, 0.00 % | **91.67 %, 95.65 %** |
 | NIT on a shared grid | the same | 0.00 %, 0.00 % | 66.67 %, 80.00 % |
@@ -556,121 +295,57 @@ on the primary, two replicates each, `contrib-10m.ts`, leg B joining 20 s late, 
 | PAT/PMT on a shared grid | the same | 96.03 %, 96.06 % | 97.66 %, 100.00 % |
 | PCR-only video packets over the same PTS span, A / B | per-kind census | 1,740 / 1,758, 1,753 / 1,771 | 1,788 / 1,790, 1,753 / 1,752 |
 
-Every other kind of video packet — payload only, and adaptation field plus payload — matches in
-count exactly between the legs on both builds, and PCR minus PTS at the same access unit is 0.000 ms
-at the median on both, so the legs packetise the video identically and carry the same PCR values.
-Where #4001 misses, the late leg has extra emissions: all 22 of A's SDT emissions are in B, which has
-one or two more, and NIT behaves the same way. Upstream's own gate, `test/ts/run.sh --pair --source`,
-agrees on the same clip (SDT/BAT 90.91 %, PAT and PMT 100 %) and fails on its generated clip
-(PAT/PMT 88.06 %, SDT 80.00 %) on this 2-vCPU host; why the generated clip scores lower is not
-examined here.
+Every other kind of video packet — payload only, and adaptation field plus payload — matches in count exactly between the legs on both builds, and PCR minus PTS at the same access unit is 0.000 ms at the median on both, so the legs packetise the video identically and carry the same PCR values. Where #4001 misses, the late leg has extra emissions: all 22 of A's SDT emissions are in B, which has one or two more, and NIT behaves the same way. Upstream's own gate, `test/ts/run.sh --pair --source`, agrees on the same clip (SDT/BAT 90.91 %, PAT and PMT 100 %) and fails on its generated clip (PAT/PMT 88.06 %, SDT 80.00 %) on this 2-vCPU host; why the generated clip scores lower is not examined here.
 
-**The slot-level pair does not follow.** Through this section's rig on the primary — the August
-`moq_egress` stream-clocked groomer at 15 Mb/s — the groomed legs are **24.72–24.86 %** identical
-with the counter masked on #4001 and **4.07–7.86 %** on `84b34f54`, padded or not. The 94.09 %
-above was `eab960192` on the laptop rig, so the fall from it spans both a build range and a rig
-change and is not attributed; on one rig, #4001 improves on the build before it. A handful of extra packets in one leg — one to two PCR-only packets
-and the join-time table emissions over about 40 s on #4001 — shifts every later slot, and a slot
-comparison then measures the shift. So a byte-identical multi-track pair now needs the exporter's
-packet schedule to be a function of the broadcast, which is the byte schedule
-[#3925](https://github.com/moq-dev/moq/issues/3925) plans. It also needs the continuity counters to
-be, and [#2779](https://github.com/moq-dev/moq/issues/2779) was closed without that fix. The
-content is ready for a merge; the slots are not. What the rig cannot say is whether the groomed
-figure would recover with a groomer that places packets by media time rather than by stream
-position; that arm is not run.
+**The slot-level pair does not follow.** Through this section's rig on the primary — the August `moq_egress` stream-clocked groomer at 15 Mb/s — the groomed legs are **24.72–24.86 %** identical with the counter masked on #4001 and **4.07–7.86 %** on `84b34f54`, padded or not. The 94.09 % above was `eab960192` on the laptop rig, so the fall from it spans both a build range and a rig change and is not attributed; on one rig, #4001 improves on the build before it. A handful of extra packets in one leg — one to two PCR-only packets and the join-time table emissions over about 40 s on #4001 — shifts every later slot, and a slot comparison then measures the shift. So a byte-identical multi-track pair now needs the exporter's packet schedule to be a function of the broadcast, which is the byte schedule [#3925](https://github.com/moq-dev/moq/issues/3925) plans. It also needs the continuity counters to be, and [#2779](https://github.com/moq-dev/moq/issues/2779) was closed without that fix. The content is ready for a merge; the slots are not. What the rig cannot say is whether the groomed figure would recover with a groomer that places packets by media time rather than by stream position; that arm is not run.
 
 ### Whether a leg ever drops media the other keeps
 
-A pair graded on field identity is only an upper bound until the legs are known to be carrying the
-same media, and the exporter's consumer is free to abandon a group whose data is late. Neither leg
-ever did so here. The per-PID census agrees to within one packet over 16 660 shared slots on the
-single-track source and 62 418 on the multi-track one; a group is a whole GOP, thousands of
-packets, and cannot hide in that. Dropping `--latency-max` from 500 ms to 0 changes nothing — on
-loopback no group is ever late, so the budget is never the binding constraint.
+A pair graded on field identity is only an upper bound until the legs are known to be carrying the same media, and the exporter's consumer is free to abandon a group whose data is late. Neither leg ever did so here. The per-PID census agrees to within one packet over 16 660 shared slots on the single-track source and 62 418 on the multi-track one; a group is a whole GOP, thousands of packets, and cannot hide in that. Dropping `--latency-max` from 500 ms to 0 changes nothing — on loopback no group is ever late, so the budget is never the binding constraint.
 
-More useful is what happens when a leg is made to fall behind. [`ts-stall.py`](scripts/ts-stall.py)
-stops one leg consuming for 8 s and then 25 s, which blocks its exporter on the write:
+More useful is what happens when a leg is made to fall behind. [`ts-stall.py`](scripts/ts-stall.py) stops one leg consuming for 8 s and then 25 s, which blocks its exporter on the write:
 
-- **A slow leg does not skip a group. It lags, without bound.** The export loop reads a frame and
-  then writes it, so a blocked output stops the consumer reading — but the skip test is only
-  reached when the current group cannot yield a frame, and a consumer that is merely behind has
-  frames in hand. It drains them in order and the delay accumulates. The media the stalled leg
-  lost (72 packets at 8 s, 221 at 25 s) was discarded by the groomer's own release ceiling
-  downstream, not by the exporter.
-- **What bites is relay retention, not the latency budget** — and it does not cause a skip either.
-  `--cache-duration` is unbounded unless set; at 5 s, the same 25 s stall ends with the exporter
-  exiting on `hang: moq error: old`. For a 1+1 pair that is the better failure, since a leg that
-  dies is visible and can be restarted, where one that silently diverges is not.
+- **A slow leg does not skip a group. It lags, without bound.** The export loop reads a frame and then writes it, so a blocked output stops the consumer reading — but the skip test is only reached when the current group cannot yield a frame, and a consumer that is merely behind has frames in hand. It drains them in order and the delay accumulates. The media the stalled leg lost (72 packets at 8 s, 221 at 25 s) was discarded by the groomer's own release ceiling downstream, not by the exporter.
+- **What bites is relay retention, not the latency budget** — and it does not cause a skip either. `--cache-duration` is unbounded unless set; at 5 s, the same 25 s stall ends with the exporter exiting on `hang: moq error: old`. For a 1+1 pair that is the better failure, since a leg that dies is visible and can be restarted, where one that silently diverges is not.
 
 ### Renumbering the counter from the stream, prototyped
 
-The remaining defect ([#2779](https://github.com/moq-dev/moq/issues/2779)) is the continuity
-counter, and the fix proposed upstream is to restart it at each video keyframe and pad every PID's
-span to a multiple of 16 so the restart stays continuous.
-[`ts-keyframe-pad.py`](scripts/ts-keyframe-pad.py) does that between the exporter and the groomer,
-which prices it without waiting for it to be built. Same cell, and now graded on **raw** identity
-rather than with the counter masked:
+The remaining defect ([#2779](https://github.com/moq-dev/moq/issues/2779)) is the continuity counter, and the fix proposed upstream is to restart it at each video keyframe and pad every PID's span to a multiple of 16 so the restart stays continuous. [`ts-keyframe-pad.py`](scripts/ts-keyframe-pad.py) does that between the exporter and the groomer, which prices it without waiting for it to be built. Same cell, and now graded on **raw** identity rather than with the counter masked:
 
 | Source | identical, stock `main` | identical, padded | masked ceiling |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | video-only 2 Mb/s, 1.8 s GOP | 0.37 % | **99.92 %** | 100.00 % |
 | `contrib-10m.ts` | 24.61 % | **93.57 %** | 93.79 % |
 
-- **The counter stops being a defect**, on both sources: raw identity arrives within 0.2 points of
-  the masked ceiling. What is left below 100 % on the multi-track source is the interleave.
-- **The groomer absorbs the filler.** Both groomed legs report zero continuity errors under TSDuck,
-  the constant bitrate holds, and the pair still aligns slot for slot.
-- **The cost is real and regressive.** 1.72 % of packets on the 4-PID single-track service
-  (47 kb/s) and 1.49 % on the 11-PID service (136 kb/s) — but per PID it is 10–18 kb/s almost
-  regardless of what that PID carries, because a PID emitting one or two packets per GOP is
-  nearly always 14 or 15 short of a multiple of 16. The 10 Mb/s video PID pays 9.6 kb/s, PAT pays
-  16.4 kb/s, and each low-rate data PID pays ~18 kb/s, several times its own payload.
-- **A joining leg pays a one-off**: it emits a full SI set at tune-in, so for that one span it
-  renders 15 filler packets its partner does not (visible as +15 on the NIT PID). It does not
-  recur.
-- **It is conditional on the interleave.** The counter becomes an index within the span, so
-  wherever the legs order media differently the renumbering diverges with it. On multi-track
-  content this fix cannot land alone; it needs [#2829](https://github.com/moq-dev/moq/issues/2829).
+- **The counter stops being a defect**, on both sources: raw identity arrives within 0.2 points of the masked ceiling. What is left below 100 % on the multi-track source is the interleave.
+- **The groomer absorbs the filler.** Both groomed legs report zero continuity errors under TSDuck, the constant bitrate holds, and the pair still aligns slot for slot.
+- **The cost is real and regressive.** 1.72 % of packets on the 4-PID single-track service (47 kb/s) and 1.49 % on the 11-PID service (136 kb/s) — but per PID it is 10–18 kb/s almost regardless of what that PID carries, because a PID emitting one or two packets per GOP is nearly always 14 or 15 short of a multiple of 16. The 10 Mb/s video PID pays 9.6 kb/s, PAT pays 16.4 kb/s, and each low-rate data PID pays ~18 kb/s, several times its own payload.
+- **A joining leg pays a one-off**: it emits a full SI set at tune-in, so for that one span it renders 15 filler packets its partner does not (visible as +15 on the NIT PID). It does not recur.
+- **It is conditional on the interleave.** The counter becomes an index within the span, so wherever the legs order media differently the renumbering diverges with it. On multi-track content this fix cannot land alone; it needs [#2829](https://github.com/moq-dev/moq/issues/2829).
 
 ### The service layer, once the exporter began carrying it
 
-Upstream later moved SI onto per-table snapshot tracks and added a TDT/TOT proxy, which puts a table
-on the wire whose *bytes advance while the stream runs*. That is a new thing for a 1+1 pair to have to
-agree about, and reading the exporter suggested it might not: each entry's snapshot advances as that
-leg's own subscription delivers groups, so a table selected by arrival rather than by media position
-would let two legs assert different times at the same slot.
+Upstream later moved SI onto per-table snapshot tracks and added a TDT/TOT proxy, which puts a table on the wire whose _bytes advance while the stream runs_. That is a new thing for a 1+1 pair to have to agree about, and reading the exporter suggested it might not: each entry's snapshot advances as that leg's own subscription delivers groups, so a table selected by arrival rather than by media position would let two legs assert different times at the same slot.
 
-**It does not happen.** Four cells on the 11-PID DVB feed, one publisher into one relay into two
-stream-clocked groomed legs with leg B joining 20 s late, 300 s each, at `dev` `016fc09ae`:
+**It does not happen.** Four cells on the 11-PID DVB feed, one publisher into one relay into two stream-clocked groomed legs with leg B joining 20 s late, 300 s each, at `dev` `016fc09ae`:
 
-| | source clock | leg B | TDT sections A / B | emissions compared | differing |
-|---|---|---|---|---|---|
+|  | source clock | leg B | TDT sections A / B | emissions compared | differing |
+| --- | --- | --- | --- | --- | --- |
 | control | native, 15.1 s | at the live edge | 11 / 10 | 10 | **0** |
 | lagging | native, 15.1 s | ~870 ms behind | 11 / 10 | 10 | **0** |
 | fast clock | re-driven, 5 per s | at the live edge | 10 / 10 | 10 | **0** |
 | fast clock, lagging | re-driven, 5 per s | ~870 ms behind | 10 / 10 | 10 | **0** |
 
-The last row is the one that decides it. TDT carries whole seconds, so a clock injected five times a
-second changes its bytes once a second and no faster — and against a leg running 870 ms behind, a
-table chosen by arrival would differ on roughly seven emissions in ten. None differed, and the two
-legs emitted the same eleven distinct advancing UTC values in the same order. The lag is measured, not
-assumed: leg B's groomer reports `max_content_gap=866 ms` where the control reports none, with
-`stalls=0 muted=0`, so the leg was behind rather than interrupted.
+The last row is the one that decides it. TDT carries whole seconds, so a clock injected five times a second changes its bytes once a second and no faster — and against a leg running 870 ms behind, a table chosen by arrival would differ on roughly seven emissions in ten. None differed, and the two legs emitted the same eleven distinct advancing UTC values in the same order. The lag is measured, not assumed: leg B's groomer reports `max_content_gap=866 ms` where the control reports none, with `stalls=0 muted=0`, so the leg was behind rather than interrupted.
 
-The whole service layer behaves the same way. Across all four cells every PSI/SI PID carries an
-identical packet count on both legs — PAT and PMT 795–796, NIT 30, SDT 149, TDT 10, the three SCTE-35
-PIDs 305/298/302 — and **no SI PID appears in the residue at all**, on either the byte comparison or
-the same-PID-different-bytes attribution. What differs between the legs is media and stuffing, and in
-these cells that difference is not interpretable (see *What this rig cannot tell you*).
+The whole service layer behaves the same way. Across all four cells every PSI/SI PID carries an identical packet count on both legs — PAT and PMT 795–796, NIT 30, SDT 149, TDT 10, the three SCTE-35 PIDs 305/298/302 — and **no SI PID appears in the residue at all**, on either the byte comparison or the same-PID-different-bytes attribution. What differs between the legs is media and stuffing, and in these cells that difference is not interpretable (see _What this rig cannot tell you_).
 
-So the exporter renders SI from the media position it has reached, not from what its socket has
-delivered, and the clock is emitted on the same grid on both legs with the same contents. The TDT
-proxy is not a divergence source, and the pair needs nothing new to tolerate it.
+So the exporter renders SI from the media position it has reached, not from what its socket has delivered, and the clock is emitted on the same grid on both legs with the same contents. The TDT proxy is not a divergence source, and the pair needs nothing new to tolerate it.
 
 ### Verdict against the pass criteria
 
 | Criterion (fixed in advance) | Result |
-|---|---|
+| --- | --- |
 | Arm C: 100 % yield, and 0 lost / 0 CC / no PCR degradation across every path injection | **pass** — rig valid |
 | Arm A feasible only at 100 % yield | **pass** when co-started (12/12 cells); fails on mid-stream join |
 | Arm B feasible only at 100 % yield | **fail** — 30–53 %; mechanism measured and structural |
@@ -681,484 +356,208 @@ proxy is not a divergence source, and the pair needs nothing new to tolerate it.
 
 ### What this rig cannot tell you
 
-- **One host, loopback, for the arms above.** There is no path diversity: skew is injected, not
-  natural, and the correlated-failure question a real 1+1 deployment asks is out of scope. The legs
-  also share a wall clock, which arm D's identity claim should not depend on; § *Arm D across two
-  hosts* removes it, and the legs stay byte-identical.
-- **The source is video-only, so a whole class of defect cannot appear.** The interleave
-  ([#2829](https://github.com/moq-dev/moq/issues/2829)) needs a second media track to be visible at
-  all; on multi-track content it holds an otherwise-fixed pair to 95.6 %. Every 100 % in this file is
-  a statement about a single-track feed.
-- **The media figures are measured against an exporter that has since been rewritten around SI**, and
-  this host cannot re-take them: at the DVB feed's 9.9 Mb/s, a relay, two exporters and two groomers on
-  one laptop make *both* legs skip groups (400–600 `slow` and 1 600–2 200 `old` per leg, unchanged by
-  raising `--latency-max` from 500 ms to 3 s), so the legs stop carrying the same media and no
-  agreement figure from those runs means anything. The single-track figures stand; the multi-track one
-  needs a host that can carry the pair without skipping.
-- **The receiver is a reference implementation, not an IRD.** It grades what a conforming 2022-7
-  receiver would reconstruct; it does not prove a specific IRD accepts the result. That is Gate 2.
-  Its selection rules are now tested against fourteen adversarial conditions
-  (`t12-oracle-selftest.py`, 53 assertions), each labelled by what it establishes: eight match what
-  ST 2022-7 requires, one is **unspecified** because differing payloads at equal sequence numbers
-  already violate the standard's packet-identity precondition and always taking leg A is a
-  reproducibility choice, three are **not modelled** because PCR wrap, a source-clock offset and this
-  implementation's own offset voting cannot be reached by a sequence-number selector, and one is a
-  **blind spot** — an intra-leg duplicate whose payload *differs* is resolved first-wins in silence and
-  moves no reported figure. Selection is graded in the byte domain only: the oracle never prefers the
-  earlier arrival, so it cannot say how deep a receiver's buffer had to be to absorb the skew it
-  reports. Passing those tests is not a conformance claim and is not offered as one.
-- **The PCR-interval floor is unexplained.** 1.4 % of PCR intervals exceed 40 ms in the clean
-  control, where [T7](test-7-timing-integrity.md) measured 0 % at a carrier rate matched to the
-  content. This rig runs 4 Mbps of carrier for 1.9 Mbps of content, so the leading hypothesis is
-  stuffing landing between PCR-bearing packets at an inflated rate — untested, and a matched-rate
-  re-run would settle it. Until then no absolute PCR-interval claim is made here; every PCR result is
-  stated against arm C's own control.
-- **The oracle cannot grade a pair that is not byte-identical.** Its sequence offset is voted by
-  payload identity and its skew is derived from that offset, so a single upstream field differing —
-  the continuity counter here — leaves it voting on a handful of datagrams and reporting a spurious
-  offset and a spurious skew. Every arm D join and recovery figure quoted above from the oracle
-  carries that caveat; the numbers that do not are the mask comparison and the equal-sequence skew,
-  neither of which correlates.
-- **Arm D's two live-edge guards are unexercised here.** Both are unit-tested in the pacer, and
-  neither fires in this rig, because the exporter feeds a joining leg at media rate rather than
-  bursting a backlog at it. A delivery path that does burst would exercise them; this one does not.
-- **Recovery is measured at two outage lengths, one per arm.** Arm B's 15 s blackout produced a 23 s
-  mute, arm D's a 13.6 s mute. How a resumed leg behaves at outages shorter than the pacer's cushion,
-  or longer than the QUIC idle timeout that would force a fresh session, is untested.
-- **One run per cell**, 60 s each; only the arm A clean control was repeated (three times, all
-  identical at 100 % yield and offset 0). Enough to establish mechanism, not distribution tails.
+- **One host, loopback, for the arms above.** There is no path diversity: skew is injected, not natural, and the correlated-failure question a real 1+1 deployment asks is out of scope. The legs also share a wall clock, which arm D's identity claim should not depend on; § _Arm D across two hosts_ removes it, and the legs stay byte-identical.
+- **The source is video-only, so a whole class of defect cannot appear.** The interleave ([#2829](https://github.com/moq-dev/moq/issues/2829)) needs a second media track to be visible at all; on multi-track content it holds an otherwise-fixed pair to 95.6 %. Every 100 % in this file is a statement about a single-track feed.
+- **The media figures are measured against an exporter that has since been rewritten around SI**, and this host cannot re-take them: at the DVB feed's 9.9 Mb/s, a relay, two exporters and two groomers on one laptop make _both_ legs skip groups (400–600 `slow` and 1 600–2 200 `old` per leg, unchanged by raising `--latency-max` from 500 ms to 3 s), so the legs stop carrying the same media and no agreement figure from those runs means anything. The single-track figures stand; the multi-track one needs a host that can carry the pair without skipping.
+- **The receiver is a reference implementation, not an IRD.** It grades what a conforming 2022-7 receiver would reconstruct; it does not prove a specific IRD accepts the result. That is Gate 2. Its selection rules are now tested against fourteen adversarial conditions (`t12-oracle-selftest.py`, 53 assertions), each labelled by what it establishes: eight match what ST 2022-7 requires, one is **unspecified** because differing payloads at equal sequence numbers already violate the standard's packet-identity precondition and always taking leg A is a reproducibility choice, three are **not modelled** because PCR wrap, a source-clock offset and this implementation's own offset voting cannot be reached by a sequence-number selector, and one is a **blind spot** — an intra-leg duplicate whose payload _differs_ is resolved first-wins in silence and moves no reported figure. Selection is graded in the byte domain only: the oracle never prefers the earlier arrival, so it cannot say how deep a receiver's buffer had to be to absorb the skew it reports. Passing those tests is not a conformance claim and is not offered as one.
+- **The PCR-interval floor is unexplained.** 1.4 % of PCR intervals exceed 40 ms in the clean control, where [T7](test-7-timing-integrity.md) measured 0 % at a carrier rate matched to the content. This rig runs 4 Mbps of carrier for 1.9 Mbps of content, so the leading hypothesis is stuffing landing between PCR-bearing packets at an inflated rate — untested, and a matched-rate re-run would settle it. Until then no absolute PCR-interval claim is made here; every PCR result is stated against arm C's own control.
+- **The oracle cannot grade a pair that is not byte-identical.** Its sequence offset is voted by payload identity and its skew is derived from that offset, so a single upstream field differing — the continuity counter here — leaves it voting on a handful of datagrams and reporting a spurious offset and a spurious skew. Every arm D join and recovery figure quoted above from the oracle carries that caveat; the numbers that do not are the mask comparison and the equal-sequence skew, neither of which correlates.
+- **Arm D's two live-edge guards are unexercised here.** Both are unit-tested in the pacer, and neither fires in this rig, because the exporter feeds a joining leg at media rate rather than bursting a backlog at it. A delivery path that does burst would exercise them; this one does not.
+- **Recovery is measured at two outage lengths, one per arm.** Arm B's 15 s blackout produced a 23 s mute, arm D's a 13.6 s mute. How a resumed leg behaves at outages shorter than the pacer's cushion, or longer than the QUIC idle timeout that would force a fresh session, is untested.
+- **One run per cell**, 60 s each; only the arm A clean control was repeated (three times, all identical at 100 % yield and offset 0). Enough to establish mechanism, not distribution tails.
 
 ## Arm D on the segmented lane: the same determinism, at eight times the cushion
 
-Arm D's mechanism should not care what carried the stream — a groomer that computes placement from
-the stream is indifferent to how the stream arrived. But the segmented lane delivers in
-segment-sized bursts rather than continuously, and a bursty source can starve a CBR groomer; a
-groomer that starves *mutes*, and two legs that mute at different instants are not byte-identical
-however deterministic their placement rules are. So the question is real, and
-[`t12-segmented-local.sh`](scripts/t12-segmented-local.sh) asks it in the two topologies that mean
-different things: one packager feeding two origins (how HLS redundancy is actually deployed, and the
-rig's positive control) and two fully disjoint packager/origin/client chains (the arm D equivalent,
-protecting the whole chain rather than the last hop).
+Arm D's mechanism should not care what carried the stream — a groomer that computes placement from the stream is indifferent to how the stream arrived. But the segmented lane delivers in segment-sized bursts rather than continuously, and a bursty source can starve a CBR groomer; a groomer that starves _mutes_, and two legs that mute at different instants are not byte-identical however deterministic their placement rules are. So the question is real, and [`t12-segmented-local.sh`](scripts/t12-segmented-local.sh) asks it in the two topologies that mean different things: one packager feeding two origins (how HLS redundancy is actually deployed, and the rig's positive control) and two fully disjoint packager/origin/client chains (the arm D equivalent, protecting the whole chain rather than the last hop).
 
-Same source, same 4 Mb/s carrier, same SSRC and sequence seed, same `--stream-clock` groomer, 60 s
-windows, graded by [`t12-rtpcmp.py`](scripts/t12-rtpcmp.py) at equal RTP timestamps.
+Same source, same 4 Mb/s carrier, same SSRC and sequence seed, same `--stream-clock` groomer, 60 s windows, graded by [`t12-rtpcmp.py`](scripts/t12-rtpcmp.py) at equal RTP timestamps.
 
 | Topology | Groomer cushion | Shared slots | Identical | Residue |
-|---|---:|---:|---:|---:|
+| --- | --: | --: | --: | --: |
 | One packager, two origins | 1 s | 12,935 | 99.9536 % | 6 slots |
 | Two disjoint chains | 1 s | 18,030 | 99.9279 % | 13 slots |
 | One packager, two origins | **8 s** | 19,698 | **100.0000 %** | **0** |
 | **Two disjoint chains** | **8 s** | **19,698** | **100.0000 %** | **0** |
 
-**At an 8 s cushion the segmented lane reproduces arm D exactly: two independent chains, byte-identical
-on every one of 19,698 datagrams.** A 1+1 pair carried this way is mergeable by an ST 2022-7 receiver,
-and the property is not MoQ's.
+**At an 8 s cushion the segmented lane reproduces arm D exactly: two independent chains, byte-identical on every one of 19,698 datagrams.** A 1+1 pair carried this way is mergeable by an ST 2022-7 receiver, and the property is not MoQ's.
 
-**At arm D's own 1 s cushion it is not**, and the residue names the mechanism rather than leaving it to
-be guessed. The conflicts are almost all one leg carrying video where the other carried a null —
-20 slots of `0x0100 vs 0x1fff` against 7 the other way in the two-chain cell — and the per-PID totals
-close on it: leg B ends the run seven video packets short and seven nulls long. That is the groomer's
-`--on-stall mute` firing, on each leg at moments the other leg did not experience. The divergence is
-also spread across the run (the first conflict at 20.5 % through it, the last at 92.8 %), so it is a
-steady-state property of the lane and not a lock transient that a longer settle would remove.
+**At arm D's own 1 s cushion it is not**, and the residue names the mechanism rather than leaving it to be guessed. The conflicts are almost all one leg carrying video where the other carried a null — 20 slots of `0x0100 vs 0x1fff` against 7 the other way in the two-chain cell — and the per-PID totals close on it: leg B ends the run seven video packets short and seven nulls long. That is the groomer's `--on-stall mute` firing, on each leg at moments the other leg did not experience. The divergence is also spread across the run (the first conflict at 20.5 % through it, the last at 92.8 %), so it is a steady-state property of the lane and not a lock transient that a longer settle would remove.
 
-**The comparison with MoQ is the whole finding, and it is a cost rather than a disqualification.**
-Arm D reaches byte-identity on the media-aware lane at a 1 s cushion; the segmented lane needs 8 s to
-reach the same place. That is the same 8 s that [T16](test-16-grooming-segmented-http.md) needed for
-PCR conformance on this lane and the same burstiness [T8b](test-8b-congestion-control.md) measured as
-line-rate bursts into a bottleneck queue — one mechanism showing up in a third experiment, not three
-findings. **The segmented lane can carry broadcast-grade 1+1, and it buys that with about seven extra
-seconds of end-to-end latency**, which for a distribution hand-off is a real price and for a
-contribution hand-off may not be payable at all.
+**The comparison with MoQ is the whole finding, and it is a cost rather than a disqualification.** Arm D reaches byte-identity on the media-aware lane at a 1 s cushion; the segmented lane needs 8 s to reach the same place. That is the same 8 s that [T16](test-16-grooming-segmented-http.md) needed for PCR conformance on this lane and the same burstiness [T8b](test-8b-congestion-control.md) measured as line-rate bursts into a bottleneck queue — one mechanism showing up in a third experiment, not three findings. **The segmented lane can carry broadcast-grade 1+1, and it buys that with about seven extra seconds of end-to-end latency**, which for a distribution hand-off is a real price and for a contribution hand-off may not be payable at all.
 
-Two limits on the claim. Neither segmented cell was subjected to arm D's injection matrix — no leg
-kill, no blackout, no differential delay — so what is established is the *clean-pair* determinism
-that arm D's control establishes, not the failure behaviour its nine injection rows do. And the
-8 s figure is a threshold that happened to work, not a measured minimum; the cushion was tested at
-1 s and 8 s, and where between them the residue reaches zero is not known.
+Two limits on the claim. Neither segmented cell was subjected to arm D's injection matrix — no leg kill, no blackout, no differential delay — so what is established is the _clean-pair_ determinism that arm D's control establishes, not the failure behaviour its nine injection rows do. And the 8 s figure is a threshold that happened to work, not a measured minimum; the cushion was tested at 1 s and 8 s, and where between them the residue reaches zero is not known.
 
 ## Arm D across two hosts: the legs do not share a clock, and they are still byte-identical
 
-Every determinism result above was measured on one machine, and that was the standing hole in the
-claim. Two co-resident groomers agree about stream position, but they also agree about wall time and
-about the same crystal, so nothing separated *"placement is a function of the stream"* — the property
-the byte-locking model asserts and the reason a 1+1 pair is mergeable — from *"both legs happened to be
-driven by one oscillator"*. The distinction is the whole basis of the ST 2022-7 claim, and it needed a
-second host to test.
+Every determinism result above was measured on one machine, and that was the standing hole in the claim. Two co-resident groomers agree about stream position, but they also agree about wall time and about the same crystal, so nothing separated _"placement is a function of the stream"_ — the property the byte-locking model asserts and the reason a 1+1 pair is mergeable — from _"both legs happened to be driven by one oscillator"_. The distinction is the whole basis of the ST 2022-7 claim, and it needed a second host to test.
 
-**Environment.** Two EC2 instances in one region and two availability zones: leg A on the primary
-(`c6in.large`, 2 vCPU, eu-west-1a) and leg B on the secondary (`c6in.2xlarge`, 8 vCPU, eu-west-1b) —
-separate hardware, separate power and cooling, separate clock, and a couple of milliseconds apart. Same
-region deliberately: a second *region* would add tens of milliseconds of differential delay on top, and
-a divergence could then be the clocks or the skew, which is the confound the arm exists to remove.
-Rig [`t12-dual-host.sh`](scripts/t12-dual-host.sh), one role per host, arm D's pacer invocation
-unaltered — `--stream-clock`, `--sequence-seed 0`, matched SSRC and an explicit 4 Mb/s rate, because an
-auto rate is measured from one process's arrival window and two hosts would derive two different grids
-from the same stream. `moq 0.9.15` on both legs, so the exporter carries #2967 and #3006. Source
-`t12_2mbps_vidonly.ts`, 120 s window, each host recording its own leg from a local socket.
+**Environment.** Two EC2 instances in one region and two availability zones: leg A on the primary (`c6in.large`, 2 vCPU, eu-west-1a) and leg B on the secondary (`c6in.2xlarge`, 8 vCPU, eu-west-1b) — separate hardware, separate power and cooling, separate clock, and a couple of milliseconds apart. Same region deliberately: a second _region_ would add tens of milliseconds of differential delay on top, and a divergence could then be the clocks or the skew, which is the confound the arm exists to remove. Rig [`t12-dual-host.sh`](scripts/t12-dual-host.sh), one role per host, arm D's pacer invocation unaltered — `--stream-clock`, `--sequence-seed 0`, matched SSRC and an explicit 4 Mb/s rate, because an auto rate is measured from one process's arrival window and two hosts would derive two different grids from the same stream. `moq 0.9.15` on both legs, so the exporter carries #2967 and #3006. Source `t12_2mbps_vidonly.ts`, 120 s window, each host recording its own leg from a local socket.
 
-**The publisher and the relay are shared in the cell below.** It grades the determinism of two *egress*
-legs on independent clocks, which is what was blocked. Full path diversity is graded in the next section,
-which removes the shared publisher and relay as well.
+**The publisher and the relay are shared in the cell below.** It grades the determinism of two _egress_ legs on independent clocks, which is what was blocked. Full path diversity is graded in the next section, which removes the shared publisher and relay as well.
 
-| | leg A (eu-west-1a) | leg B (eu-west-1b) |
-|---|---:|---:|
+|  | leg A (eu-west-1a) | leg B (eu-west-1b) |
+| --- | --: | --: |
 | slots recorded | 46,844 | 46,844 |
 | slots carried by both | 46,759 | 46,759 |
-| **identical** | **46,759 (100.0000 %)** | |
-| identical, continuity counter masked | 46,759 (100.0000 %) | |
-| **residue beyond the counter** | **0** | |
+| **identical** | **46,759 (100.0000 %)** |  |
+| identical, continuity counter masked | 46,759 (100.0000 %) |  |
+| **residue beyond the counter** | **0** |  |
 
-**Repeated under the same conditions, and it reproduces exactly.** A second run of the same arm — same
-hosts, same AZs, same 4 Mb/s explicit rate, same SSRC and seed, same `moq 0.9.15` — recorded **62,302,520
-bytes on each leg, byte-for-byte the same count**, and graded **46,844 of 46,844 slots shared, 100.0000 %
-identical, 0 residue**, counters included. All 46,844 are shared this time rather than 46,759: the
-`START_AT` hold put the two windows in step closely enough that there were no window edges to lose.
-Neither leg logged a stall, an underrun or a late drop, and loads were 0.27–0.33 on the primary against
-0.02 on the secondary, so it is again not resource-bound. Two runs, two hosts, two oscillators, one
-result.
+**Repeated under the same conditions, and it reproduces exactly.** A second run of the same arm — same hosts, same AZs, same 4 Mb/s explicit rate, same SSRC and seed, same `moq 0.9.15` — recorded **62,302,520 bytes on each leg, byte-for-byte the same count**, and graded **46,844 of 46,844 slots shared, 100.0000 % identical, 0 residue**, counters included. All 46,844 are shared this time rather than 46,759: the `START_AT` hold put the two windows in step closely enough that there were no window edges to lose. Neither leg logged a stall, an underrun or a late drop, and loads were 0.27–0.33 on the primary against 0.02 on the secondary, so it is again not resource-bound. Two runs, two hosts, two oscillators, one result.
 
-**Two independently groomed legs on two oscillators in two availability zones are byte-identical across
-46,759 datagrams, with zero residue.** Not identical-once-the-counter-is-masked, which is the weaker
-result the campaign has had to report before — the raw bytes match, including the continuity counters,
-because under `--stream-clock` the numbering is a function of the output slot and both legs seeded it
-identically. The 85 unshared slots are the window edges, where one recorder was running and the other
-was not.
+**Two independently groomed legs on two oscillators in two availability zones are byte-identical across 46,759 datagrams, with zero residue.** Not identical-once-the-counter-is-masked, which is the weaker result the campaign has had to report before — the raw bytes match, including the continuity counters, because under `--stream-clock` the numbering is a function of the output slot and both legs seeded it identically. The 85 unshared slots are the window edges, where one recorder was running and the other was not.
 
-**The result is not resource-bound, which is the condition that would have voided it.** Sampled during
-the run, the primary was 86.4 % idle with the whole leg costing under 11 % of two vCPU, and the
-secondary 97.6 % idle; loads were 0.39–0.46 and 0.02–0.03 respectively, and neither pacer reported a
-stall, an underrun or a late drop. The asymmetry between a 2-vCPU and an 8-vCPU host is therefore
-verified non-binding rather than assumed so.
+**The result is not resource-bound, which is the condition that would have voided it.** Sampled during the run, the primary was 86.4 % idle with the whole leg costing under 11 % of two vCPU, and the secondary 97.6 % idle; loads were 0.39–0.46 and 0.02–0.03 respectively, and neither pacer reported a stall, an underrun or a late drop. The asymmetry between a 2-vCPU and an 8-vCPU host is therefore verified non-binding rather than assumed so.
 
-**What this closes and what it does not.** It closes the substitution the campaign has been making
-since T6: that co-resident agreement stands in for clock-independent agreement. It does not close the
-churn cells — a leg that restarts and rejoins its partner still cannot be byte-identical while
-[#2779](https://github.com/moq-dev/moq/issues/2779) has the exporter numbering continuity counters from
-process state.
+**What this closes and what it does not.** It closes the substitution the campaign has been making since T6: that co-resident agreement stands in for clock-independent agreement. It does not close the churn cells — a leg that restarts and rejoins its partner still cannot be byte-identical while [#2779](https://github.com/moq-dev/moq/issues/2779) has the exporter numbering continuity counters from process state.
 
 ## Arm D with a fully independent upstream: determinism is a property of single-track content
 
-The cell above still shared a publisher and a relay, so it graded two *egress* legs and nothing above
-them. This one removes every shared component: **one publisher, one relay, one exporter and one groomer
-per host**, each host reading its own copy of the source. The two chains have nothing in common but the
-file. That is the topology a real 1+1 deployment has, and it is the arm every determinism result to date
-was standing in for.
+The cell above still shared a publisher and a relay, so it graded two _egress_ legs and nothing above them. This one removes every shared component: **one publisher, one relay, one exporter and one groomer per host**, each host reading its own copy of the source. The two chains have nothing in common but the file. That is the topology a real 1+1 deployment has, and it is the arm every determinism result to date was standing in for.
 
-**Environment.** The same two instances and availability zones as above. Both hosts verified to hold
-byte-identical copies of the source and byte-identical binaries before the run — the source
-(`md5 364ce82c…` full mux, `7c3d0428…` video-only), `moq` and `moq-relay` 0.9.15/0.14.14
-(`md5 44e21312…`, `73083fb8…`) and the groomer (`md5 f7b1dc6e…`) — because otherwise the arm grades the
-artefacts rather than the pipeline. Each host's relay binds loopback only: with a publisher and a
-subscriber per host there is no cross-host traffic left to carry. Rig
-[`t12-dual-host.sh`](scripts/t12-dual-host.sh) with `OWN_UPSTREAM=1`, graded by
-[`t12-rtpcmp.py`](scripts/t12-rtpcmp.py) at equal RTP timestamps, continuity counters included.
+**Environment.** The same two instances and availability zones as above. Both hosts verified to hold byte-identical copies of the source and byte-identical binaries before the run — the source (`md5 364ce82c…` full mux, `7c3d0428…` video-only), `moq` and `moq-relay` 0.9.15/0.14.14 (`md5 44e21312…`, `73083fb8…`) and the groomer (`md5 f7b1dc6e…`) — because otherwise the arm grades the artefacts rather than the pipeline. Each host's relay binds loopback only: with a publisher and a subscriber per host there is no cross-host traffic left to carry. Rig [`t12-dual-host.sh`](scripts/t12-dual-host.sh) with `OWN_UPSTREAM=1`, graded by [`t12-rtpcmp.py`](scripts/t12-rtpcmp.py) at equal RTP timestamps, continuity counters included.
 
-| | single-track (video only) | full mux (7 elementary streams) |
-|---|---:|---:|
+|  | single-track (video only) | full mux (7 elementary streams) |
+| --- | --: | --: |
 | slots carried by both | 46,778 | 72,035 |
 | **byte-identical, counters included** | **46,778 (100.0000 %)** | **54,428 (75.5577 %)** |
 | identical with the counter masked | 46,778 (100.0000 %) | 54,542 (75.7160 %) |
 | **residue beyond the counter** | **0** | **17,493 (24.2840 %)** |
 
-**On single-track content an independent upstream changes nothing: 46,778 of 46,778 shared datagrams are
-byte-identical, RTP headers and continuity counters included, with zero residue.** The two recordings are
-the same size to the byte (62,302,520), the unshared slots are 66 window edges on each side and nothing
-else, and the RTP sequence number agrees on every shared slot. This is the strongest form of the claim
-the campaign can make: placement and numbering are functions of stream position alone, so a 1+1 pair
-needs no shared publisher, no shared relay, no shared host and no shared clock.
+**On single-track content an independent upstream changes nothing: 46,778 of 46,778 shared datagrams are byte-identical, RTP headers and continuity counters included, with zero residue.** The two recordings are the same size to the byte (62,302,520), the unshared slots are 66 window edges on each side and nothing else, and the RTP sequence number agrees on every shared slot. This is the strongest form of the claim the campaign can make: placement and numbering are functions of stream position alone, so a 1+1 pair needs no shared publisher, no shared relay, no shared host and no shared clock.
 
-**On a multi-track mux it does not hold, and the residue names the mechanism.** The legs are not carrying
-different media. Over the shared span they carry the *same number of packets on every media PID* — video
-381,419 each, MPEG-1 audio 10,396, AC-3 8,208, teletext 1,564, the three SCTE-35 PIDs 62/63/63 — and
-treating each leg as a multiset of packets, **99.9528 % are common** (504,007 of 504,245). Aligned as
-sequences with an edit script rather than compared position by position, **98.414 %** of the first
-120,000 packets match with the counter masked, across **416 local edit regions**. What differs is the
-*order*.
+**On a multi-track mux it does not hold, and the residue names the mechanism.** The legs are not carrying different media. Over the shared span they carry the _same number of packets on every media PID_ — video 381,419 each, MPEG-1 audio 10,396, AC-3 8,208, teletext 1,564, the three SCTE-35 PIDs 62/63/63 — and treating each leg as a multiset of packets, **99.9528 % are common** (504,007 of 504,245). Aligned as sequences with an edit script rather than compared position by position, **98.414 %** of the first 120,000 packets match with the counter masked, across **416 local edit regions**. What differs is the _order_.
 
-Of the 238 packets per leg with no counterpart, **236 carry a PCR**. Those are ours: the groomer
-regenerates PCR from the output slot, and the slot moved because the interleave moved the packet into it.
-The remaining pair is one PAT and one PMT emitted by leg A where leg B emitted stuffing, which is the
-SI-cadence mint rather than the interleave.
+Of the 238 packets per leg with no counterpart, **236 carry a PCR**. Those are ours: the groomer regenerates PCR from the output slot, and the slot moved because the interleave moved the packet into it. The remaining pair is one PAT and one PMT emitted by leg A where leg B emitted stuffing, which is the SI-cadence mint rather than the interleave.
 
-**The cause is upstream and is already known.** `pick_next_track`
-(`rs/moq-mux/src/container/ts/export.rs:707`, re-read against `main` at `5eea9e3c8`) filters to tracks
-that have a *pending* frame and takes the minimum of `(timestamp, pid, name)`. The tiebreak is fully
-deterministic, so the non-determinism is not in the choice but in the candidate set: it holds exactly
-those tracks whose next frame had arrived when the choice was made. Two independent chains do not present
-the same set at the same points, so they interleave differently. This is
-[#2829](https://github.com/moq-dev/moq/issues/2829), and the measurement above is posted there; a
-single-track source has no interleave decision to make, which is precisely why it reaches 100 %.
+**The cause is upstream and is already known.** `pick_next_track` (`rs/moq-mux/src/container/ts/export.rs:707`, re-read against `main` at `5eea9e3c8`) filters to tracks that have a _pending_ frame and takes the minimum of `(timestamp, pid, name)`. The tiebreak is fully deterministic, so the non-determinism is not in the choice but in the candidate set: it holds exactly those tracks whose next frame had arrived when the choice was made. Two independent chains do not present the same set at the same points, so they interleave differently. This is [#2829](https://github.com/moq-dev/moq/issues/2829), and the measurement above is posted there; a single-track source has no interleave decision to make, which is precisely why it reaches 100 %.
 
-**Neither host was resource-bound, which is the condition that would have voided a null.** The leg cost
-14.2–14.4 % of a core on the 2-vCPU primary at 64.1–65.5 % box idle, and 14.8–15.2 % on the 8-vCPU
-secondary at 94.8–94.9 % idle; loads were 1.13–1.27 and 0.55–0.65. No leg logged a stall, an underrun or
-a late drop.
+**Neither host was resource-bound, which is the condition that would have voided a null.** The leg cost 14.2–14.4 % of a core on the 2-vCPU primary at 64.1–65.5 % box idle, and 14.8–15.2 % on the 8-vCPU secondary at 94.8–94.9 % idle; loads were 1.13–1.27 and 0.55–0.65. No leg logged a stall, an underrun or a late drop.
 
-**What this means for 1+1.** A byte-level merge across two independent chains is available today for
-single-track content and not for a broadcast mux. The choice is therefore between carrying each
-elementary stream as its own 1+1 pair, merging above the transport rather than at the byte, or an
-exporter whose packet schedule and counters are functions of the broadcast: fixing the interleave
-alone did not close the pair (§ *After the media-time interleave*). Nothing here is a groomer defect: the groomer places by stream position and
-carries faithfully whatever order it was handed.
+**What this means for 1+1.** A byte-level merge across two independent chains is available today for single-track content and not for a broadcast mux. The choice is therefore between carrying each elementary stream as its own 1+1 pair, merging above the transport rather than at the byte, or an exporter whose packet schedule and counters are functions of the broadcast: fixing the interleave alone did not close the pair (§ _After the media-time interleave_). Nothing here is a groomer defect: the groomer places by stream position and carries faithfully whatever order it was handed.
 
 ## Arm D on the opaque lane, one leg joining late (P1-o): the join is clean, and with the pacer fixed so are a leg's loss and return
 
-**Question.** Arm D merges co-started legs of the demultiplexed export, and across independent
-upstreams only single-track content. The opaque lane's export writes the source's own packets, and a
-leg joining 8 s late is byte-identical to the first ([T48](test-48-passthrough-export.md)). Does such a
-pair, each leg through its own stream-clocked groomer, stay hitless when either leg is lost mid-run?
+**Question.** Arm D merges co-started legs of the demultiplexed export, and across independent upstreams only single-track content. The opaque lane's export writes the source's own packets, and a leg joining 8 s late is byte-identical to the first ([T48](test-48-passthrough-export.md)). Does such a pair, each leg through its own stream-clocked groomer, stay hitless when either leg is lost mid-run?
 
-**Rig** ([`t12-opaque-late.sh`](scripts/t12-opaque-late.sh)). The secondary alone, clear of its
-standing units: `contrib-10m.ts` paced in real time into `import ts --passthrough` on a merged `main`
-relay and teed as the reference, for 150 s so the clip never wraps; legs A and B, each `export ts
---passthrough --delay 2s` into its own `mpegts-pacer --rtp --stream-clock` at the clip's rate, with
-shared SSRC and sequence seed, to ports 5100 and 5200. B starts 8 s after A. One loopback `tcpdump`
-records both legs; a blackout drops the leg's QUIC flow both ways by its own UDP ports, with a
-watchdog. A live-feed cell follows once a host other than the primary is fed.
+**Rig** ([`t12-opaque-late.sh`](scripts/t12-opaque-late.sh)). The secondary alone, clear of its standing units: `contrib-10m.ts` paced in real time into `import ts --passthrough` on a merged `main` relay and teed as the reference, for 150 s so the clip never wraps; legs A and B, each `export ts --passthrough --delay 2s` into its own `mpegts-pacer --rtp --stream-clock` at the clip's rate, with shared SSRC and sequence seed, to ports 5100 and 5200. B starts 8 s after A. One loopback `tcpdump` records both legs; a blackout drops the leg's QUIC flow both ways by its own UDP ports, with a watchdog. A live-feed cell follows once a host other than the primary is fed.
 
-**Cells, one run each.** (1) Control. (2) A blacked out for 15 s at 40 s and cleared, then B for 15 s at
-100 s, so each leg carries the output alone, A after its return. (3) A's export killed at 40 s.
-(2b), fixed after cell 2 and before it ran: cell 2 with 5 s blackouts, because 15 s outlasted the
-session's idle timeout and no leg returned; criterion 3 is graded on it.
+**Cells, one run each.** (1) Control. (2) A blacked out for 15 s at 40 s and cleared, then B for 15 s at 100 s, so each leg carries the output alone, A after its return. (3) A's export killed at 40 s. (2b), fixed after cell 2 and before it ran: cell 2 with 5 s blackouts, because 15 s outlasted the session's idle timeout and no leg returned; criterion 3 is graded on it.
 
 **Pass criteria, fixed before running.**
 
 1. **Rig gate.** The control's legs align at 100 % with 0 conflicts, or nothing else is reported.
-2. **Hitless.** In every cell the seq-merge output, from B's first aligned datagram, loses no TS packet,
-   has no continuity error, and is the source's packets in order: `ts-passthrough-identity.py`, 0 gaps
-   and 0 foreign, with PCR fields masked, because a stream-clocked groomer regenerates PCR and refuses
-   to preserve it. The mask is added to the grader and proven on the control first.
-3. **A returning leg rejoins the numbering.** In cell 2, A's first datagram after its blackout carries
-   the sequence number its slot implies (deficit 0, `t12-resume.py`), and A realigns before B's
-   blackout.
-4. **Reported, not graded:** skew (median, p99, maximum) per cell, and input-select's artefact at
-   k = 50 ms.
+2. **Hitless.** In every cell the seq-merge output, from B's first aligned datagram, loses no TS packet, has no continuity error, and is the source's packets in order: `ts-passthrough-identity.py`, 0 gaps and 0 foreign, with PCR fields masked, because a stream-clocked groomer regenerates PCR and refuses to preserve it. The mask is added to the grader and proven on the control first.
+3. **A returning leg rejoins the numbering.** In cell 2, A's first datagram after its blackout carries the sequence number its slot implies (deficit 0, `t12-resume.py`), and A realigns before B's blackout.
+4. **Reported, not graded:** skew (median, p99, maximum) per cell, and input-select's artefact at k = 50 ms.
 
-Passing 1–3 is the evidence for lifting [Architecture](../docs/architecture.md) §5.1's co-start
-condition on the opaque lane, for one clip on one host. If 2 fails only in cell 2 and 3 fails too, the
-defect is the resumed leg's, not the late join's.
+Passing 1–3 is the evidence for lifting [Architecture](../docs/architecture.md) §5.1's co-start condition on the opaque lane, for one clip on one host. If 2 fails only in cell 2 and 3 fails too, the defect is the resumed leg's, not the late join's.
 
-**Results** on `main` at `b581c27ed` with the pacer at `5ab84cd`, graded by
-[`t12-merge-oracle.py`](scripts/t12-merge-oracle.py),
-[`ts-passthrough-identity.py`](scripts/ts-passthrough-identity.py) `--groomed`,
-[`t12-resume.py`](scripts/t12-resume.py) and TSDuck `continuity` on the seq-merge output:
+**Results** on `main` at `b581c27ed` with the pacer at `5ab84cd`, graded by [`t12-merge-oracle.py`](scripts/t12-merge-oracle.py), [`ts-passthrough-identity.py`](scripts/ts-passthrough-identity.py) `--groomed`, [`t12-resume.py`](scripts/t12-resume.py) and TSDuck `continuity` on the seq-merge output:
 
 | Cell | Legs aligned (mismatched datagrams) | Seq-merge lost | Continuity errors | Identity: gaps (packets), foreign |
-|---|---|---|---|---|
+| --- | --- | --- | --- | --- |
 | 1, control | 100 % (0) | 0 | 0 | 0, 0 |
 | 2, 15 s blackouts | 99.99 % (2) | everything after B's blackout | 3 | 2 (8), 2 |
 | 2b, 5 s blackouts | 97.71 % (2,877) | 0 | on 8 PIDs | 2 (9,621), 100 |
 | 3, A's export killed | 99.93 % (20) | 0 | 0 | 0, 1 |
 
-- **The rig gate passes (1)** and the mask is proven: the control's merge is the source's packets in
-  order, and a copy with 100 packets cut and one corrupted reports 2 gaps and 1 foreign. The grader
-  refuses a lone payload-free packet as an anchor, because with PCR masked such packets repeat.
-- **The late join is clean in every cell.** From B's first datagram, every datagram both legs carry
-  is identical until A's loss. Skew B−A is 18.0–18.3 ms at the median and at most 19.7 ms.
-- **Hitless fails (2) in every impaired cell, each time on a datagram the groomer should not have
-  sent.** A stream-clocked
-  pacer that cannot fill a datagram as the stream dictates sends it anyway, under the sequence number
-  its partner fills with programme, and an ST 2022-7 receiver keeps whichever arrives first. It does
-  so in four places: at stall onset it completes the last datagram with nulls (2 packets lost); while
-  it re-primes its 1.5 s cushion after a return it sends about 1,390 null-only datagrams with PCR
-  re-inserted (9,619 packets lost, because A leads B); when its input ends after a stall it sends one
-  PCR packet under a 9 s-old continuity counter (6 packets displaced); and when its input ends with
-  programme buffered it places the last PCR interval, which has no closing PCR, on slots of its own
-  (A's final 21 datagrams; here the splice left one legal duplicate, but the same shift could drop a
-  packet). Arm D's own exporter-kill and blackout cells, on the demultiplexed lane with the pacer of
-  that time, merged without loss; whether the opaque lane's input or the pacer's five later commits
-  make the difference is not separated.
-- **The resumed leg rejoins the numbering (3), in cell 2b.** After a 3.3 s silence on the wire A's
-  sequence jumps 3,130, and its 91,605 later datagrams match B's at the same sequence numbers once
-  the refill ends, 1.5 s after its return and 55 s before B's blackout; B reads deficit 0. The tool's
-  −1 for A is its counting window, which B's 18 ms lag puts one datagram short.
-- **A 15 s blackout ends the leg.** Each export exits about 13 s into it (`transport: connection
-  error: closed`) instead of reconnecting, so in cell 2 neither leg returned and the output stopped at
-  B's blackout. Beyond the session's idle timeout, a returning leg is a restarted export and pacer,
-  which is a late join.
+- **The rig gate passes (1)** and the mask is proven: the control's merge is the source's packets in order, and a copy with 100 packets cut and one corrupted reports 2 gaps and 1 foreign. The grader refuses a lone payload-free packet as an anchor, because with PCR masked such packets repeat.
+- **The late join is clean in every cell.** From B's first datagram, every datagram both legs carry is identical until A's loss. Skew B−A is 18.0–18.3 ms at the median and at most 19.7 ms.
+- **Hitless fails (2) in every impaired cell, each time on a datagram the groomer should not have sent.** A stream-clocked pacer that cannot fill a datagram as the stream dictates sends it anyway, under the sequence number its partner fills with programme, and an ST 2022-7 receiver keeps whichever arrives first. It does so in four places: at stall onset it completes the last datagram with nulls (2 packets lost); while it re-primes its 1.5 s cushion after a return it sends about 1,390 null-only datagrams with PCR re-inserted (9,619 packets lost, because A leads B); when its input ends after a stall it sends one PCR packet under a 9 s-old continuity counter (6 packets displaced); and when its input ends with programme buffered it places the last PCR interval, which has no closing PCR, on slots of its own (A's final 21 datagrams; here the splice left one legal duplicate, but the same shift could drop a packet). Arm D's own exporter-kill and blackout cells, on the demultiplexed lane with the pacer of that time, merged without loss; whether the opaque lane's input or the pacer's five later commits make the difference is not separated.
+- **The resumed leg rejoins the numbering (3), in cell 2b.** After a 3.3 s silence on the wire A's sequence jumps 3,130, and its 91,605 later datagrams match B's at the same sequence numbers once the refill ends, 1.5 s after its return and 55 s before B's blackout; B reads deficit 0. The tool's −1 for A is its counting window, which B's 18 ms lag puts one datagram short.
+- **A 15 s blackout ends the leg.** Each export exits about 13 s into it (`transport: connection error: closed`) instead of reconnecting, so in cell 2 neither leg returned and the output stopped at B's blackout. Beyond the session's idle timeout, a returning leg is a restarted export and pacer, which is a late join.
 - Input-select at k = 50 ms switches once per silence.
 
-**Verdict with the pacer at `5ab84cd`.** Not passed. What the run moved is where the co-start
-condition belongs: the join it guards against is clean, and what is not
-hitless is a leg's loss and return, in the groomer. A stream-clocked leg must stay silent rather than send a
-datagram it cannot fill exactly; with that fixed in the pacer, cells 2b and 3 decide it.
+**Verdict with the pacer at `5ab84cd`.** Not passed. What the run moved is where the co-start condition belongs: the join it guards against is clean, and what is not hitless is a leg's loss and return, in the groomer. A stream-clocked leg must stay silent rather than send a datagram it cannot fill exactly; with that fixed in the pacer, cells 2b and 3 decide it.
 
 ### Cells 2b and 3 with the pacer fixed (fixed before they run)
 
-The pacer at `ea88793` sends a datagram only when every slot in it lies inside the stretch the leg
-received unbroken, before the run still awaiting its closing PCR, and after a content PCR has gone
-out in its own slot since the leg last passed a slot it could not fill. A PCR interval twice the
-longest of the last eight counts as missed PCRs, runs with no closing PCR are discarded, and a
-resumed leg flags no discontinuity. Its unit tests show a leg that misses a stretch or loses its
-source mid-run sending nothing its partner contradicts; they fail on `5ab84cd`.
+The pacer at `ea88793` sends a datagram only when every slot in it lies inside the stretch the leg received unbroken, before the run still awaiting its closing PCR, and after a content PCR has gone out in its own slot since the leg last passed a slot it could not fill. A PCR interval twice the longest of the last eight counts as missed PCRs, runs with no closing PCR are discarded, and a resumed leg flags no discontinuity. Its unit tests show a leg that misses a stretch or loses its source mid-run sending nothing its partner contradicts; they fail on `5ab84cd`.
 
-Same rig, clip, `main` build (`3c0daa21b`) and grading as above, moved to the EC2 tertiary because
-the secondary carries the seven-day soak: the control, cell 2b and cell 3, one run each. Criteria 1
-to 3 as written. Reported beside them: each leg's `withheld` and `cut_runs` counts, which should be
-non-zero on the impaired leg only. If criterion 2 still fails, the first mismatched datagram is
-located in the capture before anything is concluded.
+Same rig, clip, `main` build (`3c0daa21b`) and grading as above, moved to the EC2 tertiary because the secondary carries the seven-day soak: the control, cell 2b and cell 3, one run each. Criteria 1 to 3 as written. Reported beside them: each leg's `withheld` and `cut_runs` counts, which should be non-zero on the impaired leg only. If criterion 2 still fails, the first mismatched datagram is located in the capture before anything is concluded.
 
 **Results: all three criteria pass.**
 
 | Cell | Legs aligned (mismatched datagrams) | Seq-merge lost | Continuity errors | Identity: gaps, foreign | Numbering deficit after an outage |
-|---|---|---|---|---|---|
+| --- | --- | --- | --- | --- | --- |
 | 1, control | 100 % (0) | 0 | 0 | 0, 0 | no outage |
 | 2b, 5 s blackouts | 100 % (0) | 0 | 0 | 0, 0 | A 0 after 4.9 s; B 0 after 4.7 s |
 | 3, A's export killed | 100 % (0) | 0 | 0 | 0, 0 | no outage; B carries on alone |
 
-- **Hitless (2) holds in every cell.** No datagram either leg sent contradicts its partner's at the
-  same sequence number, so the seq-merge from B's first aligned datagram is the source's packets in
-  order. In cell 2b, B covered 4,595 of A's datagrams and A covered B's blackout in turn; in cell 3,
-  B covered all 102,406 after the kill.
-- **Each returning leg rejoins the numbering (3).** A's sequence advanced 4,596 across its silence,
-  as its partner did, and every one of its 96,062 later datagrams carries programme; B's advanced
-  4,465 with the same result.
-- **The pacer's new counts.** The rig stops the pacers before they report, so only cell 3's leg A,
-  whose input ended, printed them: 161 packets withheld and 155 in discarded runs.
-- Skew B−A is 17.2–18.6 ms at the median and at most 21.0 ms; input-select at k = 50 ms switches once
-  per silence.
+- **Hitless (2) holds in every cell.** No datagram either leg sent contradicts its partner's at the same sequence number, so the seq-merge from B's first aligned datagram is the source's packets in order. In cell 2b, B covered 4,595 of A's datagrams and A covered B's blackout in turn; in cell 3, B covered all 102,406 after the kill.
+- **Each returning leg rejoins the numbering (3).** A's sequence advanced 4,596 across its silence, as its partner did, and every one of its 96,062 later datagrams carries programme; B's advanced 4,465 with the same result.
+- **The pacer's new counts.** The rig stops the pacers before they report, so only cell 3's leg A, whose input ended, printed them: 161 packets withheld and 155 in discarded runs.
+- Skew B−A is 17.2–18.6 ms at the median and at most 21.0 ms; input-select at k = 50 ms switches once per silence.
 
-**Verdict.** Passed, for one clip on one host. The opaque lane's late join was already clean, and
-with a groomer that stays silent rather than send a datagram it cannot fill exactly, a leg's loss and
-return are hitless too. This is the evidence for lifting Architecture §5.1's co-start condition on
-the opaque lane; that edit awaits the author.
+**Verdict.** Passed, for one clip on one host. The opaque lane's late join was already clean, and with a groomer that stays silent rather than send a datagram it cannot fill exactly, a leg's loss and return are hitless too. This is the evidence for lifting Architecture §5.1's co-start condition on the opaque lane; that edit awaits the author.
 
 ## Arm D on the demultiplexed lane, one leg late, with the padding filter (P2-i)
 
-**Question.** Behind the fixed-delay export a co-started multi-track pair merges at the byte; a leg
-8 s late matched 98.5 % once a grader rewrote each PID's counter, the rest falling on the clock
-table's arrival-driven placement ([T13](test-13-downstream-grooming.md) § *On #4645's PCR grid*),
-on an unmerged build. On merged `main`, with
-[`ts-keyframe-pad.py`](scripts/ts-keyframe-pad.py) numbering the counters from the stream in line,
-does a late or returning leg merge?
+**Question.** Behind the fixed-delay export a co-started multi-track pair merges at the byte; a leg 8 s late matched 98.5 % once a grader rewrote each PID's counter, the rest falling on the clock table's arrival-driven placement ([T13](test-13-downstream-grooming.md) § _On #4645's PCR grid_), on an unmerged build. On merged `main`, with [`ts-keyframe-pad.py`](scripts/ts-keyframe-pad.py) numbering the counters from the stream in line, does a late or returning leg merge?
 
-**Rig.** [`t12-opaque-late.sh`](scripts/t12-opaque-late.sh) with `LANE=demux` (no `--passthrough`
-at either end), on the tertiary, `main` at `204c97f4f`, the pacer at `ea88793`, `contrib-10m.ts`,
-B 8 s late, `--delay 2s`, the groomers at 10.2 Mb/s for the filter's padding. One run per cell:
-D0, no filter, no fault; with `PAD=1`, D1 no fault, D2 5 s blackouts of each leg in turn, D3 A's
-export killed at 40 s. Graded by `t12-merge-oracle.py`, `t12-resume.py` and TSDuck `continuity`
-on the seq-merge output.
+**Rig.** [`t12-opaque-late.sh`](scripts/t12-opaque-late.sh) with `LANE=demux` (no `--passthrough` at either end), on the tertiary, `main` at `204c97f4f`, the pacer at `ea88793`, `contrib-10m.ts`, B 8 s late, `--delay 2s`, the groomers at 10.2 Mb/s for the filter's padding. One run per cell: D0, no filter, no fault; with `PAD=1`, D1 no fault, D2 5 s blackouts of each leg in turn, D3 A's export killed at 40 s. Graded by `t12-merge-oracle.py`, `t12-resume.py` and TSDuck `continuity` on the seq-merge output.
 
 **Criteria, fixed before running.**
 
-1. **The grader can fail:** D0's legs mismatch, as #2779's counters predict; if they do not, the
-   filter has nothing to fix on this build, and that is the result.
-2. **A late leg merges:** in D1 the legs mismatch in no datagram from 2 s after B's first, and the
-   seq-merge has no continuity error.
-3. **A returning leg merges:** in D2 each leg's numbering deficit is 0 after its return, with
-   criterion 2 holding from 2 s after it; in D3 the seq-merge loses nothing.
+1. **The grader can fail:** D0's legs mismatch, as #2779's counters predict; if they do not, the filter has nothing to fix on this build, and that is the result.
+2. **A late leg merges:** in D1 the legs mismatch in no datagram from 2 s after B's first, and the seq-merge has no continuity error.
+3. **A returning leg merges:** in D2 each leg's numbering deficit is 0 after its return, with criterion 2 holding from 2 s after it; in D3 the seq-merge loses nothing.
 4. **Reported:** where each mismatched datagram falls, against the TDT's packets in each leg.
 
-*Predicted:* criterion 2 fails, with mismatches confined to the stretches between one leg's TDT
-revision and the other's.
+_Predicted:_ criterion 2 fails, with mismatches confined to the stretches between one leg's TDT revision and the other's.
 
-**Results.** D1 and D2 are the runs after a filter fix: the filter had left a payload-less packet's
-counter as the exporter wrote it, where once renumbered it repeats its PID's last, and the
-exporter's PCR-only video packets made 508 continuity errors of it on D0's unpadded leg (0 after).
-[`t12-mismatch-where.py`](scripts/t12-mismatch-where.py) places the mismatches, grouping runs
-under 2 s apart into episodes.
+**Results.** D1 and D2 are the runs after a filter fix: the filter had left a payload-less packet's counter as the exporter wrote it, where once renumbered it repeats its PID's last, and the exporter's PCR-only video packets made 508 continuity errors of it on D0's unpadded leg (0 after). [`t12-mismatch-where.py`](scripts/t12-mismatch-where.py) places the mismatches, grouping runs under 2 s apart into episodes.
 
 | Cell | Aligned | Pairs differing, from 2 s after B | Seq-merge lost; CC | After a return |
-|---|---|---|---|---|
+| --- | --- | --- | --- | --- |
 | D0 | no offset found | — | — | — |
 | D1 | offset 0 | 5.97 % in 10 episodes, one per 15.1 s TDT/TOT revision, 0.3–2.1 s each | 0; 1 | — |
 | D2 | offset 0 | 41.2 % | 0; 17 | numbered one datagram off on each leg; A diverged 5.8 s, B for the remaining 43 s |
 | D3, unfixed filter | offset 0 | not graded | 0; — | — (B carries on alone) |
 
 1. **Criterion 1 holds**: unfiltered legs never align.
-2. **Criterion 2 fails, at the clock table and at the join.** Every D1 episode holds a TDT/TOT packet, which 66
-   of 134,695 datagrams do, and the first is also the join's tail (§ *D1 after upstream's clock-table
-   placement*); between them the late leg is byte-identical to its partner. Inside, the
-   legs carry the same packets in another order (video against audio, null, teletext and SCTE-35
-   packets, the TDT against the PMT), and re-converge within two GOPs.
-3. **Criterion 3 fails**: each resumed leg is misnumbered by one datagram, and B, returning second,
-   did not re-converge before the run ended. D3's seq-merge loses nothing.
+2. **Criterion 2 fails, at the clock table and at the join.** Every D1 episode holds a TDT/TOT packet, which 66 of 134,695 datagrams do, and the first is also the join's tail (§ _D1 after upstream's clock-table placement_); between them the late leg is byte-identical to its partner. Inside, the legs carry the same packets in another order (video against audio, null, teletext and SCTE-35 packets, the TDT against the PMT), and re-converge within two GOPs.
+3. **Criterion 3 fails**: each resumed leg is misnumbered by one datagram, and B, returning second, did not re-converge before the run ended. D3's seq-merge loses nothing.
 4. **The filter costs 1.43 % of packets** (136 kb/s), as on the earlier build.
 
 ### D1 after upstream's clock-table placement (criteria fixed before the first run)
 
-Upstream now places each TDT/TOT revision at the first media-grid slot at or after its import stamp,
-not on arrival: what D1 asked for ([#7743](https://github.com/moq-dev/moq/issues/7743), closed by
-[#7779](https://github.com/moq-dev/moq/pull/7779)). **Rig.** D1 again, `CELL=control LANE=demux PAD=1
-LATE=8 DELAY=2s RATE=10200000`, the clip's first 175 s, the pacer at `97f3a38`, on the far host
-(loopback, us-west-2): one run with `main` at `204c97f4f`, one at `701b7196a`. Graded as D1, with
-`t12-mismatch-where.py`.
+Upstream now places each TDT/TOT revision at the first media-grid slot at or after its import stamp, not on arrival: what D1 asked for ([#7743](https://github.com/moq-dev/moq/issues/7743), closed by [#7779](https://github.com/moq-dev/moq/pull/7779)). **Rig.** D1 again, `CELL=control LANE=demux PAD=1 LATE=8 DELAY=2s RATE=10200000`, the clip's first 175 s, the pacer at `97f3a38`, on the far host (loopback, us-west-2): one run with `main` at `204c97f4f`, one at `701b7196a`. Graded as D1, with `t12-mismatch-where.py`.
 
-1. **Valid:** at `204c97f4f`, from 2 s after B's first datagram the legs differ in episodes that each
-   hold a TDT/TOT packet. Otherwise this host does not reproduce D1 and the comparison is void.
-2. **Pass:** at `701b7196a`, no pair differs from 2 s after B's first datagram, and the seq-merge has
-   no continuity error. The after build carries every change since `204c97f4f`, not #7779 alone.
-3. **Reported:** any remaining episode and whether it holds a TDT/TOT packet; upstream expects one
-   only where a revision arrives after media has passed its stamp.
+1. **Valid:** at `204c97f4f`, from 2 s after B's first datagram the legs differ in episodes that each hold a TDT/TOT packet. Otherwise this host does not reproduce D1 and the comparison is void.
+2. **Pass:** at `701b7196a`, no pair differs from 2 s after B's first datagram, and the seq-merge has no continuity error. The after build carries every change since `204c97f4f`, not #7779 alone.
+3. **Reported:** any remaining episode and whether it holds a TDT/TOT packet; upstream expects one only where a revision arrives after media has passed its stamp.
 
-**Results.** Both runs aligned at offset 0, and each seq-merge lost nothing. "From B" counts from
-leg B's first datagram; the masked count ignores the 4-bit continuity counter.
+**Results.** Both runs aligned at offset 0, and each seq-merge lost nothing. "From B" counts from leg B's first datagram; the masked count ignores the 4-bit continuity counter.
 
 | Build | Pairs differing, from 2 s after B | Episodes, from B | Pairs differing, 0–3.5 s from B (masked) | After 3.5 s | Seq-merge CC |
-|---|---|---|---|---|---|
+| --- | --- | --- | --- | --- | --- |
 | `204c97f4f` | 4.01 % | 10, each holding a TDT/TOT packet: the join at 0.2 s for 2.5 s, then 16.6 s to 137.6 s, 15.1 s apart, 0.1–2.0 s each | 2,448 (2,214) | 4,587 | 1 |
 | `701b7196a` | 0.63 % | 1: the join at 0.4 s for 2.5 s, holding a TDT/TOT packet in its first 2 s | 2,431 (2,198) | **0** | **0** |
 
 1. **Valid.** The before build reproduces D1, and D1's first episode was the join's tail.
-2. **Criterion 2 fails, at the join alone.** From 2.9 s after it joins, the late leg is byte-identical to its
-   partner over the remaining 131,306 pairs, and the seq-merge has no continuity error: every
-   revision episode is gone. The join's first 2.9 s differ on both builds by the same amount, and
-   masking the counter leaves nine in ten of those pairs differing, so it is content and order, not
-   the filter's numbering. The 2 s grace in the criterion was too short for the join on either build.
-3. **Reported:** one episode, the join's, holding a TDT/TOT packet in its first 2 s and none after;
-   what differs in it, and whether a revision arriving after media has passed its stamp explains it,
-   is open.
+2. **Criterion 2 fails, at the join alone.** From 2.9 s after it joins, the late leg is byte-identical to its partner over the remaining 131,306 pairs, and the seq-merge has no continuity error: every revision episode is gone. The join's first 2.9 s differ on both builds by the same amount, and masking the counter leaves nine in ten of those pairs differing, so it is content and order, not the filter's numbering. The 2 s grace in the criterion was too short for the join on either build.
+3. **Reported:** one episode, the join's, holding a TDT/TOT packet in its first 2 s and none after; what differs in it, and whether a revision arriving after media has passed its stamp explains it, is open.
 
 ## Corrections
 
 > Each stale claim is fixed where it was made; each rule is in [method-notes.md](method-notes.md).
 
-- **Independent upstreams and the TDT.** *Believed:* two importers and exporters would break byte
-  identity, and SI snapshots advanced by delivery would let two legs assert different times. *True:*
-  single-track content stays identical (46,778 of 46,778, counters included), and driving the TDT
-  against a leg 870 ms behind produced no differing emission in four cells, because the exporter
-  renders SI from its media position. *Rule:* a mechanism read from the source is a hypothesis;
-  before reporting a null, work out whether the arm could have shown the effect.
-- **What separates two arm D legs.** *Believed:* the continuity counter was the last obstacle, and
-  two independent groomers would differ only in re-stamped PCR. *True:* the counter is one of three
-  per-process values, with the SI cadence and the interleave; the 2.90 % that survives its mask was
-  in the first arm D capture; none of 400 sampled conflicts differs only in PCR. *Rule:* name a
-  divergence from the bytes that differ, with the suspect field masked, and attribute the residue.
-- **The groomer conceals nothing.** *Believed:* placing by stream position hid the other two
-  defects. *True:* it makes two legs comparable and carries a displaced table faithfully. *Rule:*
-  distinguish a stage that normalises a difference from one that gives two streams a common frame
-  of reference.
-- **Arm A is not a negative control.** *Believed:* ungroomed legs would fail on phase. *True:* with
-  RTP framing pinned and the legs co-started, they align in all 12 cells and fail on conformance.
-  *Rule:* pin every parameter the property depends on, then measure.
-- **A rate-holding leg is not a healthy one.** *Believed:* no loss and no continuity errors meant a
-  healthy leg. *True:* a groomer held a dead source's carrier for 26 s, with conformant PCR and no
-  programme; the content check must also exclude the groomer's own PCR-only packets. *Rule:*
-  liveness keys on programme content, and the enforcement point is the sender.
-- **Stopping is not rejoining.** *Believed:* a groomer that stops with its source lets its leg come
-  back, and a returning stream-clocked leg's misalignment was headroom. *True:* an RTP sequence
-  counting datagrams sent left the resumed leg 8,756 behind; doubling the rate changed nothing, and
-  the leg was reading its own outage as a splice. *Rule:* every stream-position quantity must be a
-  function of position in the stream, not of what this instance emitted.
-- **There was no twelve seconds.** *Believed:* a joining leg sent the right bytes 12 s late.
-  *True:* the oracle had voted on 15 datagrams in 23,175 (confidence 0.19); at equal sequence
-  numbers the leg is a median 10 ms from its partner. *Rule:* read the confidence an instrument
-  reports, and re-measure a derived quantity independently before explaining it.
-- **The merge window.** *Believed:* grade where both legs are live. *True:* that window ends at the
-  blackout under test. *Rule:* the merge window is the union of the legs' activity.
-- **Pooled PCR faults.** Arm C's sixteen "jumps" were long intervals and backward steps counted
-  together; apart, arm C has no backward step. *Rule:* report long intervals and backward steps
-  separately.
-- **Two rig faults.** A 2.0 Mb/s carrier for a 1.9 Mb/s feed dropped 4,011 packets, which is why
-  the rig runs 4 Mb/s; sorting whole tuples ordered tied datagrams by payload, scrambling one leg
-  into 207 phantom continuity errors. *Rules:* a pacer's carrier must match the content arriving at
-  it; sort on the key, not the record.
+- **Independent upstreams and the TDT.** _Believed:_ two importers and exporters would break byte identity, and SI snapshots advanced by delivery would let two legs assert different times. _True:_ single-track content stays identical (46,778 of 46,778, counters included), and driving the TDT against a leg 870 ms behind produced no differing emission in four cells, because the exporter renders SI from its media position. _Rule:_ a mechanism read from the source is a hypothesis; before reporting a null, work out whether the arm could have shown the effect.
+- **What separates two arm D legs.** _Believed:_ the continuity counter was the last obstacle, and two independent groomers would differ only in re-stamped PCR. _True:_ the counter is one of three per-process values, with the SI cadence and the interleave; the 2.90 % that survives its mask was in the first arm D capture; none of 400 sampled conflicts differs only in PCR. _Rule:_ name a divergence from the bytes that differ, with the suspect field masked, and attribute the residue.
+- **The groomer conceals nothing.** _Believed:_ placing by stream position hid the other two defects. _True:_ it makes two legs comparable and carries a displaced table faithfully. _Rule:_ distinguish a stage that normalises a difference from one that gives two streams a common frame of reference.
+- **Arm A is not a negative control.** _Believed:_ ungroomed legs would fail on phase. _True:_ with RTP framing pinned and the legs co-started, they align in all 12 cells and fail on conformance. _Rule:_ pin every parameter the property depends on, then measure.
+- **A rate-holding leg is not a healthy one.** _Believed:_ no loss and no continuity errors meant a healthy leg. _True:_ a groomer held a dead source's carrier for 26 s, with conformant PCR and no programme; the content check must also exclude the groomer's own PCR-only packets. _Rule:_ liveness keys on programme content, and the enforcement point is the sender.
+- **Stopping is not rejoining.** _Believed:_ a groomer that stops with its source lets its leg come back, and a returning stream-clocked leg's misalignment was headroom. _True:_ an RTP sequence counting datagrams sent left the resumed leg 8,756 behind; doubling the rate changed nothing, and the leg was reading its own outage as a splice. _Rule:_ every stream-position quantity must be a function of position in the stream, not of what this instance emitted.
+- **There was no twelve seconds.** _Believed:_ a joining leg sent the right bytes 12 s late. _True:_ the oracle had voted on 15 datagrams in 23,175 (confidence 0.19); at equal sequence numbers the leg is a median 10 ms from its partner. _Rule:_ read the confidence an instrument reports, and re-measure a derived quantity independently before explaining it.
+- **The merge window.** _Believed:_ grade where both legs are live. _True:_ that window ends at the blackout under test. _Rule:_ the merge window is the union of the legs' activity.
+- **Pooled PCR faults.** Arm C's sixteen "jumps" were long intervals and backward steps counted together; apart, arm C has no backward step. _Rule:_ report long intervals and backward steps separately.
+- **Two rig faults.** A 2.0 Mb/s carrier for a 1.9 Mb/s feed dropped 4,011 packets, which is why the rig runs 4 Mb/s; sorting whole tuples ordered tied datagrams by payload, scrambling one leg into 207 phantom continuity errors. _Rules:_ a pacer's carrier must match the content arriving at it; sort on the key, not the record.
 
 ## References
 
-- Full result tables: [`results/t12-summary.csv`](results/t12-summary.csv),
-  [`results/t12-input-select.csv`](results/t12-input-select.csv).
+- Full result tables: [`results/t12-summary.csv`](results/t12-summary.csv), [`results/t12-input-select.csv`](results/t12-input-select.csv).
 - Remaining conditions (the churn arms, P2-i): [planned-experiments.md](planned-experiments.md).
 - The exporter's continuity counters: [moq-dev/moq#2779](https://github.com/moq-dev/moq/issues/2779).
 - Redundancy model: [`docs/architecture.md`](../docs/architecture.md) §5 (the mergeable pair, §5.1) and §8.4.

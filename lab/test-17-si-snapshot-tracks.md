@@ -2,54 +2,29 @@
 
 ## Objective
 
-Every earlier experiment on the media-aware lane measured a stream whose service layer stopped at NIT
-and SDT. EIT — the event schedule, and the largest SI table by a wide margin — was dropped at the
-importer's gate, so [test 11](test-11-interop.md) could record that the DVB service layer survived
-while the EPG did not. Upstream's answer is to take SI off the catalog entirely and give each
-`(PID, table_id)` pair its own MoQ track with snapshot semantics
-([`moq-dev/moq#2909`](https://github.com/moq-dev/moq/pull/2909)).
+Every earlier experiment on the media-aware lane measured a stream whose service layer stopped at NIT and SDT. EIT — the event schedule, and the largest SI table by a wide margin — was dropped at the importer's gate, so [test 11](test-11-interop.md) could record that the DVB service layer survived while the EPG did not. Upstream's answer is to take SI off the catalog entirely and give each `(PID, table_id)` pair its own MoQ track with snapshot semantics ([`moq-dev/moq#2909`](https://github.com/moq-dev/moq/pull/2909)).
 
-That design has one part which cannot be settled by reading the code. An EIT schedule sub-table is
-**sparse**: it declares a `last_section_number` spanning its whole four-day range and transmits only
-the segment-boundary sections that actually hold events. Completeness therefore cannot be decided by
-counting sections, and the importer commits a generation when the transmission cycle is seen to wrap
-instead. Whether that rule reconstructs the table faithfully is an empirical question.
+That design has one part which cannot be settled by reading the code. An EIT schedule sub-table is **sparse**: it declares a `last_section_number` spanning its whole four-day range and transmits only the segment-boundary sections that actually hold events. Completeness therefore cannot be decided by counting sections, and the importer commits a generation when the transmission cycle is seen to wrap instead. Whether that rule reconstructs the table faithfully is an empirical question.
 
 Two things follow that are worth measuring rather than asserting:
 
 1. **Does EIT round-trip, schedule included, section for section?**
-2. **What does the service layer cost a joining receiver?** In the design as proposed, export held
-   *all* output — tables and media alike — until every SI entry the catalog named had reduced its first
-   snapshot, so SI moved off the join *bandwidth* path and onto the join *blocking* path. The size of an
-   EPG makes that worth pricing: a full DVB planning horizon is eight days. The measurement is what
-   retired the gate rather than tuning it (conclusion 4).
+2. **What does the service layer cost a joining receiver?** In the design as proposed, export held _all_ output — tables and media alike — until every SI entry the catalog named had reduced its first snapshot, so SI moved off the join _bandwidth_ path and onto the join _blocking_ path. The size of an EPG makes that worth pricing: a full DVB planning horizon is eight days. The measurement is what retired the gate rather than tuning it (conclusion 4).
 
-Both are media-aware-lane questions. The fidelity one is not, so it is also put to segmented HTTP
-(§5) — partly because the paper had been asserting the answer there from the survival of *other* SI
-rather than measuring it, and partly because a lane that passes for a different reason is worth
-separating from one that passes for the same reason.
+Both are media-aware-lane questions. The fidelity one is not, so it is also put to segmented HTTP (§5) — partly because the paper had been asserting the answer there from the survival of _other_ SI rather than measuring it, and partly because a lane that passes for a different reason is worth separating from one that passes for the same reason.
 
 ### Pass criteria (fixed before the runs)
 
-1. **Fidelity.** For every EIT sub-table, the set of distinct sections on the exported TS equals the
-   set on the source: no section missing, none added, sizes equal, and `last_section_number`
-   preserved. A sub-table that arrives with a hole has failed, whether or not a decoder complains.
-2. **The sparse path is actually exercised.** At least one schedule sub-table must transmit fewer
-   sections than its `last_section_number` implies, or the run has only tested the contiguous path
-   and says nothing about the interesting one.
-3. **Carriage cost.** The EIT PID's rate on the egress is within ±10 % of the source's. Export
-   re-emits at the ETSI TS 101 211 maximum interval rather than the source's observed cadence, so
-   this is not a given.
-4. **Join cost.** Time-to-first-byte for a cold exporter joining an already-running publisher is
-   measured with and without the EPG, and the difference attributed to bytes or to round-trips.
-5. **A control on the merge base.** Every figure is taken on the PR head *and* on its merge base
-   through the same rig. Without it a rig fault reads as a finding, and on this run it very nearly
-   did (see Corrections).
+1. **Fidelity.** For every EIT sub-table, the set of distinct sections on the exported TS equals the set on the source: no section missing, none added, sizes equal, and `last_section_number` preserved. A sub-table that arrives with a hole has failed, whether or not a decoder complains.
+2. **The sparse path is actually exercised.** At least one schedule sub-table must transmit fewer sections than its `last_section_number` implies, or the run has only tested the contiguous path and says nothing about the interesting one.
+3. **Carriage cost.** The EIT PID's rate on the egress is within ±10 % of the source's. Export re-emits at the ETSI TS 101 211 maximum interval rather than the source's observed cadence, so this is not a given.
+4. **Join cost.** Time-to-first-byte for a cold exporter joining an already-running publisher is measured with and without the EPG, and the difference attributed to bytes or to round-trips.
+5. **A control on the merge base.** Every figure is taken on the PR head _and_ on its merge base through the same rig. Without it a rig fault reads as a finding, and on this run it very nearly did (see Corrections).
 
 ## Environment
 
-| | |
-|---|---|
+|  |  |
+| --- | --- |
 | Under test | `moq-dev/moq` PR #2909 head, `5e29b0c87` |
 | Control | `origin/dev` `7061bec07` — the PR's merge base, so a clean before/after |
 | Build | one worktree, one shared cargo target, each arm's binaries copied out before switching |
@@ -59,14 +34,9 @@ separating from one that passes for the same reason.
 | EIT fixture | synthetic — 8 days, 24 events/day, ~120 B of descriptor per event |
 | Segmented lane (§5) | [`t3-segmented-transparency.sh`](scripts/t3-segmented-transparency.sh) unchanged: `tsp -O hls` (2 s segments, `--live 6 --live-extra-segments 3`) → `python3 -m http.server` → `tsp -I hls --live`, graded by [`eit-section-diff.py`](scripts/eit-section-diff.py) |
 
-The PR targets `dev`, not `main`, and the two have diverged; `dev` is the correct base and the only
-one against which the PR merges cleanly.
+The PR targets `dev`, not `main`, and the two have diverged; `dev` is the correct base and the only one against which the PR merges cleanly.
 
-No capture we hold carries EIT, so the EPG is generated. The pre-existing fixture
-(`make-eit-fixture.sh full`) does carry schedule, and is already sparse, but it holds under a day of
-EPG in one schedule table — 7 sections and 975 B in total. That is enough to ask whether carriage
-works and far too small to price it, so this experiment adds a generator sized to the DVB planning
-horizon:
+No capture we hold carries EIT, so the EPG is generated. The pre-existing fixture (`make-eit-fixture.sh full`) does carry schedule, and is already sparse, but it holds under a day of EPG in one schedule table — 7 sections and 975 B in total. That is enough to ask whether carriage works and far too small to price it, so this experiment adds a generator sized to the DVB planning horizon:
 
 ```bash
 # 8-day EPG for one service, anchored to the clip's own TDT epoch
@@ -79,13 +49,11 @@ tsp -I file ~/contrib-10m.ts \
     -O file ~/contrib-10m_eit_sched.ts
 ```
 
-The result is the same 9,945,951 bps CBR stream as the source with clean continuity, carrying four
-EIT sub-tables: p/f actual (0x4E) and schedule actual for days 0–3, 4–7 and 8 (0x50, 0x51, 0x52).
+The result is the same 9,945,951 bps CBR stream as the source with clean continuity, carrying four EIT sub-tables: p/f actual (0x4E) and schedule actual for days 0–3, 4–7 and 8 (0x50, 0x51, 0x52).
 
 ## Procedure
 
-Both arms are built from one detached worktree with a shared cargo target, copying each arm's binaries
-out before switching, so the second build is incremental and both arms exist at once:
+Both arms are built from one detached worktree with a shared cargo target, copying each arm's binaries out before switching, so the second build is incremental and both arms exist at once:
 
 ```bash
 git fetch origin pull/2909/head:refs/t2909/post
@@ -97,8 +65,7 @@ cp "$TARGET/release/moq"{,-relay} "$BIN/post/"
 cp "$TARGET/release/moq"{,-relay} "$BIN/pre/"
 ```
 
-Both rigs then start the relay, publisher and subscriber inside a single invocation, and both detect
-which dial-side flag surface the binary speaks (see Corrections). `TGT` selects the arm:
+Both rigs then start the relay, publisher and subscriber inside a single invocation, and both detect which dial-side flag surface the binary speaks (see Corrections). `TGT` selects the arm:
 
 ```bash
 # fidelity: round-trip the fixture and census the SI PIDs on both sides
@@ -112,219 +79,114 @@ TGT="$BIN/post" lab/scripts/si-join-cost.sh ~/contrib-10m.ts          noeit 5 70
 
 Each figure is then re-taken with `TGT="$BIN/pre"` for the control.
 
-The 70 s settle before the first join is deliberate: EIT schedule commits on transmission-cycle wrap
-and the ETSI "later" cycle is 30 s, so a shorter settle measures acquisition rather than join.
+The 70 s settle before the first join is deliberate: EIT schedule commits on transmission-cycle wrap and the ETSI "later" cycle is 30 s, so a shorter settle measures acquisition rather than join.
 
 ## Results
 
 ### 1. EIT round-trips, schedule included
 
-Distinct sections present, source against exported TS. The windows are not equal — 227 s of source
-against the whole 119 s capture — deliberately, so that a section the source transmits only late still
-counts against the egress rather than being excluded from both:
+Distinct sections present, source against exported TS. The windows are not equal — 227 s of source against the whole 119 s capture — deliberately, so that a section the source transmits only late still counts against the egress rather than being excluded from both:
 
 | sub-table | table_id | sections src / egress | `last_section_number` src / egress | missing | extra | sizes |
-|---|---|---|---|---|---|---|
+| --- | --- | --- | --- | --- | --- | --- |
 | EIT p/f actual | 0x4E | 2 / 2 | 1 / 1 | none | none | match |
 | EIT schedule actual, days 0–3 | 0x50 | 32 / 32 | 248 / 248 | none | none | match |
 | EIT schedule actual, days 4–7 | 0x51 | 32 / 32 | 248 / 248 | none | none | match |
 | EIT schedule actual, day 8 | 0x52 | 3 / 3 | 16 / 16 | none | none | match |
 
-Pass criterion 1 met. The control on `origin/dev` exports **zero** EIT packets from the same fixture,
-which is the pre-PR behaviour: the importer drops every PID outside NIT and SDT.
+Pass criterion 1 met. The control on `origin/dev` exports **zero** EIT packets from the same fixture, which is the pre-PR behaviour: the importer drops every PID outside NIT and SDT.
 
-Pass criterion 2 is met by construction and by measurement: sub-table 0x50 declares
-`last_section_number = 248` and transmits 32 sections. Contiguity — all of `0..=last` present —
-cannot be reached for EIT schedule, so the cycle-wrap rule is not a fallback there but the sole
-commit path, and it reconstructs the table exactly.
+Pass criterion 2 is met by construction and by measurement: sub-table 0x50 declares `last_section_number = 248` and transmits 32 sections. Contiguity — all of `0..=last` present — cannot be reached for EIT schedule, so the cycle-wrap rule is not a fallback there but the sole commit path, and it reconstructs the table exactly.
 
-An independent check that this is inherent to sparse tables rather than an artefact of the fixture:
-TSDuck's own `tables` plugin will not print these sub-tables at all, and only `--all-sections`
-reveals them, because it too completes a sub-table by counting sections.
+An independent check that this is inherent to sparse tables rather than an artefact of the fixture: TSDuck's own `tables` plugin will not print these sub-tables at all, and only `--all-sections` reveals them, because it too completes a sub-table by counting sections.
 
 ### 2. Carriage is bitrate-neutral
 
-Measured over a 118.7 s egress window, duration taken from the PCR span — the raw export is not CBR,
-so `analyze`'s per-PID bitrate is meaningless on it:
+Measured over a 118.7 s egress window, duration taken from the PCR span — the raw export is not CBR, so `analyze`'s per-PID bitrate is meaningless on it:
 
-| | EIT PID 0x0012 |
-|---|---|
-| source | 28,870 bps |
-| egress | 28,445 bps |
-| ratio | 0.985× |
+|        | EIT PID 0x0012 |
+| ------ | -------------- |
+| source | 28,870 bps     |
+| egress | 28,445 bps     |
+| ratio  | 0.985×         |
 
-Pass criterion 3 met, comfortably. Re-emitting at the spec maximum rather than at the source's
-observed cadence costs nothing here.
+Pass criterion 3 met, comfortably. Re-emitting at the spec maximum rather than at the source's observed cadence costs nothing here.
 
 ### 3. The join cost is small, and scales with bytes rather than track count
 
 Cold exporter joining a publisher already running with its SI already advertised, five joins each:
 
-| | SI tracks | TTFB median | min / max |
-|---|---|---|---|
-| no EIT (NIT + SDT only) | 2 | 14 ms | 4 / 14 |
-| 8-day EPG | 6 | 15 ms | 0 / 16 |
+|                         | SI tracks | TTFB median | min / max |
+| ----------------------- | --------- | ----------- | --------- |
+| no EIT (NIT + SDT only) | 2         | 14 ms       | 4 / 14    |
+| 8-day EPG               | 6         | 15 ms       | 0 / 16    |
 
-Four extra tracks and ~30 kB cost one millisecond. The subscriptions are issued together, so the
-gate's cost is a bandwidth term rather than a round-trip per track — which is the property that lets
-the design scale.
+Four extra tracks and ~30 kB cost one millisecond. The subscriptions are issued together, so the gate's cost is a bandwidth term rather than a round-trip per track — which is the property that lets the design scale.
 
-The tracks the exporter subscribed to, which is also the shape of the catalog's `mpegts.si` map:
-`0x0010-0x40.si`, `0x0011-0x42.si`, `0x0012-0x4e.si`, `0x0012-0x50.si`, `0x0012-0x51.si`,
-`0x0012-0x52.si`.
+The tracks the exporter subscribed to, which is also the shape of the catalog's `mpegts.si` map: `0x0010-0x40.si`, `0x0011-0x42.si`, `0x0012-0x4e.si`, `0x0012-0x50.si`, `0x0012-0x51.si`, `0x0012-0x52.si`.
 
 ### 4. The price of an 8-day EPG
 
 Snapshot payload, summed over the distinct sections of each sub-table:
 
-| sub-table | sections | `last_section_number` | snapshot bytes |
-|---|---|---|---|
-| EIT p/f actual | 2 | 1 | 237 |
-| EIT schedule, days 0–3 | 32 | 248 | 13,653 |
-| EIT schedule, days 4–7 | 32 | 248 | 14,784 |
-| EIT schedule, day 8 | 3 | 16 | 1,238 |
-| **total, one service** | **69** | | **29,912** |
+| sub-table              | sections | `last_section_number` | snapshot bytes |
+| ---------------------- | -------- | --------------------- | -------------- |
+| EIT p/f actual         | 2        | 1                     | 237            |
+| EIT schedule, days 0–3 | 32       | 248                   | 13,653         |
+| EIT schedule, days 4–7 | 32       | 248                   | 14,784         |
+| EIT schedule, day 8    | 3        | 16                    | 1,238          |
+| **total, one service** | **69**   |                       | **29,912**     |
 
-For scale, the one-day `full` fixture totals 975 B across two sub-tables — a thirtieth of this, which
-is why it could not answer the cost question.
+For scale, the one-day `full` fixture totals 975 B across two sub-tables — a thirtieth of this, which is why it could not answer the cost question.
 
 Scaled by service count, which is what a multi-programme primary-distribution multiplex does to it:
 
-| | snapshot bytes | snapshot tracks |
-|---|---|---|
-| 1 service | 29,912 | 4 |
-| 10 services | 299,120 | 40 |
-| 40 services | 1,196,480 (1.14 MiB) | 160 |
+|             | snapshot bytes       | snapshot tracks |
+| ----------- | -------------------- | --------------- |
+| 1 service   | 29,912               | 4               |
+| 10 services | 299,120              | 40              |
+| 40 services | 1,196,480 (1.14 MiB) | 160             |
 
-A 40-service MPTS is the relevant shape, and there an exporter resolves 160 tracks and pulls ~1.1 MiB
-before its first TS packet — on the order of a couple of hundred milliseconds at 50 Mbps. Bounded and
-acceptable, but bounded by the EPG's size, and nothing in the gate distinguishes an EPG from a table
-the stream cannot start without.
+A 40-service MPTS is the relevant shape, and there an exporter resolves 160 tracks and pulls ~1.1 MiB before its first TS packet — on the order of a couple of hundred milliseconds at 50 Mbps. Bounded and acceptable, but bounded by the EPG's size, and nothing in the gate distinguishes an EPG from a table the stream cannot start without.
 
 ### 5. The same fidelity question, asked of the segmented lane
 
-The four measurements above are all about a mechanism — snapshot tracks, a cycle-wrap commit rule, an
-export gate — that exists because the media-aware lane takes the mux apart. The other data plane does
-not take it apart, so the same pass criteria can be put to it and the answer should be uninteresting.
-It is worth taking anyway, for two reasons: [`docs/comparison.md`](../docs/comparison.md) has been
-claiming EIT survives the segmented lane on the strength of *other* SI surviving it, which is an
-inference and not a measurement; and the HLS packager is not the pass-through it is easy to assume it
-is ([T11](test-11-interop.md) — it re-multiplexes, regenerates PSI and chooses segment boundaries by
-picture type).
+The four measurements above are all about a mechanism — snapshot tracks, a cycle-wrap commit rule, an export gate — that exists because the media-aware lane takes the mux apart. The other data plane does not take it apart, so the same pass criteria can be put to it and the answer should be uninteresting. It is worth taking anyway, for two reasons: [`docs/comparison.md`](../docs/comparison.md) has been claiming EIT survives the segmented lane on the strength of _other_ SI surviving it, which is an inference and not a measurement; and the HLS packager is not the pass-through it is easy to assume it is ([T11](test-11-interop.md) — it re-multiplexes, regenerates PSI and chooses segment boundaries by picture type).
 
-Same fixture, same pass criteria, [T3](test-3-opaque-transparency.md)'s segmented rig unchanged
-(`tsp -O hls` → HTTP origin → `tsp -I hls --live`, 2 s segments, a 60 s equal-media window against an
-offset-aligned source cut), graded with
-[`eit-section-diff.py`](scripts/eit-section-diff.py):
+Same fixture, same pass criteria, [T3](test-3-opaque-transparency.md)'s segmented rig unchanged (`tsp -O hls` → HTTP origin → `tsp -I hls --live`, 2 s segments, a 60 s equal-media window against an offset-aligned source cut), graded with [`eit-section-diff.py`](scripts/eit-section-diff.py):
 
 | sub-table | table_id | distinct sections src / egress | `last_section_number` src / egress | lost | gained |
-|---|---|---|---|---|---|
+| --- | --- | --- | --- | --- | --- |
 | EIT p/f actual | 0x4E | 2 / 2 | 1 / 1 | none | none |
 | EIT schedule actual, days 0–3 | 0x50 | 32 / 32 | 248 / 248 | none | none |
 | EIT schedule actual, days 4–7 | 0x51 | 32 / 32 | 248 / 248 | none | none |
 | EIT schedule actual, day 8 | 0x52 | 3 / 3 | 16 / 16 | none | none |
-| **total** | | **69 / 69** | | **0** | **0** |
+| **total** |  | **69 / 69** |  | **0** | **0** |
 
-The sets are equal by SHA-256 over the section bytes, not merely equal in count. Carriage cost is
-1.003× (PID 0x0012: 1,181 packets against 1,185 over equal-media windows, 298 → 299 per 100k),
-against the media-aware lane's 0.985×. Criteria 1, 2 and 3 met.
+The sets are equal by SHA-256 over the section bytes, not merely equal in count. Carriage cost is 1.003× (PID 0x0012: 1,181 packets against 1,185 over equal-media windows, 298 → 299 per 100k), against the media-aware lane's 0.985×. Criteria 1, 2 and 3 met.
 
-**Both lanes pass, and the reason they pass is not the same reason — which is the finding.** The
-media-aware lane *reconstructs* the table: it must decide when a sparse sub-table is complete, it
-cannot distinguish a skipped section number from a lost one, and a section lost before the cycle wraps
-commits a generation quietly missing a segment. The segmented lane never parses PID 0x0012 at all. The
-packager regenerates PAT and PMT — one extra pair per segment head, the 25 injected pairs the census
-records — and copies every other PID through, so the EIT that arrives is the source's own packets and
-the sparse-table hazard has nowhere to live. That is the same asymmetry [T3](test-3-opaque-transparency.md)
-found in the mux as a whole, restated for the table that is hardest to carry: **the lane that
-understands the media inherits the obligation to understand it correctly.**
+**Both lanes pass, and the reason they pass is not the same reason — which is the finding.** The media-aware lane _reconstructs_ the table: it must decide when a sparse sub-table is complete, it cannot distinguish a skipped section number from a lost one, and a section lost before the cycle wraps commits a generation quietly missing a segment. The segmented lane never parses PID 0x0012 at all. The packager regenerates PAT and PMT — one extra pair per segment head, the 25 injected pairs the census records — and copies every other PID through, so the EIT that arrives is the source's own packets and the sparse-table hazard has nowhere to live. That is the same asymmetry [T3](test-3-opaque-transparency.md) found in the mux as a whole, restated for the table that is hardest to carry: **the lane that understands the media inherits the obligation to understand it correctly.**
 
-**What the segmented lane does not have is a join answer, and that is the honest cost.** A MoQ
-subscriber is handed the whole EPG as snapshots when it joins — 69 sections for 1 ms, measured above.
-A segmented client waits for the carousel: here the full distinct set appeared within the first 2.7 s
-of egress (present at 2.72 s, incomplete at 2.27 s), which is a property of this fixture's injected
-cadence and not of the lane. A real EPG cycles far slower — ETSI TS 101 211 allows 30 s for the
-"later" schedule — so on a broadcast carousel that wait is tens of seconds, and no HLS mechanism
-shortens it because there is nowhere to put a snapshot. Snapshot tracks buy something real; they are
-just not buying fidelity, which is what §1 was asked to check.
+**What the segmented lane does not have is a join answer, and that is the honest cost.** A MoQ subscriber is handed the whole EPG as snapshots when it joins — 69 sections for 1 ms, measured above. A segmented client waits for the carousel: here the full distinct set appeared within the first 2.7 s of egress (present at 2.72 s, incomplete at 2.27 s), which is a property of this fixture's injected cadence and not of the lane. A real EPG cycles far slower — ETSI TS 101 211 allows 30 s for the "later" schedule — so on a broadcast carousel that wait is tens of seconds, and no HLS mechanism shortens it because there is nowhere to put a snapshot. Snapshot tracks buy something real; they are just not buying fidelity, which is what §1 was asked to check.
 
 ## Observations
 
-**The export gate has no deadline, and an auxiliary table can now hold a programme dark.** Export
-opens its output when every SI entry either has a snapshot or has reached a terminal state. Terminal
-failure is handled deliberately and well — a failed or ended track logs and keeps its last snapshot
-rather than killing the mux. What is not handled is a track that neither succeeds nor fails: one that
-resolves and never delivers a complete group, or never resolves at all, leaves the gate shut, and the
-exporter emits **no TS at all — media included — indefinitely**, with nothing logged past the
-subscribe attempt. The common path is safe, because a snapshot group is finished synchronously and an
-entry is advertised only after its first cut. The exposure is a stale announce, where the catalog
-names an SI track that will not resolve. Before this design SI lived in the catalog and could not
-independently gate media; now it can.
+**The export gate has no deadline, and an auxiliary table can now hold a programme dark.** Export opens its output when every SI entry either has a snapshot or has reached a terminal state. Terminal failure is handled deliberately and well — a failed or ended track logs and keeps its last snapshot rather than killing the mux. What is not handled is a track that neither succeeds nor fails: one that resolves and never delivers a complete group, or never resolves at all, leaves the gate shut, and the exporter emits **no TS at all — media included — indefinitely**, with nothing logged past the subscribe attempt. The common path is safe, because a snapshot group is finished synchronously and an entry is advertised only after its first cut. The exposure is a stale announce, where the catalog names an SI track that will not resolve. Before this design SI lived in the catalog and could not independently gate media; now it can.
 
-**The wrap rule cannot distinguish a skipped section number from a lost one.** In a sparse table both
-are holes, and `last_section_number` does not betray the difference. A section lost or CRC-failed
-before the cycle wraps yields a committed generation quietly missing a segment. Nothing in the
-algorithm can do better — that is what sparseness costs — but it bounds how strong a fidelity
-guarantee this carriage can claim.
+**The wrap rule cannot distinguish a skipped section number from a lost one.** In a sparse table both are holes, and `last_section_number` does not betray the difference. A section lost or CRC-failed before the cycle wraps yields a committed generation quietly missing a segment. Nothing in the algorithm can do better — that is what sparseness costs — but it bounds how strong a fidelity guarantee this carriage can claim.
 
-**This run measured 0 packets on 0x0014** — TDT/TOT carried by neither side (by design on the
-importer, by omission downstream), leaving a DVB receiver behind `export ts` with an EPG and no clock
-to place it against. That carriage gap is **superseded upstream** since #2929: `export ts` now proxies
-the source's time tables on a latest-value SI slot, and both TDT and TOT reach the egress with TOT's
-`local_time_offset` descriptors byte-identical to the source's. What remains is emission timing, not
-carriage: [T15](test-15-point-to-point-cadence.md) measurement 4 puts the clock ~14 s late against a
-source true to under a second.
+**This run measured 0 packets on 0x0014** — TDT/TOT carried by neither side (by design on the importer, by omission downstream), leaving a DVB receiver behind `export ts` with an EPG and no clock to place it against. That carriage gap is **superseded upstream** since #2929: `export ts` now proxies the source's time tables on a latest-value SI slot, and both TDT and TOT reach the egress with TOT's `local_time_offset` descriptors byte-identical to the source's. What remains is emission timing, not carriage: [T15](test-15-point-to-point-cadence.md) measurement 4 puts the clock ~14 s late against a source true to under a second.
 
 ## Conclusions
 
-1. **EIT carriage works, and the hard case works.** The sparse EIT schedule — the part that cannot be
-   validated by section counting, and the part reading the code left open — round-trips with every
-   section intact across four sub-tables, against zero on the merge base. The segmented lane carries
-   the same 69 sections byte for byte, so **neither data plane is now a reason to lose an EPG** — but
-   they earn that differently. The media-aware lane reconstructs the table and owns the sparse-table
-   commit problem that comes with it; the segmented lane copies the PID and never has the problem.
-   The cost lands on the other side: MoQ hands a joining receiver the whole EPG in a millisecond,
-   where a segmented client waits out the carousel.
-2. **The service layer is no longer the reason an MPEG-TS hand-off is lossy.** NIT, SDT, EIT and — since
-   #2929 — TDT/TOT all survive, so the DVB service layer has no carriage gap left over this lane. What
-   remains is a timing question about one of them: the clock arrives, later than the source sent it.
-3. **Neither cost that theory predicted is material.** Carriage is bitrate-neutral (0.985×) and the
-   join gate costs 1 ms for four extra tracks. Both concerns were priced rather than argued, and both
-   came out smaller than they went in.
-4. **The residual risk was liveness, not latency, and it was removed rather than bounded.** An SI track
-   that neither succeeded nor failed held all output. Upstream first bounded the wait and then deleted
-   the gate outright, on the ground that nothing in SI is something a stream cannot begin without: the
-   PAT and PMT are built locally, and a receiver acquires the service layer mid-stream by design. The
-   join measurement above is what made that safe to do — the subscriptions resolve within the first
-   poll, so the healthy case still leads the stream, it just no longer promises to.
+1. **EIT carriage works, and the hard case works.** The sparse EIT schedule — the part that cannot be validated by section counting, and the part reading the code left open — round-trips with every section intact across four sub-tables, against zero on the merge base. The segmented lane carries the same 69 sections byte for byte, so **neither data plane is now a reason to lose an EPG** — but they earn that differently. The media-aware lane reconstructs the table and owns the sparse-table commit problem that comes with it; the segmented lane copies the PID and never has the problem. The cost lands on the other side: MoQ hands a joining receiver the whole EPG in a millisecond, where a segmented client waits out the carousel.
+2. **The service layer is no longer the reason an MPEG-TS hand-off is lossy.** NIT, SDT, EIT and — since #2929 — TDT/TOT all survive, so the DVB service layer has no carriage gap left over this lane. What remains is a timing question about one of them: the clock arrives, later than the source sent it.
+3. **Neither cost that theory predicted is material.** Carriage is bitrate-neutral (0.985×) and the join gate costs 1 ms for four extra tracks. Both concerns were priced rather than argued, and both came out smaller than they went in.
+4. **The residual risk was liveness, not latency, and it was removed rather than bounded.** An SI track that neither succeeded nor failed held all output. Upstream first bounded the wait and then deleted the gate outright, on the ground that nothing in SI is something a stream cannot begin without: the PAT and PMT are built locally, and a receiver acquires the service layer mid-stream by design. The join measurement above is what made that safe to do — the subscriptions resolve within the first poll, so the healthy case still leads the stream, it just no longer promises to.
 
 ## Corrections
 
-> The general method rules extracted from this section, together with those from every other
-> experiment, are collected in [method-notes.md](method-notes.md). What stays here is the
-> specific record of what this experiment got wrong.
+> The general method rules extracted from this section, together with those from every other experiment, are collected in [method-notes.md](method-notes.md). What stays here is the specific record of what this experiment got wrong.
 
-- **A sparse sub-table is invisible to `tsp -P tables`, and reading that as absence produced a false
-  finding.** The census that opened this experiment used `tables` without `--all-sections` and
-  reported the `full` fixture as carrying EIT p/f only, from which followed a conclusion that the
-  fixture had never exercised the schedule path and that `eitinject` would not generate schedule from
-  a `type="pf"` element. Both were wrong, and wrong for the same reason the experiment exists: a
-  sub-table declaring `last_section_number = 48` while transmitting 7 sections never completes, so the
-  section demux never emits it and the plugin prints nothing. With `--all-sections` the fixture shows
-  420 schedule sections on table 0x50. The method rule: **an instrument that reports completed tables
-  cannot be used to establish absence of a table that is designed never to complete.** Census SI with
-  `--all-sections`. The genuine gap in the old fixture was size, not shape — under a day of EPG in one
-  schedule table, which prices nothing.
-- **A rig fault read as a total regression until the merge-base control ran.** The first round-trip on
-  the PR head captured zero bytes, which matched a predicted failure of the export gate closely
-  enough to be believed. It was not that: the dial-side flags were renamed on `dev` from `--client-*`
-  to `--connect-*` with per-direction QUIC tuning merged into one `--quic-*` section, and the
-  deprecated aliases warn and then do not take effect. Isolated one flag at a time, **both**
-  `--client-connect` and `--client-quic-gso` fail independently — the first leaves the client with
-  nothing to dial, the second leaves GSO on so the session stalls on macOS loopback — and in each case
-  the warning fires naming the correct replacement, so the alias is parsed and only the propagation is
-  missing. The base behaved identically, which is what exposed the rig rather than the PR. The method
-  rule is pass criterion 5, and it earned its place: **run the control before believing a striking
-  result, not after.** Both rigs now detect the flag surface instead of assuming one. Reported upstream
-  as [#2913](https://github.com/moq-dev/moq/issues/2913), and since fixed: the renamed settings are now
-  rejected outright with the mapping printed, rather than warned about and ignored.
+- **A sparse sub-table is invisible to `tsp -P tables`, and reading that as absence produced a false finding.** The census that opened this experiment used `tables` without `--all-sections` and reported the `full` fixture as carrying EIT p/f only, from which followed a conclusion that the fixture had never exercised the schedule path and that `eitinject` would not generate schedule from a `type="pf"` element. Both were wrong, and wrong for the same reason the experiment exists: a sub-table declaring `last_section_number = 48` while transmitting 7 sections never completes, so the section demux never emits it and the plugin prints nothing. With `--all-sections` the fixture shows 420 schedule sections on table 0x50. The method rule: **an instrument that reports completed tables cannot be used to establish absence of a table that is designed never to complete.** Census SI with `--all-sections`. The genuine gap in the old fixture was size, not shape — under a day of EPG in one schedule table, which prices nothing.
+- **A rig fault read as a total regression until the merge-base control ran.** The first round-trip on the PR head captured zero bytes, which matched a predicted failure of the export gate closely enough to be believed. It was not that: the dial-side flags were renamed on `dev` from `--client-*` to `--connect-*` with per-direction QUIC tuning merged into one `--quic-*` section, and the deprecated aliases warn and then do not take effect. Isolated one flag at a time, **both** `--client-connect` and `--client-quic-gso` fail independently — the first leaves the client with nothing to dial, the second leaves GSO on so the session stalls on macOS loopback — and in each case the warning fires naming the correct replacement, so the alias is parsed and only the propagation is missing. The base behaved identically, which is what exposed the rig rather than the PR. The method rule is pass criterion 5, and it earned its place: **run the control before believing a striking result, not after.** Both rigs now detect the flag surface instead of assuming one. Reported upstream as [#2913](https://github.com/moq-dev/moq/issues/2913), and since fixed: the renamed settings are now rejected outright with the mapping printed, rather than warned about and ignored.

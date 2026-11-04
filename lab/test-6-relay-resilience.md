@@ -2,67 +2,30 @@
 
 ## Objective
 
-Measure recovery time and stream continuity when the serving node fails and when a receiver
-reconnects, separate *transport resilience* (does a client survive the serving node restarting or
-the session dropping?) from *service redundancy* (does an active/active pair fail over without the
-receiver noticing?), and establish the output-determinism precondition for a hitless dual-path pair.
+Measure recovery time and stream continuity when the serving node fails and when a receiver reconnects, separate _transport resilience_ (does a client survive the serving node restarting or the session dropping?) from _service redundancy_ (does an active/active pair fail over without the receiver noticing?), and establish the output-determinism precondition for a hitless dual-path pair.
 
-Both lanes are drilled, because the answers are opposite and the reasons are structural. The roles
-do not sit in the same places, so the mapping is worth stating once:
+Both lanes are drilled, because the answers are opposite and the reasons are structural. The roles do not sit in the same places, so the mapping is worth stating once:
 
-| | media-aware lane | segmented lane |
-|---|---|---|
+|  | media-aware lane | segmented lane |
+| --- | --- | --- |
 | source | `moq import ts` publisher | `tsp -O hls` packager |
 | serving node | `moq-relay` | an HTTP origin over a segment store |
 | receiver | `moq export ts` | `tsp -I hls`, ffmpeg, or `t6-hls-pull.py` |
 | who selects the source | the relay | nobody — the sources share a namespace |
 
-The last row is the whole result. The media-aware relay holds session state and therefore has to
-*detect* a dead source before it can reselect, which puts a floor under recovery. The segmented
-origin holds none, so there is nothing to fail over: two packagers writing the same names into one
-store are already interchangeable, and the receiver never learns which one served it.
+The last row is the whole result. The media-aware relay holds session state and therefore has to _detect_ a dead source before it can reselect, which puts a floor under recovery. The segmented origin holds none, so there is nothing to fail over: two packagers writing the same names into one store are already interchangeable, and the receiver never learns which one served it.
 
-> Of the four issues this experiment reported upstream, **two were real defects and two were
-> artefacts of our own harness**. Both artefacts, and the method rules that follow from them, are
-> recorded under [Corrections](#corrections) — they are the most transferable output of this drill.
-> The segmented arm then walked into one of those same artefacts a second time, which is recorded
-> there too.
+> Of the four issues this experiment reported upstream, **two were real defects and two were artefacts of our own harness**. Both artefacts, and the method rules that follow from them, are recorded under [Corrections](#corrections) — they are the most transferable output of this drill. The segmented arm then walked into one of those same artefacts a second time, which is recorded there too.
 
 ## Environment
 
-- Media-aware lane, loopback. `moq` / `moq-relay` 0.8.7 (`feat/mux-ts-dvb-service-layer`), TSDuck
-  3.44, Darwin 25.5.0. Source `~/contrib-10m.ts` looped via `tsp regulate --pcr-synchronous`. All
-  clients `--client-quic-gso=false`; negotiated wire **`moq-lite-05`** unless noted.
-- Each drill runs relay(s) + publisher(s) + subscriber(s) + timed kills inside a single shell
-  invocation (the local background-process constraint). Scripts and relay configs under
-  `~/t6-redundancy/` (`failover.sh`, `cluster_failover.sh`, `reconnect.sh`, `graceful_exit.sh`,
-  `renumber_takeover.sh`, `src_failover.sh`, `relayA.toml`, `relayB.toml`). A one-row-per-second byte
-  sampler on each subscriber output makes the failure instant visible.
+- Media-aware lane, loopback. `moq` / `moq-relay` 0.8.7 (`feat/mux-ts-dvb-service-layer`), TSDuck 3.44, Darwin 25.5.0. Source `~/contrib-10m.ts` looped via `tsp regulate --pcr-synchronous`. All clients `--client-quic-gso=false`; negotiated wire **`moq-lite-05`** unless noted.
+- Each drill runs relay(s) + publisher(s) + subscriber(s) + timed kills inside a single shell invocation (the local background-process constraint). Scripts and relay configs under `~/t6-redundancy/` (`failover.sh`, `cluster_failover.sh`, `reconnect.sh`, `graceful_exit.sh`, `renumber_takeover.sh`, `src_failover.sh`, `relayA.toml`, `relayB.toml`). A one-row-per-second byte sampler on each subscriber output makes the failure instant visible.
 - ST 2022-7 determinism study: `mpegts-pacer` 0.1.0, TSDuck 3.44, FFmpeg 8.1 (Darwin 25.5.0).
-- **Segmented lane, loopback, same host and same clip.** TSDuck 3.44 `-O hls` packagers (2 s target
-  duration, `--intra-close --align-first-segment`, a six-segment window with three extra kept on
-  disk), a `python3 -m http.server` origin, and three receivers — `tsp -I hls --live`, FFmpeg 9.0.1,
-  and `lab/scripts/t6-hls-pull.py`. Drills are `lab/scripts/t6-segmented-arm.sh <drill>`; each runs
-  the whole lane inside one invocation with a one-row-per-second sampler on the receiver's output,
-  and prints a single `RESULT` line.
-  - **Three receivers, on purpose.** `tsp -I hls` has no retry option and FFmpeg's HLS demuxer
-    abandons the stream on a failed playlist reload even with `-reconnect`, `-seg_max_retry`,
-    `-max_reload` and `-m3u8_hold_counters` all set. A drill run only under those two grades their
-    error handling and reports it as a property of segmented HTTP. `t6-hls-pull.py` is the control
-    for that: the least capable thing that can still be called a receiver — one media playlist, no
-    ABR, no LL-HLS — whose only real feature is that a failed fetch is a retry rather than an exit.
-    It establishes what the protocol permits; the other two establish what is on the shelf.
-  - **Kill semantics are separated here too.** `KILL_SIG` selects SIGKILL or SIGTERM, because the
-    media-aware lane gives opposite answers to the two and the segmented lane has to be asked the
-    same question. `DUAL_NAMES` selects whether a hot pair writes distinct or identical segment
-    filenames, which turns out to decide the entire outcome.
-- **Builds.** The drill outcomes below are the current state on the **0.14.8 release** (`moq-relay`
-  0.14.8 / `moq-cli` 0.9.8 / `moq-net` 0.2.9). The same drills were run on each intervening release
-  from 0.8.7 onward as the routing, detach and resume paths were rewritten upstream; the outcomes did
-  not change, and the places where a *result* moved are called out where they occur (the 4-packet
-  startup offset, the reconnect ceiling, and the exporter's survival of a relay restart, which the
-  relay-kill drill re-ran on the build under test). Note some release binaries cosmetically self-report an
-  older `--version` string than the release they are built from; trust the in-tree crate versions.
+- **Segmented lane, loopback, same host and same clip.** TSDuck 3.44 `-O hls` packagers (2 s target duration, `--intra-close --align-first-segment`, a six-segment window with three extra kept on disk), a `python3 -m http.server` origin, and three receivers — `tsp -I hls --live`, FFmpeg 9.0.1, and `lab/scripts/t6-hls-pull.py`. Drills are `lab/scripts/t6-segmented-arm.sh <drill>`; each runs the whole lane inside one invocation with a one-row-per-second sampler on the receiver's output, and prints a single `RESULT` line.
+  - **Three receivers, on purpose.** `tsp -I hls` has no retry option and FFmpeg's HLS demuxer abandons the stream on a failed playlist reload even with `-reconnect`, `-seg_max_retry`, `-max_reload` and `-m3u8_hold_counters` all set. A drill run only under those two grades their error handling and reports it as a property of segmented HTTP. `t6-hls-pull.py` is the control for that: the least capable thing that can still be called a receiver — one media playlist, no ABR, no LL-HLS — whose only real feature is that a failed fetch is a retry rather than an exit. It establishes what the protocol permits; the other two establish what is on the shelf.
+  - **Kill semantics are separated here too.** `KILL_SIG` selects SIGKILL or SIGTERM, because the media-aware lane gives opposite answers to the two and the segmented lane has to be asked the same question. `DUAL_NAMES` selects whether a hot pair writes distinct or identical segment filenames, which turns out to decide the entire outcome.
+- **Builds.** The drill outcomes below are the current state on the **0.14.8 release** (`moq-relay` 0.14.8 / `moq-cli` 0.9.8 / `moq-net` 0.2.9). The same drills were run on each intervening release from 0.8.7 onward as the routing, detach and resume paths were rewritten upstream; the outcomes did not change, and the places where a _result_ moved are called out where they occur (the 4-packet startup offset, the reconnect ceiling, and the exporter's survival of a relay restart, which the relay-kill drill re-ran on the build under test). Note some release binaries cosmetically self-report an older `--version` string than the release they are built from; trust the in-tree crate versions.
 
 ## Procedure
 
@@ -70,276 +33,109 @@ store are already interchangeable, and the receiver never learns which one serve
 
 Three drills:
 
-1. **Relay restart / QUIC reconnect / publisher + exporter lifecycle** (`reconnect.sh`). One relay,
-   one `moq import ts` publisher, two `moq export ts` subscribers. Kill the relay mid-stream, restart
-   on the same port, observe re-establishment and TS resume. A second pass sets
-   `--client-quic-idle-timeout 3s` so a hard-killed (no CONNECTION_CLOSE) session is detected quickly
-   instead of after the 30 s QUIC idle default.
-2. **Active/active failover, single relay** (`failover.sh`). One relay, two publishers announcing the
-   **same** broadcast (`red.hang`) as a hot pair, two subscribers. Kill the active; observe re-splice.
-3. **Active/active failover, two-relay mesh** (`cluster_failover.sh`). `pubA→relayA:4443`,
-   `pubB→relayB:5443`, `relayB` dials `relayA` as a cluster peer, both subscribers on `relayA`. Kill
-   `pubA`; observe whether `relayA` fails its source over to `pubB` across the mesh.
+1. **Relay restart / QUIC reconnect / publisher + exporter lifecycle** (`reconnect.sh`). One relay, one `moq import ts` publisher, two `moq export ts` subscribers. Kill the relay mid-stream, restart on the same port, observe re-establishment and TS resume. A second pass sets `--client-quic-idle-timeout 3s` so a hard-killed (no CONNECTION_CLOSE) session is detected quickly instead of after the 30 s QUIC idle default.
+2. **Active/active failover, single relay** (`failover.sh`). One relay, two publishers announcing the **same** broadcast (`red.hang`) as a hot pair, two subscribers. Kill the active; observe re-splice.
+3. **Active/active failover, two-relay mesh** (`cluster_failover.sh`). `pubA→relayA:4443`, `pubB→relayB:5443`, `relayB` dials `relayA` as a cluster peer, both subscribers on `relayA`. Kill `pubA`; observe whether `relayA` fails its source over to `pubB` across the mesh.
 
-**Kill semantics matter.** SIGKILL the whole `tsp | moq import` pipeline in one pass
-(`pkill -KILL -P`). Killing `tsp` first feeds the importer a truncated stream + EOF, which shuts the
-broadcast down *cleanly* — a different code path that grades graceful detach, not source failure.
-**Grade beyond one idle timeout** (a hard kill sends no close frame; the relay serves the dead source
-until `DEFAULT_IDLE_TIMEOUT` = 30 s). The drill derives its window from `IDLE_BUDGET` (default 30 s;
-`SIDLE` sets `--server-quic-idle-timeout` for a fast variant).
+**Kill semantics matter.** SIGKILL the whole `tsp | moq import` pipeline in one pass (`pkill -KILL -P`). Killing `tsp` first feeds the importer a truncated stream + EOF, which shuts the broadcast down _cleanly_ — a different code path that grades graceful detach, not source failure. **Grade beyond one idle timeout** (a hard kill sends no close frame; the relay serves the dead source until `DEFAULT_IDLE_TIMEOUT` = 30 s). The drill derives its window from `IDLE_BUDGET` (default 30 s; `SIDLE` sets `--server-quic-idle-timeout` for a fast variant).
 
-For the graceful-exit case (`graceful_exit.sh`): `pubA` publishes a **finite** clip (so `tsp` reaches
-EOF and the importer finishes without truncation) and the standby joins at t=2 (so the timeline offset
-is negligible); `pubA` ends at t=25 with the standby announced since t=2.
+For the graceful-exit case (`graceful_exit.sh`): `pubA` publishes a **finite** clip (so `tsp` reaches EOF and the importer finishes without truncation) and the standby joins at t=2 (so the timeline offset is negligible); `pubA` ends at t=25 with the standby announced since t=2.
 
 ### Media-aware lane on the supported redundancy model (P1-p)
 
-Fixed before the first run. On `main` from #5967, independent importers carry distinct epochs, the
-relay serves the newest, an open subscription stays on its instance until that instance goes, and
-`export ts --stitch` follows a replacement as a programme switch. Only replicas of one publisher's
-bytes share an epoch, such as one publisher announced through several relays. Linux, loopback,
-the drills' clip looped live and read by every publisher from one file (`FEED=file`), a 6 s idle
-timeout, two exporters per relay with `--stitch --linger 10s`: the linger also bounds a replacement's
-wait for its first catalog, and at the default zero an exporter exits when a backup announces before
-its catalog is served. Each arm runs on the demultiplexed lane, then with
-`--passthrough` on import and export, where `export ts` refuses `--stitch`: there the rig's
-supervisor restarts an exporter that exits (`SUPERVISE=1`), C1 cannot hold, and C2 is read from the
-capture's longest stall. Each runs on moq-lite 07, which carries the epoch and the restart, then on
-the default version as the epochless control; three runs per cell.
+Fixed before the first run. On `main` from #5967, independent importers carry distinct epochs, the relay serves the newest, an open subscription stays on its instance until that instance goes, and `export ts --stitch` follows a replacement as a programme switch. Only replicas of one publisher's bytes share an epoch, such as one publisher announced through several relays. Linux, loopback, the drills' clip looped live and read by every publisher from one file (`FEED=file`), a 6 s idle timeout, two exporters per relay with `--stitch --linger 10s`: the linger also bounds a replacement's wait for its first catalog, and at the default zero an exporter exits when a backup announces before its catalog is served. Each arm runs on the demultiplexed lane, then with `--passthrough` on import and export, where `export ts` refuses `--stitch`: there the rig's supervisor restarts an exporter that exits (`SUPERVISE=1`), C1 cannot hold, and C2 is read from the capture's longest stall. Each runs on moq-lite 07, which carries the epoch and the restart, then on the default version as the epochless control; three runs per cell.
 
-1. **Two importers, one relay** (`t6-relay-kill.sh MODE=standby`, no shared identity). In one
-   window: the backup's start 8 s after the exporters have the programme; a SIGKILL (in separate
-   runs, a SIGTERM) to the importer the exporters are reading, from the publishers' logs; that
-   importer's restart 10 s later.
-2. **Two importers, two relays** (`TOPOLOGY=mesh`), one importer per relay, exporters on both, the
-   same events.
-3. **One importer through two relays** (`MODE=diamond`). The importer on relay O, relays M1 and M2
-   peering with O, relay E peering with both, the exporters on E. SIGKILL the middle relay serving
-   E, from the middle relays' logs; its restart 10 s later.
+1. **Two importers, one relay** (`t6-relay-kill.sh MODE=standby`, no shared identity). In one window: the backup's start 8 s after the exporters have the programme; a SIGKILL (in separate runs, a SIGTERM) to the importer the exporters are reading, from the publishers' logs; that importer's restart 10 s later.
+2. **Two importers, two relays** (`TOPOLOGY=mesh`), one importer per relay, exporters on both, the same events.
+3. **One importer through two relays** (`MODE=diamond`). The importer on relay O, relays M1 and M2 peering with O, relay E peering with both, the exporters on E. SIGKILL the middle relay serving E, from the middle relays' logs; its restart 10 s later.
 
-Graded per exporter and event: whether the process survived; programme lost, the source time
-absent across the event from the video PTS either side; whether the switch is marked (a new PMT
-version and a discontinuity indicator on every PID); TSDuck's continuity errors outside a marked
-switch.
+Graded per exporter and event: whether the process survived; programme lost, the source time absent across the event from the video PTS either side; whether the switch is marked (a new PMT version and a discontinuity indicator on every PID); TSDuck's continuity errors outside a marked switch.
 
-- **C1, the switch is clean:** in every run of arms 1 and 2, every exporter survives every event,
-  each switch is marked, and no continuity error falls outside one.
-- **C2, its cost:** programme lost per event, the median and worst of three runs, against the idle
-  timeout. A backup's start that switches the exporters is an event, not a control.
-- **C3, a relay loss is seamless:** on moq-lite 07 every exporter of arm 3 continues with no
-  programme lost, no repeated PTS, no flag and no continuity error. On the default version it is
-  expected to switch instead, graded as C1.
+- **C1, the switch is clean:** in every run of arms 1 and 2, every exporter survives every event, each switch is marked, and no continuity error falls outside one.
+- **C2, its cost:** programme lost per event, the median and worst of three runs, against the idle timeout. A backup's start that switches the exporters is an event, not a control.
+- **C3, a relay loss is seamless:** on moq-lite 07 every exporter of arm 3 continues with no programme lost, no repeated PTS, no flag and no continuity error. On the default version it is expected to switch instead, graded as C1.
 
 A run whose source tap shows input loss is repeated, not graded.
 
 ### Segmented lane
 
-The same three questions, via `t6-segmented-arm.sh <drill>`. Each drill runs packager(s), origin and
-receiver in one invocation over a 75 s window with the event at t=25 s, and the byte sampler makes
-the outage visible as stalled growth rather than inferred from a total.
+The same three questions, via `t6-segmented-arm.sh <drill>`. Each drill runs packager(s), origin and receiver in one invocation over a 75 s window with the event at t=25 s, and the byte sampler makes the outage visible as stalled growth rather than inferred from a total.
 
-1. **`origin-restart`** — one packager, one origin, one receiver; kill the origin at t=25 and restart
-   it on the same port ten seconds later. Run under all three clients, because two of them do not
-   survive it.
-2. **`dual-source` / `dual-source-align`** — two packagers writing into one URL namespace, the
-   standby joining at t=12, active killed at t=25. `-align` gives the standby a
-   `--start-media-sequence` continuing the active's, to separate a numbering problem from a timeline
-   one. **Both are the naive configuration**: each packager opens the clip for itself, so the pair is
-   twenty seconds apart in the media timeline. Read them as a deployment mistake, not as the lane's
-   answer — see [Corrections](#corrections).
-3. **`dual-source-common`** — the valid pair. One `tsp regulate` source fanned by `gtee` into two
-   FIFOs, one packager on each, both co-started so both see byte 0. `DUAL_NAMES` selects distinct or
-   identical segment filenames and `KILL_SIG` selects SIGKILL or SIGTERM.
-4. **`endlist-race`** — a shared-name pair with one leg SIGTERMed, polling the shared playlist at
-   50 ms to measure how long the departing leg's `#EXT-X-ENDLIST` stays visible.
-5. **`determinism` / `determinism-live`** — two packagers of the same clip, and of one `gtee`-fanned
-   live feed, with rotation off so every segment survives; compare pairwise by SHA-256.
+1. **`origin-restart`** — one packager, one origin, one receiver; kill the origin at t=25 and restart it on the same port ten seconds later. Run under all three clients, because two of them do not survive it.
+2. **`dual-source` / `dual-source-align`** — two packagers writing into one URL namespace, the standby joining at t=12, active killed at t=25. `-align` gives the standby a `--start-media-sequence` continuing the active's, to separate a numbering problem from a timeline one. **Both are the naive configuration**: each packager opens the clip for itself, so the pair is twenty seconds apart in the media timeline. Read them as a deployment mistake, not as the lane's answer — see [Corrections](#corrections).
+3. **`dual-source-common`** — the valid pair. One `tsp regulate` source fanned by `gtee` into two FIFOs, one packager on each, both co-started so both see byte 0. `DUAL_NAMES` selects distinct or identical segment filenames and `KILL_SIG` selects SIGKILL or SIGTERM.
+4. **`endlist-race`** — a shared-name pair with one leg SIGTERMed, polling the shared playlist at 50 ms to measure how long the departing leg's `#EXT-X-ENDLIST` stays visible.
+5. **`determinism` / `determinism-live`** — two packagers of the same clip, and of one `gtee`-fanned live feed, with rotation off so every segment survives; compare pairwise by SHA-256.
 
-**Grading.** `rate_ratio` is delivered bytes over the window against the 9.95 Mbps source, so 1.0
-means the receiver ended holding everything the source produced — a lane that recovers *content*
-after an outage scores 1.0 despite the gap, and a lane being served the same media twice scores
-above it. Alongside continuity errors, an explicit **PCR rewind** count is required here: the
-failure specific to a lane two sources can serve at once is repeated time, and no continuity or
-PCR-interval check can see it. The baseline's own 2–3 s stall is the segment cadence and is the
-noise floor.
+**Grading.** `rate_ratio` is delivered bytes over the window against the 9.95 Mbps source, so 1.0 means the receiver ended holding everything the source produced — a lane that recovers _content_ after an outage scores 1.0 despite the gap, and a lane being served the same media twice scores above it. Alongside continuity errors, an explicit **PCR rewind** count is required here: the failure specific to a lane two sources can serve at once is repeated time, and no continuity or PCR-interval check can see it. The baseline's own 2–3 s stall is the segment cadence and is the noise floor.
 
 ## Results
 
 ### ST 2022-7 output-determinism precondition
 
-ST 2022-7 reconstructs by matching RTP sequence numbers, so a dual-path pair is hitless only if the
-two egress legs are **byte-identical and sequence-aligned**. Method: offline `cbr_file`
-reproducibility (pace the same clip twice, compare SHA-256), a scheduler-level probe driving the real
-scheduler with two seeded arrival/emit-jitter timelines over a 20 s VBR clip, and `run-twice`
-determinism checks of FFmpeg (`-muxrate`) and TSDuck (`pcradjust`) references.
+ST 2022-7 reconstructs by matching RTP sequence numbers, so a dual-path pair is hitless only if the two egress legs are **byte-identical and sequence-aligned**. Method: offline `cbr_file` reproducibility (pace the same clip twice, compare SHA-256), a scheduler-level probe driving the real scheduler with two seeded arrival/emit-jitter timelines over a 20 s VBR clip, and `run-twice` determinism checks of FFmpeg (`-muxrate`) and TSDuck (`pcradjust`) references.
 
-- **Single-leg CBR/PCR conformance holds** exactly as in T2/T3 (byte-locked PCR, 0 `pcrverify`
-  violations @ 500 µs, 0 % > 40 ms). PCR is a pure function of output byte position
-  (`byte_offset × 8 × 27 MHz ÷ mux_rate`), the same model FFmpeg and TSDuck use.
-- **A single groomer is deterministic (offline / stream-clocked):** the same input paced twice
-  yields identical SHA-256 (fixed-rate and `auto`), matching FFmpeg CBR remux and TSDuck `pcradjust`.
-- **Two independent live pacers keyed to arrival/emit time are not byte-identical.** The live
-  real-time path gates its content-vs-null interleave on the wall-clock instant each datagram is
-  emitted, so injecting as little as **50 µs** of emit-scheduling jitter into one leg reshuffles
-  which stuffing slots carry content and diverges the two byte streams within ~30 ms — even though
-  total content/null counts stay equal and each leg stays independently conformant. Non-determinism
-  sources: wall-clock-gated content release; an evolving arrival-timing-dependent media-rate
-  estimate; a first-arrival start anchor; and per-process RTP SSRC / timestamp / sequence origin.
-  **Stream-clocked pacers are byte-identical:** [T12](test-12-dual-path-handoff.md) measured two
-  independent groomers with `--stream-clock` producing matching legs.
+- **Single-leg CBR/PCR conformance holds** exactly as in T2/T3 (byte-locked PCR, 0 `pcrverify` violations @ 500 µs, 0 % > 40 ms). PCR is a pure function of output byte position (`byte_offset × 8 × 27 MHz ÷ mux_rate`), the same model FFmpeg and TSDuck use.
+- **A single groomer is deterministic (offline / stream-clocked):** the same input paced twice yields identical SHA-256 (fixed-rate and `auto`), matching FFmpeg CBR remux and TSDuck `pcradjust`.
+- **Two independent live pacers keyed to arrival/emit time are not byte-identical.** The live real-time path gates its content-vs-null interleave on the wall-clock instant each datagram is emitted, so injecting as little as **50 µs** of emit-scheduling jitter into one leg reshuffles which stuffing slots carry content and diverges the two byte streams within ~30 ms — even though total content/null counts stay equal and each leg stays independently conformant. Non-determinism sources: wall-clock-gated content release; an evolving arrival-timing-dependent media-rate estimate; a first-arrival start anchor; and per-process RTP SSRC / timestamp / sequence origin. **Stream-clocked pacers are byte-identical:** [T12](test-12-dual-path-handoff.md) measured two independent groomers with `--stream-clock` producing matching legs.
 
-Two routes close it: (a) drive live emission and RTP framing from *stream time* (lock the mux rate,
-anchor to a stream-intrinsic point, derive RTP sequence/timestamp/SSRC from stream position); or (b)
-the standard ST 2022-7 sender pattern — groom **once** and duplicate the identical RTP packets onto
-both paths. Positioning: neither SRT nor Zixi hands a hardware IRD a native ST 2022-7 pair on its own,
-so a MoQ subscriber + `mpegts-pacer` is no worse than an SRT/Zixi hand-off on this axis.
+Two routes close it: (a) drive live emission and RTP framing from _stream time_ (lock the mux rate, anchor to a stream-intrinsic point, derive RTP sequence/timestamp/SSRC from stream position); or (b) the standard ST 2022-7 sender pattern — groom **once** and duplicate the identical RTP packets onto both paths. Positioning: neither SRT nor Zixi hands a hardware IRD a native ST 2022-7 pair on its own, so a MoQ subscriber + `mpegts-pacer` is no worse than an SRT/Zixi hand-off on this axis.
 
 ### Transport-resilience drills — working, except the exporter's on the current build
 
-- **Redundant outputs (fan-out).** Two independent `moq export ts` subscribers produce byte-identical,
-  continuous captures. Fan-out to N subscribers → N pacers → N IRDs works today with no extra
-  machinery.
-- **Publisher transport reconnect.** After a relay restart the `moq import ts` publisher redials the
-  same URL and re-announces automatically on each new session. (`rs/moq-native/src/reconnect.rs`,
-  wired at `rs/moq-cli/src/main.rs`.)
-- **The reconnect loop backs off.** Exponential backoff (initial 1 s, ×2, max 30 s, give-up 5 min);
-  auth errors terminal.
-- **A two-relay cluster forms and carries the media-aware TS end to end** (`moq-lite-05`), including
-  two publishers of the same broadcast coexisting on separate relays without collision.
-- **`moq export ts` subscriber survives session loss and resumes automatically — on builds before
-  upstream's `dev` merge, and not since** (fixed by
-  [#2469](https://github.com/moq-dev/moq/pull/2469)). Across a relay kill+restart both exporters
-  freeze at the kill, resume once the publisher re-announces, and are byte-identical before and after
-  the gap. The gap = idle-timeout detection + reconnect backoff + re-announce: **automatic and
-  bounded, not hitless**; the content gap is a clean object-boundary skip absorbed downstream.
-  **On the build under test both exporters exit instead, and a supervisor recovers them fully.**
-  Re-run on one host over loopback with [`t6-relay-kill.sh`](scripts/t6-relay-kill.sh) (relay SIGKILL
-  at 12 s, restart at 24 s, client idle timeout 6 s, graded at 70 s; two runs per row, two exporters
-  per run). `SUPERVISE=1` restarts an exporter whenever it exits and appends to the same capture:
+- **Redundant outputs (fan-out).** Two independent `moq export ts` subscribers produce byte-identical, continuous captures. Fan-out to N subscribers → N pacers → N IRDs works today with no extra machinery.
+- **Publisher transport reconnect.** After a relay restart the `moq import ts` publisher redials the same URL and re-announces automatically on each new session. (`rs/moq-native/src/reconnect.rs`, wired at `rs/moq-cli/src/main.rs`.)
+- **The reconnect loop backs off.** Exponential backoff (initial 1 s, ×2, max 30 s, give-up 5 min); auth errors terminal.
+- **A two-relay cluster forms and carries the media-aware TS end to end** (`moq-lite-05`), including two publishers of the same broadcast coexisting on separate relays without collision.
+- **`moq export ts` subscriber survives session loss and resumes automatically — on builds before upstream's `dev` merge, and not since** (fixed by [#2469](https://github.com/moq-dev/moq/pull/2469)). Across a relay kill+restart both exporters freeze at the kill, resume once the publisher re-announces, and are byte-identical before and after the gap. The gap = idle-timeout detection + reconnect backoff + re-announce: **automatic and bounded, not hitless**; the content gap is a clean object-boundary skip absorbed downstream. **On the build under test both exporters exit instead, and a supervisor recovers them fully.** Re-run on one host over loopback with [`t6-relay-kill.sh`](scripts/t6-relay-kill.sh) (relay SIGKILL at 12 s, restart at 24 s, client idle timeout 6 s, graded at 70 s; two runs per row, two exporters per run). `SUPERVISE=1` restarts an exporter whenever it exits and appends to the same capture:
 
   | build | exporter | at 70 s | output resumes | written after the restart | exit |
-  |---|---|---|---|---|---|
+  | --- | --- | --- | --- | --- | --- |
   | `fd4f5d82e` | unsupervised | all alive | t = 26–27 s | 52.4–53.8 MB | — |
   | `fd4f5d82e` | supervised | never restarted | t = 27–29 s | 50.8–53.7 MB | — |
   | `ffa5b81b` | unsupervised | all exited | never | 0 B | `Error: json: dropped`, when the idle timeout closed the session |
   | `ffa5b81b` | supervised | one restart each | t = 25 s | 58.0 MB | `json: dropped` once, then the restarted exporter rides on |
 
-  The publisher reconnected to the restarted relay normally in every run. The change is upstream's
-  [#2704](https://github.com/moq-dev/moq/pull/2704), which removed the client's linger: a broadcast
-  fed by a reconnecting session used to outlive it for the reconnect budget plus one second, and now
-  closes with it, taking the exporter's catalog track along
-  ([T28](test-28-failure-injection-matrix.md) § *The build bisection*, the 30 s cell). A standing
-  egress on the current build therefore needs a supervisor, and with one it resumes a second after the
-  relay returns, no later than the old build's own reconnect. What the restarted exporter writes is a
-  new process's transport stream appended to the old one, and the values it mints per process start
-  again ([upstream contributions](upstream-contributions.md#three-values-the-exporter-mints-per-process--two-closed-one-declined-and-since-planned-as-an-opt-in)),
-  so downstream receives a splice rather than a continuation; this drill counts bytes and does not
-  grade the splice.
+  The publisher reconnected to the restarted relay normally in every run. The change is upstream's [#2704](https://github.com/moq-dev/moq/pull/2704), which removed the client's linger: a broadcast fed by a reconnecting session used to outlive it for the reconnect budget plus one second, and now closes with it, taking the exporter's catalog track along ([T28](test-28-failure-injection-matrix.md) § _The build bisection_, the 30 s cell). A standing egress on the current build therefore needs a supervisor, and with one it resumes a second after the relay returns, no later than the old build's own reconnect. What the restarted exporter writes is a new process's transport stream appended to the old one, and the values it mints per process start again ([upstream contributions](upstream-contributions.md#three-values-the-exporter-mints-per-process--two-closed-one-declined-and-since-planned-as-an-opt-in)), so downstream receives a splice rather than a continuation; this drill counts bytes and does not grade the splice.
 
 ### Limitations observed — media-aware lane
 
-- **Failure detection on a hard kill is gated by the QUIC idle timeout** (default 30 s,
-  `--client-quic-idle-timeout`), so recovery is dominated by detection, not the ~1 s backoff. Idle
-  timeout must stay **above** the keep-alive interval or a healthy reconnected publisher flaps at the
-  keep-alive period.
-- **On the early builds, naive active/active on one relay collapsed the stream.** Two publishers
-  announcing the same broadcast to one relay did not form a standby pair: the moment the second
-  announced, the relay declared the path `unroutable` and tore down **both** (`Error: moq:
-  unroutable`), so a 1+1 pair needed two relays and a shared `--origin`. On `ffa5b81b` two publishers
-  on one relay coexist and a hard kill fails over, while a shared hop makes a late standby's arrival
-  end every subscriber; on October 2026 `main` a shared `--epoch` does not (§ *Single-relay standby*).
+- **Failure detection on a hard kill is gated by the QUIC idle timeout** (default 30 s, `--client-quic-idle-timeout`), so recovery is dominated by detection, not the ~1 s backoff. Idle timeout must stay **above** the keep-alive interval or a healthy reconnected publisher flaps at the keep-alive period.
+- **On the early builds, naive active/active on one relay collapsed the stream.** Two publishers announcing the same broadcast to one relay did not form a standby pair: the moment the second announced, the relay declared the path `unroutable` and tore down **both** (`Error: moq: unroutable`), so a 1+1 pair needed two relays and a shared `--origin`. On `ffa5b81b` two publishers on one relay coexist and a hard kill fails over, while a shared hop makes a late standby's arrival end every subscriber; on October 2026 `main` a shared `--epoch` does not (§ _Single-relay standby_).
 
-**Why the mesh needed a routing fix, which #2473 supplied.** Before that fix a two-relay mesh
-tolerated the pair but did **not** fail over: with `pubA→relayA` / `pubB→relayB` meshed, both
-coexist, but killing `pubA` left `relayA` unable to re-splice, and `sub1` stayed frozen for the rest
-of the window — graded beyond one full idle timeout (a 68 s control), so this is the mechanism and
-not the detection budget. The origin already implemented multi-source splice
-(`rs/moq-net/src/model/origin.rs` `best_route`/`reselect`, unit test `test_route_failover`); the
-drill never reached it. What #2473 adds is the *selection* rule that makes a relay offer a peer a
-route other than the one it is already serving through. Our original diagnosis — that `relayB` never
-emitted the standby announcement at all, suppressed by announce coalescing and the split-horizon
-`exclude_hop` filter — was withdrawn (see [Corrections](#corrections)); what `relayA`'s route table
-actually held before the fix was never re-established, and only the failure to reselect is measured.
+**Why the mesh needed a routing fix, which #2473 supplied.** Before that fix a two-relay mesh tolerated the pair but did **not** fail over: with `pubA→relayA` / `pubB→relayB` meshed, both coexist, but killing `pubA` left `relayA` unable to re-splice, and `sub1` stayed frozen for the rest of the window — graded beyond one full idle timeout (a 68 s control), so this is the mechanism and not the detection budget. The origin already implemented multi-source splice (`rs/moq-net/src/model/origin.rs` `best_route`/`reselect`, unit test `test_route_failover`); the drill never reached it. What #2473 adds is the _selection_ rule that makes a relay offer a peer a route other than the one it is already serving through. Our original diagnosis — that `relayB` never emitted the standby announcement at all, suppressed by announce coalescing and the split-horizon `exclude_hop` filter — was withdrawn (see [Corrections](#corrections)); what `relayA`'s route table actually held before the fix was never re-established, and only the failure to reselect is measured.
 
-This also explains why `moq-lite-06` cost routing is **necessary but not sufficient** on its own:
-with both relays and all clients opted in (#2424 — a standby seeds a high `route.cost`, the winner's
-drops to 0 while it carries), the mesh drill behaved exactly as before, because pricing decides
-between the routes a relay is willing to offer and does not create one.
+This also explains why `moq-lite-06` cost routing is **necessary but not sufficient** on its own: with both relays and all clients opted in (#2424 — a standby seeds a high `route.cost`, the winner's drops to 0 while it carries), the mesh drill behaved exactly as before, because pricing decides between the routes a relay is willing to offer and does not create one.
 
 ### Distinct epochs on `main` `f13283b30` (P1-p): every importer switch is marked and survived on the demultiplexed lane; a relay loss under one importer skips 7 s unflagged
 
-*P1, file domain, Linux loopback, a 6 s idle timeout and 2 s keep-alive, the procedure above; three
-runs per cell, two exporters per run, 60 runs. The source tap carries no flag, gap or continuity
-error.*
+_P1, file domain, Linux loopback, a 6 s idle timeout and 2 s keep-alive, the procedure above; three runs per cell, two exporters per run, 60 runs. The source tap carries no flag, gap or continuity error._
 
-**Two importers, one relay or a mesh: C1 holds on the demultiplexed lane in all 24 runs.** Every
-exporter survived every event; every switch carried a new PMT version and flagged every PID; no
-continuity error or PTS gap fell outside a switch. PID 20 is carried about every 12 s, so its flag
-lands on its next packet, up to 12 s after the switch it belongs to. Programme lost per event (C2),
-median and worst of three runs; on one relay the two exporters agree in every run:
+**Two importers, one relay or a mesh: C1 holds on the demultiplexed lane in all 24 runs.** Every exporter survived every event; every switch carried a new PMT version and flagged every PID; no continuity error or PTS gap fell outside a switch. PID 20 is carried about every 12 s, so its flag lands on its next packet, up to 12 s after the switch it belongs to. Programme lost per event (C2), median and worst of three runs; on one relay the two exporters agree in every run:
 
 | Event | One relay, moq-lite 07 | One relay, default | Mesh, moq-lite 07 | Mesh, default |
-|---|---|---|---|---|
+| --- | --- | --- | --- | --- |
 | Backup's start | switch, 1.74, 1.74 s | switch in 2 of 6 runs, 1.46 s | switch on both relays, 1.74, 1.74 s | switch on the backup's relay only, 1.46 s |
 | SIGKILL of the serving importer | 9.0, 9.0 s (5.4 in one run) | 9.0, 9.0 s (5.4 in one run) | 7.8, 7.8 s | 5.4, 5.4 s, its own relay only |
 | Its SIGTERM | 0.4, 0.4 s | 1.84, 1.88 s | 0.4, 0.4 s | 1.6–1.84 s, its own relay only |
 | Its restart | switch back, 0.7–0.98 s | switch in 4 of 6 runs, 0.3–0.42 s | switch back on both relays, 0.7 s | switch on its own relay, 0.3–0.5 s |
 
-At a 6 s idle timeout a hard kill costs about one detection interval, 5.4–9.0 s, and a clean exit
-under 2 s. On moq-lite 07 the newest importer takes every open exporter, across the mesh too, so a
-standby's start and each restart are switches of their own, 0.7–1.74 s. On the default version an
-exporter follows the importer its own relay holds: in the mesh the two relays' exporters sat on
-different importers for most of every run, and on one relay a newer importer took open exporters in
-only 2 of 6 starts and 4 of 6 restarts.
+At a 6 s idle timeout a hard kill costs about one detection interval, 5.4–9.0 s, and a clean exit under 2 s. On moq-lite 07 the newest importer takes every open exporter, across the mesh too, so a standby's start and each restart are switches of their own, 0.7–1.74 s. On the default version an exporter follows the importer its own relay holds: in the mesh the two relays' exporters sat on different importers for most of every run, and on one relay a newer importer took open exporters in only 2 of 6 starts and 4 of 6 restarts.
 
-**Passthrough: C1 fails, as fixed in advance.** A backup's start and a restart change nothing. The
-serving importer's loss ends every exporter reading it, and the supervisor's restart splices without
-a mark: 8–9 s of stall at a SIGKILL and 1 s at a SIGTERM, with 12 and 8–9 continuity errors and one
-PTS gap, on both versions and both topologies.
+**Passthrough: C1 fails, as fixed in advance.** A backup's start and a restart change nothing. The serving importer's loss ends every exporter reading it, and the supervisor's restart splices without a mark: 8–9 s of stall at a SIGKILL and 1 s at a SIGTERM, with 12 and 8–9 continuity errors and one PTS gap, on both versions and both topologies.
 
-**One importer through two relays: C3 fails on moq-lite 07.** The SIGKILL of the middle relay serving
-E moved both exporters to the other middle relay with no error, switch or flag and no continuity
-error, but each output lost **7.02 s** of source time in all three runs, at the same packet: the
-video PTS steps forward with no discontinuity indicator, after a 4 s stall. The exporter logs
-`media skipped upstream; resuming at the next group`, 2.3–7.2 s per track. Re-run three times at
-`--delay 10s`, the output did not stall and lost the same 7.02 s, so the new route started at a later
-group, not at the first frame the subscription lacked, where upstream documents a shared epoch
-resuming ([#6062](https://github.com/moq-dev/moq/issues/6062)). With `--passthrough` the move kept the exporter alive with no restart, but it
-dropped the late objects at its release deadline: a 6 s stall, 11 continuity errors and one PTS gap.
-On the default version the relay loss is a marked switch costing 8.2 s, passing C1, and the relay's
-restart is a second one, 0.64–0.86 s; its passthrough exits on `unroutable` and restarts as above.
+**One importer through two relays: C3 fails on moq-lite 07.** The SIGKILL of the middle relay serving E moved both exporters to the other middle relay with no error, switch or flag and no continuity error, but each output lost **7.02 s** of source time in all three runs, at the same packet: the video PTS steps forward with no discontinuity indicator, after a 4 s stall. The exporter logs `media skipped upstream; resuming at the next group`, 2.3–7.2 s per track. Re-run three times at `--delay 10s`, the output did not stall and lost the same 7.02 s, so the new route started at a later group, not at the first frame the subscription lacked, where upstream documents a shared epoch resuming ([#6062](https://github.com/moq-dev/moq/issues/6062)). With `--passthrough` the move kept the exporter alive with no restart, but it dropped the late objects at its release deadline: a 6 s stall, 11 continuity errors and one PTS gap. On the default version the relay loss is a marked switch costing 8.2 s, passing C1, and the relay's restart is a second one, 0.64–0.86 s; its passthrough exits on `unroutable` and restarts as above.
 
 ### Mesh source failover: on `ffa5b81b` a hard kill fails over, bounded by the later of detection and the standby's lag; on `main` a splice that waits for the standby's numbering is fatal; on both a shared-hop standby ends its own relay's subscribers; with a shared epoch on `moq-lite-07` nothing fails over
 
-[#2473](https://github.com/moq-dev/moq/pull/2473) (*"fail over across redundant publishers via
-per-peer route selection"*, addressing #2461) is what first made the two-relay drill pass. It adds per-peer
-announce selection (a relay advertises the best route whose hop chain *excludes* the requesting peer),
-exclusion-aware serving, first-hop content identity in SETUP, and a `moq --origin <id>` knob (now
-`--hop <id>`) so a 1+1 pair declares itself interchangeable. Model/wire unit tests pass
-(`excluded_peer_receives_the_standby`, `standby_attach_announces_to_excluded_peer`,
-`test_standby_join_splices_live_subscriber`, `origin_round_trip`, plus per-track regressions
-`test_standby_missing_track_keeps_incumbent`, `test_unservable_track_retried_by_a_later_request`).
+[#2473](https://github.com/moq-dev/moq/pull/2473) (_"fail over across redundant publishers via per-peer route selection"_, addressing #2461) is what first made the two-relay drill pass. It adds per-peer announce selection (a relay advertises the best route whose hop chain _excludes_ the requesting peer), exclusion-aware serving, first-hop content identity in SETUP, and a `moq --origin <id>` knob (now `--hop <id>`) so a 1+1 pair declares itself interchangeable. Model/wire unit tests pass (`excluded_peer_receives_the_standby`, `standby_attach_announces_to_excluded_peer`, `test_standby_join_splices_live_subscriber`, `origin_round_trip`, plus per-track regressions `test_standby_missing_track_keeps_incumbent`, `test_unservable_track_retried_by_a_later_request`).
 
-The mechanism, from the debug log of the builds that first passed: relay A announces its local route
-(`announce broadcast=red.hang hops=1`); while relay B is merely carrying via relay A it correctly
-advertises nothing (`no advertisable route for this peer exclude_hop=…`); the instant standby `pubB`
-joins relay B it emits `announce broadcast=red.hang hops=2` to relay A, so relay A holds the standby
-**before** it needs it; on detection relay A reselects (`unannounce (filtered route)` →
-`reannounce`). On those builds, with the pipeline SIGKILLed in one pass, 4 of 4 runs failed over at
-full rate, resuming 30–33 s after the kill, and `sub3` on relay B survived `pubB`'s join, where the
-earliest builds had ended it with `Error::Unroutable` (`code=30`).
+The mechanism, from the debug log of the builds that first passed: relay A announces its local route (`announce broadcast=red.hang hops=1`); while relay B is merely carrying via relay A it correctly advertises nothing (`no advertisable route for this peer exclude_hop=…`); the instant standby `pubB` joins relay B it emits `announce broadcast=red.hang hops=2` to relay A, so relay A holds the standby **before** it needs it; on detection relay A reselects (`unannounce (filtered route)` → `reannounce`). On those builds, with the pipeline SIGKILLed in one pass, 4 of 4 runs failed over at full rate, resuming 30–33 s after the kill, and `sub3` on relay B survived `pubB`'s join, where the earliest builds had ended it with `Error::Unroutable` (`code=30`).
 
-**On `ffa5b81b`**, [`cluster-failover.sh`](scripts/cluster-failover.sh) with `--hop`: two meshed relays,
-one live source (`tsp … -P regulate --pcr-synchronous -P fork`) into both publishers, `sub1` and
-`sub2` on relay A, `sub3` on relay B, `pubB` joining at t=10 and the event at t=22 (seconds after the
-subscribers attach), relays at a 6 s idle timeout with a 2 s keep-alive unless noted. Pass criteria,
-fixed before the runs: **CHECK 1**, `sub1` resumes within one idle timeout + 5 s of the kill and
-runs to the end; **CHECK 2**, `sub3` survives `pubB`'s arrival. Driven by
-[`cluster-failover-arms.sh`](scripts/cluster-failover-arms.sh) and tabulated per subscriber and per
-track by [`cluster-failover-table.sh`](scripts/cluster-failover-table.sh).
+**On `ffa5b81b`**, [`cluster-failover.sh`](scripts/cluster-failover.sh) with `--hop`: two meshed relays, one live source (`tsp … -P regulate --pcr-synchronous -P fork`) into both publishers, `sub1` and `sub2` on relay A, `sub3` on relay B, `pubB` joining at t=10 and the event at t=22 (seconds after the subscribers attach), relays at a 6 s idle timeout with a 2 s keep-alive unless noted. Pass criteria, fixed before the runs: **CHECK 1**, `sub1` resumes within one idle timeout + 5 s of the kill and runs to the end; **CHECK 2**, `sub3` survives `pubB`'s arrival. Driven by [`cluster-failover-arms.sh`](scripts/cluster-failover-arms.sh) and tabulated per subscriber and per track by [`cluster-failover-table.sh`](scripts/cluster-failover-table.sh).
 
 | Arm | Runs | Relay A detects the kill | `sub1` resumes | `sub3` on relay B | CHECK 1 | CHECK 2 |
-|---|---:|---|---|---|---|---|
+| --- | --: | --- | --- | --- | --- | --- |
 | Shared hop, 6 s | 3 | kill + 8 s | kill + 14 s, 11 s stall | exits `Error: moq: not found` **at the join** | fail ×3 | fail ×3 |
 | Fresh identities, 6 s | 3 | kill + 8 s | kill + 14 s, 11 s stall | survives the join, then **frozen, no error**, from the failover to the end | fail ×3 | pass ×3 |
 | Shared hop, 30 s default | 1 | kill + 32 s | kill + 33 s, 30 s stall | `not found` at the join | pass | fail |
@@ -350,47 +146,20 @@ track by [`cluster-failover-table.sh`](scripts/cluster-failover-table.sh).
 
 Neither exporter on relay A exited in any run.
 
-- **A hard kill fails over for the subscribers on the dead publisher's relay**, with or without a
-  shared hop.
-- **The resume is bounded by the later of detection and the standby's lag in group numbering.**
-  Each importer numbers groups from its own start, and relay A's splice does not deliver below the
-  last group it delivered (`pubA`'s last video group was 21 in every run; `pubB` served group 21 at
-  t≈34.7). `pubA` starts about 4 s before t=0, so the standby lags by the join time + 4 s. At a
-  ~4 s lag the resume is detection-bound (kill + 10 s); at ~14 s it is kill + 14 s, and at ~24 s
-  kill + 23 s. At the 30 s default, detection covers a 14 s lag. So the 6 s CHECK 1 failures are
-  lag, not detection, and a standby restarted long after the active would add its whole lag to the
-  outage. That extrapolation is *reasoned* from three lag points.
-- **A shared-hop standby ends the subscribers of the relay it joins**, `not found` at the join in
-  10 of 10 shared-hop runs plus two smoke runs: the same race as on one relay (§ *Single-relay standby*),
-  which the fix that removed `Unroutable` does not cover on this build.
-- **Without a shared hop, relay B's subscriber freezes silently at the failover**, 5 of 5. Relay B
-  served 1,688 groups on `sub3`'s session before relay A dropped `pubA` and none after; it logs `no
-  route can serve the rest of this group group=21 frame=30 err=cancelled` for `sub3` and releases
-  `pubB`'s tracks as idle, then re-subscribes them for relay A. Why it does not attach `sub3` to them
-  is *inferred*, not established; that nothing is served and no error is sent is measured.
-- **No configuration passes both checks**: a shared hop costs relay B's subscribers at the join, and
-  fresh identities cost them at the failover.
+- **A hard kill fails over for the subscribers on the dead publisher's relay**, with or without a shared hop.
+- **The resume is bounded by the later of detection and the standby's lag in group numbering.** Each importer numbers groups from its own start, and relay A's splice does not deliver below the last group it delivered (`pubA`'s last video group was 21 in every run; `pubB` served group 21 at t≈34.7). `pubA` starts about 4 s before t=0, so the standby lags by the join time + 4 s. At a ~4 s lag the resume is detection-bound (kill + 10 s); at ~14 s it is kill + 14 s, and at ~24 s kill + 23 s. At the 30 s default, detection covers a 14 s lag. So the 6 s CHECK 1 failures are lag, not detection, and a standby restarted long after the active would add its whole lag to the outage. That extrapolation is _reasoned_ from three lag points.
+- **A shared-hop standby ends the subscribers of the relay it joins**, `not found` at the join in 10 of 10 shared-hop runs plus two smoke runs: the same race as on one relay (§ _Single-relay standby_), which the fix that removed `Unroutable` does not cover on this build.
+- **Without a shared hop, relay B's subscriber freezes silently at the failover**, 5 of 5. Relay B served 1,688 groups on `sub3`'s session before relay A dropped `pubA` and none after; it logs `no route can serve the rest of this group group=21 frame=30 err=cancelled` for `sub3` and releases `pubB`'s tracks as idle, then re-subscribes them for relay A. Why it does not attach `sub3` to them is _inferred_, not established; that nothing is served and no error is sent is measured.
+- **No configuration passes both checks**: a shared hop costs relay B's subscribers at the join, and fresh identities cost them at the failover.
 
-The mesh arms ran co-resident on one 8-vCPU host over loopback, including the cluster link, beside
-the single-relay drill on other ports, at 99 % disk, with UDP socket buffers below what `moq`
-requested. Replicates were tightly consistent. The 30 s arms have one replicate each; a cross-host
-run is owed before any sizing use. Splice quality is ungraded: resuming at group 21 frame 30 of a
-differently numbered GOP may start mid-GOP, and the arm that would settle it is one `KEEP_TS=1` run
-decoded across the splice.
+The mesh arms ran co-resident on one 8-vCPU host over loopback, including the cluster link, beside the single-relay drill on other ports, at 99 % disk, with UDP socket buffers below what `moq` requested. Replicates were tightly consistent. The 30 s arms have one replicate each; a cross-host run is owed before any sizing use. Splice quality is ungraded: resuming at group 21 frame 30 of a differently numbered GOP may start mid-GOP, and the arm that would settle it is one `KEEP_TS=1` run decoded across the splice.
 
-One adjacent fix that does *not* touch this case, since it is easy to assume it would:
-[#2556](https://github.com/moq-dev/moq/pull/2556) (*"prefer the newest route so a reconnect takes over
-immediately"*) addresses a publisher reclaiming *its own* path on reconnect, and states outright that
-shared-origin 1+1 standbys are unaffected. Its same-origin recency tie-break cannot fire here because
-the active (local, `hops=1`) and standby (mesh, `hops=2`) routes differ on cost, so cost decides
-before recency.
+One adjacent fix that does _not_ touch this case, since it is easy to assume it would: [#2556](https://github.com/moq-dev/moq/pull/2556) (_"prefer the newest route so a reconnect takes over immediately"_) addresses a publisher reclaiming _its own_ path on reconnect, and states outright that shared-origin 1+1 standbys are unaffected. Its same-origin recency tie-break cannot fire here because the active (local, `hops=1`) and standby (mesh, `hops=2`) routes differ on cost, so cost decides before recency.
 
-**On upstream `main` at `2b689c24`** (moq 0.12.8 / moq-relay 0.15.8), the same rig, arm matrix
-and host, unchanged. `main` accepts every flag the rig passes: its CLI only adds flags over
-`ffa5b81b`, with identical defaults.
+**On upstream `main` at `2b689c24`** (moq 0.12.8 / moq-relay 0.15.8), the same rig, arm matrix and host, unchanged. `main` accepts every flag the rig passes: its CLI only adds flags over `ffa5b81b`, with identical defaults.
 
 | Arm | Runs | Relay A detects the kill | `sub1` and `sub2` on relay A | `sub3` on relay B | CHECK 1 | CHECK 2 |
-|---|---:|---|---|---|---|---|
+| --- | --: | --- | --- | --- | --- | --- |
 | Shared hop, 6 s | 3 | kill + 8 s | `pubB` serves group 21 at t≈34.7; **both exit** `frame timestamp is below the live edge` at t=35 | exits `not found` **at the join** | fail ×3 | fail ×3 |
 | Fresh identities, 6 s | 3 | kill + 8 s | **no reselection**; both exit `moq: internal error` at detection | survives the join, then exits `json: internal error` at the same second | fail ×3 | pass ×3 |
 | Shared hop, 30 s default | 1 | kill + 33 s | `pubB` already at group 39; both resume at kill + 34 s, 30 s stall | `not found` at the join | pass | fail |
@@ -398,122 +167,50 @@ and host, unchanged. `main` accepts every flag the rig passes: its CLI only adds
 | Shared hop, 6 s, join at t=0 | 1 | kill + 8 s | `pubB` already at group 23; both resume at kill + 8 s, 4 s stall | `not found` at the join | pass | fail |
 | Shared hop, 6 s, join at t=20 | 1 | kill + 8 s | `pubB` serves group 21 at t≈44; both exit on the live-edge error | `not found` at the join | fail | fail |
 
-- **At the splice floor the exporter now aborts.** Relay A still resumes a shared-hop standby at the
-  last video group the dead publisher served (21, `no route can serve the rest of this group
-  group=21 frame=30`), as on `ffa5b81b`. Where the standby had to catch up to that group, every
-  exporter on relay A exited on the live-edge error the moment the standby's group 21 arrived: 4 of
-  4 hard-kill runs and all 4 shared-hop end-of-input runs. Where detection took longer than the
-  standby's lag, so its numbering was already past 21 at the switch, both runs resumed with the same
-  exporter process. `ffa5b81b` resumed from the same group on the same rig in every run. The
-  message is the one the single-relay switches on `main` abort with, the across-groups
-  `TimestampRewind` (§ *Single-relay standby*); the diagnostic build that
-  located that check was not run in the mesh, so that this is the same return is *inferred*.
-- **So the lag that lengthened the outage on `ffa5b81b` is fatal on `main`.** A shared-hop mesh pair
-  on `main` fails over only if the standby is ahead in numbering by the time the relay detects the
-  loss; the three lag points above fit that and do not establish a threshold.
-- **Without a shared hop there is no mesh failover on `main`**, 5 of 5 hard-kill runs: relay A
-  never subscribes `pubB`, and at detection every subscriber on both relays exits with `internal
-  error`. That matches the single-relay result on `main`. `sub3` on relay B had `pubB` attached
-  locally and still ended with relay A's route. On `ffa5b81b` it froze silently; on `main` it
-  exits, which a supervisor can at least see.
-- **The shared-hop arrival teardown is unchanged**: `sub3` exits `not found` at `pubB`'s join in 12
-  of 12 runs.
-- **A clean end is not failed over in the mesh either.** With a shared hop, all four runs ended as
-  the hard kills did, on the live-edge error when `pubB`'s group 21 arrived. With fresh identities,
-  in four of four, `sub1` ended at the event, two runs cleanly with every track completed and two
-  with an `internal error`. This is more repeatable than on `ffa5b81b`, where the same arms varied
-  from run to run (below).
+- **At the splice floor the exporter now aborts.** Relay A still resumes a shared-hop standby at the last video group the dead publisher served (21, `no route can serve the rest of this group group=21 frame=30`), as on `ffa5b81b`. Where the standby had to catch up to that group, every exporter on relay A exited on the live-edge error the moment the standby's group 21 arrived: 4 of 4 hard-kill runs and all 4 shared-hop end-of-input runs. Where detection took longer than the standby's lag, so its numbering was already past 21 at the switch, both runs resumed with the same exporter process. `ffa5b81b` resumed from the same group on the same rig in every run. The message is the one the single-relay switches on `main` abort with, the across-groups `TimestampRewind` (§ _Single-relay standby_); the diagnostic build that located that check was not run in the mesh, so that this is the same return is _inferred_.
+- **So the lag that lengthened the outage on `ffa5b81b` is fatal on `main`.** A shared-hop mesh pair on `main` fails over only if the standby is ahead in numbering by the time the relay detects the loss; the three lag points above fit that and do not establish a threshold.
+- **Without a shared hop there is no mesh failover on `main`**, 5 of 5 hard-kill runs: relay A never subscribes `pubB`, and at detection every subscriber on both relays exits with `internal error`. That matches the single-relay result on `main`. `sub3` on relay B had `pubB` attached locally and still ended with relay A's route. On `ffa5b81b` it froze silently; on `main` it exits, which a supervisor can at least see.
+- **The shared-hop arrival teardown is unchanged**: `sub3` exits `not found` at `pubB`'s join in 12 of 12 runs.
+- **A clean end is not failed over in the mesh either.** With a shared hop, all four runs ended as the hard kills did, on the live-edge error when `pubB`'s group 21 arrived. With fresh identities, in four of four, `sub1` ended at the event, two runs cleanly with every track completed and two with an `internal error`. This is more repeatable than on `ffa5b81b`, where the same arms varied from run to run (below).
 
-The `main` arms share the limits of the `ffa5b81b` arms above (one host, loopback including the
-cluster link, one replicate of each 30 s and join-offset arm), without the single-relay drill
-running beside them. Splice quality is again ungraded.
+The `main` arms share the limits of the `ffa5b81b` arms above (one host, loopback including the cluster link, one replicate of each 30 s and join-offset arm), without the single-relay drill running beside them. Splice quality is again ungraded.
 
-**On upstream `main` at `f8215bc47` (moq 0.14.2 / moq-relay 0.17.2 as reported), with a shared
-`--epoch` and every process on `moq-lite-07-wip`, nothing fails over in the mesh.** The same rig,
-matrix and host; the shared-identity arms now pass one UUIDv7 per run as `--epoch` to both
-publishers, and both relays logged `moq-lite-07-wip` for every session. The checks are unchanged.
-The unset-timeout arms run at this build's 10 s default.
+**On upstream `main` at `f8215bc47` (moq 0.14.2 / moq-relay 0.17.2 as reported), with a shared `--epoch` and every process on `moq-lite-07-wip`, nothing fails over in the mesh.** The same rig, matrix and host; the shared-identity arms now pass one UUIDv7 per run as `--epoch` to both publishers, and both relays logged `moq-lite-07-wip` for every session. The checks are unchanged. The unset-timeout arms run at this build's 10 s default.
 
 | Arm | Runs | `sub1` and `sub2` on relay A | `sub3` on relay B | CHECK 1 | CHECK 2 |
-|---|---:|---|---|---|---|
+| --- | --: | --- | --- | --- | --- |
 | Shared epoch, kill (6 s ×3, default ×1, join at t=0 and t=20 ×1 each) | 6 | relay A detects at kill + 8 s (kill + 11.6 s at the default) and re-subscribes every track through relay B at once, from group 21; **nothing arrives**: alive and silent to the end, no error | survives the join; silent from the kill to the end | fail ×6 | pass ×6 |
 | Shared epoch, clean end (6 s ×3, default ×1) | 4 | end 2 s after the event, no error, no failover | survives the join; silent after the event | — | pass ×4 |
 | Fresh identities, kill and clean end (6 s ×3 each, default ×1 each) | 8 | exit `unroutable` **at the join** | exits `unroutable` at the join | fail | fail ×8 |
 
-- **The standby's relay asks it once, before it has tracks, and never again.** In all ten
-  shared-epoch runs relay B probed `pubB` the moment it announced, for every track `sub3` held, and
-  got `not found` for 9–11 of them: the importer had not yet parsed a PMT. Relay B kept the
-  incumbent route through relay A, which is why `sub3` survives the join, and asked `pubB` for none
-  of those tracks again. At the failover relay B accepted relay A's re-subscriptions and forwarded
-  none to `pubB`, which served no video in any run; the one track it did serve, in the two
-  join-offset runs, was an SI track first requested after `pubB` had it. This traces, in the mesh,
-  the kept refusals reasoned for the single-relay `moq-lite-07` arms (§ *Single-relay standby*),
-  and it is the refusal upstream's aligned-import plan diagnoses.
-- **So the epoch moves the arrival teardown to the failover and makes it silent.** On `2b689c24`
-  the standby's arrival ended `sub3` with `not found`; here every subscriber survives it and is
-  then frozen without an error, which a supervisor watching for an exit never sees.
-- **Without a shared epoch the standby replaces the broadcast as it arrives**, as the epoch design
-  intends: a newer, different epoch is new content, so every subscriber on both relays exits
-  `unroutable` at the join, 8 of 8. The drill's exporters run without `--linger`; whether a
-  lingering one would follow the replacement is not tested here.
+- **The standby's relay asks it once, before it has tracks, and never again.** In all ten shared-epoch runs relay B probed `pubB` the moment it announced, for every track `sub3` held, and got `not found` for 9–11 of them: the importer had not yet parsed a PMT. Relay B kept the incumbent route through relay A, which is why `sub3` survives the join, and asked `pubB` for none of those tracks again. At the failover relay B accepted relay A's re-subscriptions and forwarded none to `pubB`, which served no video in any run; the one track it did serve, in the two join-offset runs, was an SI track first requested after `pubB` had it. This traces, in the mesh, the kept refusals reasoned for the single-relay `moq-lite-07` arms (§ _Single-relay standby_), and it is the refusal upstream's aligned-import plan diagnoses.
+- **So the epoch moves the arrival teardown to the failover and makes it silent.** On `2b689c24` the standby's arrival ended `sub3` with `not found`; here every subscriber survives it and is then frozen without an error, which a supervisor watching for an exit never sees.
+- **Without a shared epoch the standby replaces the broadcast as it arrives**, as the epoch design intends: a newer, different epoch is new content, so every subscriber on both relays exits `unroutable` at the join, 8 of 8. The drill's exporters run without `--linger`; whether a lingering one would follow the replacement is not tested here.
 - **A clean end is still not failed over**, 4 of 4.
 
-Same limits as above (one host, loopback including the cluster link, one replicate of each
-default-timeout and join-offset arm). Nothing was spliced, so splice quality and the group-numbering
-lag do not arise; they return once the standby is asked again.
+Same limits as above (one host, loopback including the cluster link, one replicate of each default-timeout and join-offset arm). Nothing was spliced, so splice quality and the group-numbering lag do not arise; they return once the standby is asked again.
 
 ### Graceful source departure is never reliably failed over
 
-On the builds before `ffa5b81b`, when the active publisher exits *cleanly* instead of being killed, the relay does **not** reselect
-onto the announced standby; it propagates completion. Both media tracks log `subscribe complete`, the
-catalog subscription is `canceled (idle)`, no route change is attempted, and the subscriber's `moq
-export ts` **terminates** with `Error: TS track layout changed after PAT/PMT was emitted: '0.avc3'
-removed`. Verified with `graceful_exit.sh` (finite clip, standby announced 23 s prior): `sub1` emits
-**zero bytes for the remaining 24 s**. So the covered case is the *harder* one (host loss); the easier
-and far more common one — SIGTERM to an encoder, a container rescheduled, a rolling restart — is
-uncovered, and a shared `--origin` buys nothing here. Adjacent to but distinct from #2469 (which
-fixed the exporter's `json: dropped` on session *loss*; here the session is healthy and it is the
-*catalog* changing under the muxer). Plausibly intended MoQ semantics rather than a defect, and it
-persists across every release tested. Proposed remedies: an announcement `epoch`
-([#2330](https://github.com/moq-dev/moq/issues/2330)) or the typed announcement lifecycle
-(#2216/#2217); an independent report on #2330 measures the same gap as a multi-second consumer outage.
-The spec-level fix is moq-lite-06 **broadcast epochs / ended-broadcasts**
-([#2611](https://github.com/moq-dev/moq/pull/2611), drafts), which is not yet on the wire.
+On the builds before `ffa5b81b`, when the active publisher exits _cleanly_ instead of being killed, the relay does **not** reselect onto the announced standby; it propagates completion. Both media tracks log `subscribe complete`, the catalog subscription is `canceled (idle)`, no route change is attempted, and the subscriber's `moq export ts` **terminates** with `Error: TS track layout changed after PAT/PMT was emitted: '0.avc3' removed`. Verified with `graceful_exit.sh` (finite clip, standby announced 23 s prior): `sub1` emits **zero bytes for the remaining 24 s**. So the covered case is the _harder_ one (host loss); the easier and far more common one — SIGTERM to an encoder, a container rescheduled, a rolling restart — is uncovered, and a shared `--origin` buys nothing here. Adjacent to but distinct from #2469 (which fixed the exporter's `json: dropped` on session _loss_; here the session is healthy and it is the _catalog_ changing under the muxer). Plausibly intended MoQ semantics rather than a defect, and it persists across every release tested. Proposed remedies: an announcement `epoch` ([#2330](https://github.com/moq-dev/moq/issues/2330)) or the typed announcement lifecycle (#2216/#2217); an independent report on #2330 measures the same gap as a multi-second consumer outage. The spec-level fix is moq-lite-06 **broadcast epochs / ended-broadcasts** ([#2611](https://github.com/moq-dev/moq/pull/2611), drafts), which is not yet on the wire.
 
-**On `ffa5b81b`, in the mesh, the outcome varies from run to run.** The mesh drill's `EVENT=eof` ends
-`pubA`'s input by terminating its `tsp -I ip` reader, never by signalling `moq`, and the importer
-exited 0 in all eight runs. Relay A saw a clean close (`err=no error`) in one of eight; in the other
-seven it timed out one idle timeout later. Each of the ten media tracks then either completed to the
-subscriber or was treated as lost and re-routed to `pubB`, and the mix differed per run:
+**On `ffa5b81b`, in the mesh, the outcome varies from run to run.** The mesh drill's `EVENT=eof` ends `pubA`'s input by terminating its `tsp -I ip` reader, never by signalling `moq`, and the importer exited 0 in all eight runs. Relay A saw a clean close (`err=no error`) in one of eight; in the other seven it timed out one idle timeout later. Each of the ten media tracks then either completed to the subscriber or was treated as lost and re-routed to `pubB`, and the mix differed per run:
 
 | Arm | Runs | `sub1` outcome |
-|---|---:|---|
+| --- | --: | --- |
 | Shared hop, 6 s | 3 | frozen; terminated (`'5.ts' removed`); terminated (`'6.mp2' removed`) after `pubB` served four tracks |
 | Fresh identities, 6 s | 3 | failed over like a kill; terminated (`'4.ts' removed`, `sub2` on the same relay froze); "failed over" on audio and two data tracks after video had completed |
 | Shared hop, 30 s | 1 | terminated (`'5.ts' removed`) |
 | Fresh identities, 30 s | 1 | frozen |
 
-Four terminated, two froze, one failed over fully and one partly, without video. A grade from capture
-sizes alone calls the last a failover; `cluster-failover-table.sh` prints the per-track outcome that
-exposes it. On one relay on `main` a clean exit is switched at once and the exporter then aborts on
-a timestamp rewind (§ *Single-relay standby*); in the mesh on `main` it ends on
-the same error with a shared hop and at the event without one (above). So across builds and topologies
-a graceful exit is never reliably failed over; only the mechanism of the failure differs.
+Four terminated, two froze, one failed over fully and one partly, without video. A grade from capture sizes alone calls the last a failover; `cluster-failover-table.sh` prints the per-track outcome that exposes it. On one relay on `main` a clean exit is switched at once and the exporter then aborts on a timestamp rewind (§ _Single-relay standby_); in the mesh on `main` it ends on the same error with a shared hop and at the event without one (above). So across builds and topologies a graceful exit is never reliably failed over; only the mechanism of the failure differs.
 
 ### A reconnecting publisher stalls its subscribers for as long as the first one lived
 
-The scenario of [#2534](https://github.com/moq-dev/moq/pull/2534) (*"deliver groups from a takeover
-source that restarted its numbering"*, closed unmerged as *"fixed by #2556"*) on the TS path, drilled
-with [`t6-relay-kill.sh`](scripts/t6-relay-kill.sh) `MODE=publisher` on loopback: one relay, two
-exporters, pubA SIGKILLed and a fresh pubB process started under the **same** broadcast name a second
-later, with restarted group numbering. Both publishers read one continuous paced UDP feed
-(`tsp … -P regulate --pcr-synchronous`), so pubB continues pubA's media timeline rather than
-replaying the clip from its start. The same PR carries an independent production report — a
-`@moq/net` subscriber starved for the broadcast's age after a publisher restart, bisected clean on
-v0.14.1 and broken from v0.14.2.
+The scenario of [#2534](https://github.com/moq-dev/moq/pull/2534) (_"deliver groups from a takeover source that restarted its numbering"_, closed unmerged as _"fixed by #2556"_) on the TS path, drilled with [`t6-relay-kill.sh`](scripts/t6-relay-kill.sh) `MODE=publisher` on loopback: one relay, two exporters, pubA SIGKILLed and a fresh pubB process started under the **same** broadcast name a second later, with restarted group numbering. Both publishers read one continuous paced UDP feed (`tsp … -P regulate --pcr-synchronous`), so pubB continues pubA's media timeline rather than replaying the clip from its start. The same PR carries an independent production report — a `@moq/net` subscriber starved for the broadcast's age after a publisher restart, bisected clean on v0.14.1 and broken from v0.14.2.
 
 | Build | Publisher identity | pubA lifetime | Exporters | Resumed, after pubB starts |
-|---|---|---|---|---|
+| --- | --- | --- | --- | --- |
 | `fd4f5d82e` | fresh | 12 s | both exit `json: dropped`, two runs | never |
 | `fd4f5d82e` | shared `--origin` | 12 s | survive, two runs | 12 s |
 | `fd4f5d82e` | shared `--origin` | 24 s | survive, one run | 23 s |
@@ -521,47 +218,17 @@ v0.14.1 and broken from v0.14.2.
 | `ffa5b81b` | fresh | 24 s | survive, two runs | 22 s |
 | `ffa5b81b` | fresh | 36 s | survive, one run | 35 s |
 
-Wherever the exporter survives, the stall matches pubA's lifetime to within 2 s and grows one for one
-with it, on both builds. With the timeline continuous this is not the clock-skew artefact of the
-earlier drill, whose publishers each replayed the clip from its start ([Corrections](#corrections)),
-and a floor on media time would give no stall at all. The figures fit a floor on the group sequence,
-under which a replacement that numbers from zero is starved until its numbering passes the old
-one's, which is what #2534 described. Whether the relay or the exporter holds that floor is not
-measured.
+Wherever the exporter survives, the stall matches pubA's lifetime to within 2 s and grows one for one with it, on both builds. With the timeline continuous this is not the clock-skew artefact of the earlier drill, whose publishers each replayed the clip from its start ([Corrections](#corrections)), and a floor on media time would give no stall at all. The figures fit a floor on the group sequence, under which a replacement that numbers from zero is starved until its numbering passes the old one's, which is what #2534 described. Whether the relay or the exporter holds that floor is not measured.
 
-**Bottom line:** a reconnecting publisher is not a failover mechanism on the TS path on either build.
-On `fd4f5d82e` a fresh identity kills the exporter and a shared origin stalls it; on `ffa5b81b` the
-exporter survives and stalls the same way. If the scaling holds beyond 36 s, which is reasoned and
-not measured, a publisher that restarts after a day of service would stall its subscribers for about
-a day. The recommended posture, a fully doubled chain with receiver-side ST 2022-7 selection, does
-not depend on this path.
+**Bottom line:** a reconnecting publisher is not a failover mechanism on the TS path on either build. On `fd4f5d82e` a fresh identity kills the exporter and a shared origin stalls it; on `ffa5b81b` the exporter survives and stalls the same way. If the scaling holds beyond 36 s, which is reasoned and not measured, a publisher that restarts after a day of service would stall its subscribers for about a day. The recommended posture, a fully doubled chain with receiver-side ST 2022-7 selection, does not depend on this path.
 
 ### Single-relay standby: `--hop` on `ffa5b81b` and `2b689c24`, `--epoch` on October 2026 `main`
 
-On `ffa5b81b` and `2b689c24` a hard kill fails over, a shared-hop standby's arrival ends every
-subscriber, and a clean exit is not failed over. On October 2026 `main` a shared `--epoch` removes
-the arrival teardown, and resumes a subscription without a seam only on the opt-in moq-lite 07,
-where the two importers' unaligned group numbering then decides whether the export survives (the
-last part of this section). On `90500867d` the `--epoch` kill arm was re-run with and without
-`--stitch` ([T47](test-47-fixed-delay-export.md) § *Re-requests on `main`*): on moq-lite 07 every
-export takes the failover over, and on 06 only with `--stitch --linger`.
+On `ffa5b81b` and `2b689c24` a hard kill fails over, a shared-hop standby's arrival ends every subscriber, and a clean exit is not failed over. On October 2026 `main` a shared `--epoch` removes the arrival teardown, and resumes a subscription without a seam only on the opt-in moq-lite 07, where the two importers' unaligned group numbering then decides whether the export survives (the last part of this section). On `90500867d` the `--epoch` kill arm was re-run with and without `--stitch` ([T47](test-47-fixed-delay-export.md) § _Re-requests on `main`_): on moq-lite 07 every export takes the failover over, and on 06 only with `--stitch --linger`.
 
-`ffa5b81b` renamed the client's `--origin <id>` to `--hop <id>`, and refuses `--origin` at startup
-with a migration message. The value becomes the first hop of the publisher's route, which is how the
-relay decides two sources carry the same content; unset, each publisher mints its own. So the
-passages that described a 1+1 pair by `--origin` needed re-checking on the build under test.
-October 2026 `main` removed `--hop`; a pair now shares an `--epoch`.
+`ffa5b81b` renamed the client's `--origin <id>` to `--hop <id>`, and refuses `--origin` at startup with a migration message. The value becomes the first hop of the publisher's route, which is how the relay decides two sources carry the same content; unset, each publisher mints its own. So the passages that described a 1+1 pair by `--origin` needed re-checking on the build under test. October 2026 `main` removed `--hop`; a pair now shares an `--epoch`.
 
-**Rig.** [`t6-relay-kill.sh`](scripts/t6-relay-kill.sh) `MODE=standby`, on one Linux host over
-loopback: one relay, one live source (`tsp … -P regulate --pcr-synchronous`, forked to two UDP ports),
-two `moq import ts` publishers of one broadcast, and two `moq export ts` subscribers. The clients run
-a 6 s idle timeout with a 2 s keep-alive; QUIC uses the smaller of the two sides' values, so the relay
-also detects a dead publisher in 6 s. At 15 s one publisher gets the signal, nothing restarts, and the
-capture is sampled once a second to 60 s. Variables: `HOP=42` for both publishers or unset;
-`LATE_SUBS=1` to start the subscribers only once both publishers are up; `KILL_WHICH` to pick the
-victim; and `SIG`, one of `KILL`, `TERM`, `INT` or `EOF`, the last ending the importer's input.
-Publisher logs are kept apart, so which one served, before and after, is read from which one received
-the media subscriptions.
+**Rig.** [`t6-relay-kill.sh`](scripts/t6-relay-kill.sh) `MODE=standby`, on one Linux host over loopback: one relay, one live source (`tsp … -P regulate --pcr-synchronous`, forked to two UDP ports), two `moq import ts` publishers of one broadcast, and two `moq export ts` subscribers. The clients run a 6 s idle timeout with a 2 s keep-alive; QUIC uses the smaller of the two sides' values, so the relay also detects a dead publisher in 6 s. At 15 s one publisher gets the signal, nothing restarts, and the capture is sampled once a second to 60 s. Variables: `HOP=42` for both publishers or unset; `LATE_SUBS=1` to start the subscribers only once both publishers are up; `KILL_WHICH` to pick the victim; and `SIG`, one of `KILL`, `TERM`, `INT` or `EOF`, the last ending the importer's input. Publisher logs are kept apart, so which one served, before and after, is read from which one received the media subscriptions.
 
 ```sh
 MODE=standby HOP=42 LATE_SUBS=1 KILL_WHICH=newest SIG=KILL PORT=4470 KILL=15 END=60 \
@@ -569,7 +236,7 @@ MODE=standby HOP=42 LATE_SUBS=1 KILL_WHICH=newest SIG=KILL PORT=4470 KILL=15 END
 ```
 
 | Arm | Serving at the kill | Runs | Subscribers | Longest stall after the signal |
-|---|---|---:|---|---|
+| --- | --- | --: | --- | --- |
 | Shared hop, standby arrives after the subscribers | — | 2 | **both exit** `Error: moq: not found` within milliseconds of the standby connecting, before any signal | — |
 | No hop, standby arrives after the subscribers | the first | 3 | unaffected by the arrival | — |
 | Hard kill of the serving publisher, shared hop ¹ | the newest | 4 | alive, same process, no error | 10, 9, 8 and 2–3 s |
@@ -579,45 +246,17 @@ MODE=standby HOP=42 LATE_SUBS=1 KILL_WHICH=newest SIG=KILL PORT=4470 KILL=15 END
 | End of input to the serving publisher, shared hop | the newest | 1 | **both exit** `TS track layout changed after PAT/PMT was emitted` | — |
 | End of input to the serving publisher, no hop | the newest | 1 | one exits on the live-edge error; the other stays alive and writes nothing for 38 s | — |
 
-*¹ SIGKILL, and SIGTERM, which is the same thing to this client: `moq` 0.12.1 handles only Ctrl-C
-(`rs/moq-cli/src/main.rs:737–741`), so a SIGTERM ends it without a clean close. From 0.12.8 it
-closes the session on SIGTERM as on SIGINT (the `main` table below).*
+_¹ SIGKILL, and SIGTERM, which is the same thing to this client: `moq` 0.12.1 handles only Ctrl-C (`rs/moq-cli/src/main.rs:737–741`), so a SIGTERM ends it without a clean close. From 0.12.8 it closes the session on SIGTERM as on SIGINT (the `main` table below)._
 
-- **A hard kill fails over on one relay, bounded by the idle timeout.** Every run in which the killed
-  publisher was serving continued on the other with the same exporter process and no error, after a
-  stall of 2–10 s. The relay logs the dead session as `connection error: timed out` 7–9 s after the
-  kill, and the visible stall is shorter than that because the exporter keeps writing what it has
-  buffered. This is the mesh result's mechanism, detection and then reselection, on one relay and at
-  a 6 s timeout. Neither identity mode is faster on this sample, and the spread within each is wider
-  than the difference between them.
-- **Two publishers on one relay now coexist.** The early builds' `unroutable` teardown of both
-  ([Limitations observed](#limitations-observed--media-aware-lane)) does not occur on `ffa5b81b`,
-  with or without a shared hop.
-- **A shared-hop standby that arrives after the subscribers ends every one of them.** Identical routes
-  are ranked by recency, so the newcomer wins the moment it lands (`route_order`,
-  `rs/moq-net/src/model/origin.rs:557–571`, *"so a reconnect … wins the moment it lands"*). The front
-  switches without regard to whether the new source serves yet (`selected`,
-  `rs/moq-net/src/model/front.rs:335–338`), re-queries every track on it (`attach`, 387–413), and a
-  track the standby has not yet created is recorded as refused and aborted with `NotFound`
-  (`redispatch`, 560–564). That is the race the mesh drill found as `Unroutable` and that was fixed
-  there. On one relay it was still open on `ffa5b81b` and `2b689c24`. Without a shared hop the newcomer's route
-  ranks on a hash of its hop chain, and in these runs it did not displace the serving source on
-  arrival. So the flag that declares a 1+1 pair is, on one relay, the one that makes a standby's
-  arrival an outage.
-- **A clean exit is not failed over, by either route.** At end of input the relay passes the
-  completion on and never reselects: the other publisher receives no media subscription, and the
-  exporters end as they did on the earlier builds (§ *Graceful source departure*). On SIGINT the relay
-  *does* reselect, since the other publisher's media subscriptions start at the signal, but the
-  exporter then aborts with `TimestampRewind` (`rs/moq-mux/src/container/consumer.rs:472–489`), a
-  group whose timestamps sit below the live edge it had reached. What the exporter is handed at
-  that switch is measured on `2b689c24` (below).
+- **A hard kill fails over on one relay, bounded by the idle timeout.** Every run in which the killed publisher was serving continued on the other with the same exporter process and no error, after a stall of 2–10 s. The relay logs the dead session as `connection error: timed out` 7–9 s after the kill, and the visible stall is shorter than that because the exporter keeps writing what it has buffered. This is the mesh result's mechanism, detection and then reselection, on one relay and at a 6 s timeout. Neither identity mode is faster on this sample, and the spread within each is wider than the difference between them.
+- **Two publishers on one relay now coexist.** The early builds' `unroutable` teardown of both ([Limitations observed](#limitations-observed--media-aware-lane)) does not occur on `ffa5b81b`, with or without a shared hop.
+- **A shared-hop standby that arrives after the subscribers ends every one of them.** Identical routes are ranked by recency, so the newcomer wins the moment it lands (`route_order`, `rs/moq-net/src/model/origin.rs:557–571`, _"so a reconnect … wins the moment it lands"_). The front switches without regard to whether the new source serves yet (`selected`, `rs/moq-net/src/model/front.rs:335–338`), re-queries every track on it (`attach`, 387–413), and a track the standby has not yet created is recorded as refused and aborted with `NotFound` (`redispatch`, 560–564). That is the race the mesh drill found as `Unroutable` and that was fixed there. On one relay it was still open on `ffa5b81b` and `2b689c24`. Without a shared hop the newcomer's route ranks on a hash of its hop chain, and in these runs it did not displace the serving source on arrival. So the flag that declares a 1+1 pair is, on one relay, the one that makes a standby's arrival an outage.
+- **A clean exit is not failed over, by either route.** At end of input the relay passes the completion on and never reselects: the other publisher receives no media subscription, and the exporters end as they did on the earlier builds (§ _Graceful source departure_). On SIGINT the relay _does_ reselect, since the other publisher's media subscriptions start at the signal, but the exporter then aborts with `TimestampRewind` (`rs/moq-mux/src/container/consumer.rs:472–489`), a group whose timestamps sit below the live edge it had reached. What the exporter is handed at that switch is measured on `2b689c24` (below).
 
-**On upstream `main` at `2b689c24`** (moq 0.12.8 / moq-relay 0.15.8, after the CLI change that closes
-the session on SIGINT *and* SIGTERM), the same rig with `STAGGER`, the gap between the publishers'
-starts, as a further variable:
+**On upstream `main` at `2b689c24`** (moq 0.12.8 / moq-relay 0.15.8, after the CLI change that closes the session on SIGINT _and_ SIGTERM), the same rig with `STAGGER`, the gap between the publishers' starts, as a further variable:
 
 | Arm | Stagger | Runs | Subscribers |
-|---|---:|---:|---|
+| --- | --: | --: | --- |
 | Shared hop, standby arrives after the subscribers | 2 s | 2 | **both exit** `not found`, 15 ms after the standby connects |
 | Shared hop, subscribers first, publishers arrive together | 0 | 1 | no teardown; a hard kill of the serving one fails over, 3 s stall |
 | Hard kill of the serving publisher, shared hop | 2 s | 2 | alive, 3 and 7 s stall |
@@ -627,27 +266,14 @@ starts, as a further variable:
 | Hard kill of the serving publisher, no hop | 2 s | 2 | **no failover**: the standby is never subscribed, both exit `internal error` about 6 s after the kill |
 | Any signal to the idle publisher (control) | 0–2 s | 6 | alive, 0 s |
 
-- **The arrival teardown is unchanged on `2b689c24`.** The standby is queried for every track within a
-  millisecond of connecting, has none yet, and the refusals end the subscribers. In the one run
-  where the publishers arrived together it did not occur, which fits the race described above.
-- **A clean exit is now switched, and the switch is fatal to `export ts`.** `ffa5b81b` passed a
-  stdin EOF on as completion; `2b689c24` reselects the standby at the signal for every clean exit. The
-  subscriber then exits on `TimestampRewind` in all six clean exits, co-started or not, and in the
-  co-started hard kill. Only the two hard kills with a 2 s stagger survived, their switch coming
-  about 11 s after the kill. So on `2b689c24` no clean exit on one relay fails over.
-- **Without a shared hop there is no failover on `2b689c24`**, where `ffa5b81b` failed over in 5 of 5.
-  This is what that build's front rules say, read from `front.rs` rather than isolated (a route whose
-  first hop differs does not qualify, and a front with nothing qualifying ends), so it is design
-  rather than defect: on `2b689c24` the shared hop was the only declaration of a 1+1 pair.
+- **The arrival teardown is unchanged on `2b689c24`.** The standby is queried for every track within a millisecond of connecting, has none yet, and the refusals end the subscribers. In the one run where the publishers arrived together it did not occur, which fits the race described above.
+- **A clean exit is now switched, and the switch is fatal to `export ts`.** `ffa5b81b` passed a stdin EOF on as completion; `2b689c24` reselects the standby at the signal for every clean exit. The subscriber then exits on `TimestampRewind` in all six clean exits, co-started or not, and in the co-started hard kill. Only the two hard kills with a 2 s stagger survived, their switch coming about 11 s after the kill. So on `2b689c24` no clean exit on one relay fails over.
+- **Without a shared hop there is no failover on `2b689c24`**, where `ffa5b81b` failed over in 5 of 5. This is what that build's front rules say, read from `front.rs` rather than isolated (a route whose first hop differs does not qualify, and a front with nothing qualifying ends), so it is design rather than defect: on `2b689c24` the shared hop was the only declaration of a 1+1 pair.
 
-**What the exporter is handed at the switch.** A diagnostic `moq` built from `2b689c24` with three
-log lines in `container/consumer.rs` (one per group arriving, one at each `TimestampRewind` return,
-giving the group, its minimum timestamp, the previous group and the live edge; the patch is kept
-with the runs) ran seven further arms on the same rig. Both exporters in
-each arm reported the same group except where noted.
+**What the exporter is handed at the switch.** A diagnostic `moq` built from `2b689c24` with three log lines in `container/consumer.rs` (one per group arriving, one at each `TimestampRewind` return, giving the group, its minimum timestamp, the previous group and the live edge; the patch is kept with the runs) ran seven further arms on the same rig. Both exporters in each arm reported the same group except where noted.
 
 | Stop | Stagger | Track | Standby's group | Last group read | Standby's first timestamp vs the live edge |
-|---|---:|---|---:|---:|---:|
+| --- | --: | --- | --: | --: | --: |
 | SIGINT | 2 s | `1.ts` | 72 | 54 | 0.17 s behind |
 | SIGTERM | 2 s | `6.mp2` | 878 | 673 | 4.15 s behind |
 | end of input | 2 s | `5.ts` | 534 | 471 | 4.05 s behind |
@@ -656,363 +282,137 @@ each arm reported the same group except where noted.
 | hard kill | 2 s | — | — | — | survived, 7 s stall |
 | SIGINT | 0 | — | — | — | control: the signalled publisher was not serving, nothing switched |
 
-- **Every rewind is the across-groups check**, never the within-group one: at the switch the
-  subscriber is handed the standby's groups under *higher* sequence numbers than the last one it
-  read (by 5 to 309), carrying media that starts 0.17–5.6 s *before* its live edge. Co-starting the
-  publishers does not align their numbering, since each importer counts groups from its own start.
-- **The hard kill that survives fits the same picture.** Its switch comes after a 7 s stall, by
-  which time the standby's media is past the old edge again.
-- **Not established:** why two co-started importers are that far apart in numbering, and why the
-  relay hands over the standby's media from before the edge rather than its newest group. With a
-  stagger, the standby's input began behind live ([Corrections](#corrections)).
-- With the publishers started together, which one the rig treats as newest is a race, so a
-  co-started arm can signal the idle publisher; this one did.
+- **Every rewind is the across-groups check**, never the within-group one: at the switch the subscriber is handed the standby's groups under _higher_ sequence numbers than the last one it read (by 5 to 309), carrying media that starts 0.17–5.6 s _before_ its live edge. Co-starting the publishers does not align their numbering, since each importer counts groups from its own start.
+- **The hard kill that survives fits the same picture.** Its switch comes after a 7 s stall, by which time the standby's media is past the old edge again.
+- **Not established:** why two co-started importers are that far apart in numbering, and why the relay hands over the standby's media from before the edge rather than its newest group. With a stagger, the standby's input began behind live ([Corrections](#corrections)).
+- With the publishers started together, which one the rig treats as newest is a race, so a co-started arm can signal the idle publisher; this one did.
 
-This is the converse of the mesh result on `ffa5b81b`, where a standby numbered *behind* the active
-publisher extends the outage (§ *Mesh source failover*): in both, group sequence is compared across
-two publishers whose sequences are not comparable. On `main` the mesh case is fatal as well: a splice
-that waits for the standby's numbering ends on the same live-edge error. Reported as
-[#4354](https://github.com/moq-dev/moq/issues/4354), with the `ffa5b81b` mesh case included.
+This is the converse of the mesh result on `ffa5b81b`, where a standby numbered _behind_ the active publisher extends the outage (§ _Mesh source failover_): in both, group sequence is compared across two publishers whose sequences are not comparable. On `main` the mesh case is fatal as well: a splice that waits for the standby's numbering ends on the same live-edge error. Reported as [#4354](https://github.com/moq-dev/moq/issues/4354), with the `ffa5b81b` mesh case included.
 
-**On upstream `main`, October 2026 (`82c3f2fe4`, reporting moq 0.14.2 / moq-relay 0.17.2, versions
-whose releases still carry `--hop`), where `--epoch` replaces `--hop`.** The rig passes one UUIDv7 to both publishers as `--epoch` where the
-tables above pass `HOP=42`; unset, each mints its own. A second variable is now the protocol: the
-default `moq-lite-06`, whose routes carry no epoch, or `moq-lite-07-wip`, opted into on every process
-(`MOQ_CONNECT_VERSION` and `MOQ_LISTEN_VERSION`), which carries the epoch on the announcement and on
-every request. The relay log confirms the version each session negotiated. Upstream documents the
-pairing as a moq-lite 07 feature that needs *"identical tracks with aligned groups, which no importer
-guarantees yet"*, so these arms grade a configuration upstream has declared but not yet completed.
+**On upstream `main`, October 2026 (`82c3f2fe4`, reporting moq 0.14.2 / moq-relay 0.17.2, versions whose releases still carry `--hop`), where `--epoch` replaces `--hop`.** The rig passes one UUIDv7 to both publishers as `--epoch` where the tables above pass `HOP=42`; unset, each mints its own. A second variable is now the protocol: the default `moq-lite-06`, whose routes carry no epoch, or `moq-lite-07-wip`, opted into on every process (`MOQ_CONNECT_VERSION` and `MOQ_LISTEN_VERSION`), which carries the epoch on the announcement and on every request. The relay log confirms the version each session negotiated. Upstream documents the pairing as a moq-lite 07 feature that needs _"identical tracks with aligned groups, which no importer guarantees yet"_, so these arms grade a configuration upstream has declared but not yet completed.
 
-Which publisher serves is now a race between equal routes (each served in some late-subscriber arms
-on both protocols), so the rig cannot aim the signal at the serving one. Serving is read from the
-publisher logs, and an arm that signalled the idle publisher is a control whatever its label. Stagger
-2 s, hard kill unless stated.
+Which publisher serves is now a race between equal routes (each served in some late-subscriber arms on both protocols), so the rig cannot aim the signal at the serving one. Serving is read from the publisher logs, and an arm that signalled the idle publisher is a control whatever its label. Stagger 2 s, hard kill unless stated.
 
 | Protocol | Epochs | Subscribers start | Signal to the serving publisher | Runs | At the subscriber | Outcome |
-|---|---|---|---|---:|---|---|
+| --- | --- | --- | --- | --: | --- | --- |
 | lite-06 | shared | before the standby | its arrival | 2 | nothing | unaffected |
-| lite-06 | shared | before the standby | hard kill | 2 | every track ends (`internal error`); the exporter re-requests | **exits**, *missed a decode deadline on PID 111* |
+| lite-06 | shared | before the standby | hard kill | 2 | every track ends (`internal error`); the exporter re-requests | **exits**, _missed a decode deadline on PID 111_ |
 | lite-06 | shared | after both | hard kill | 1 | every track ends (`unroutable`); re-request | alive, 6 s stall |
 | lite-06 | shared | after both | SIGINT | 1 | three tracks end `not found`; no re-request reaches the standby | **exits**, `internal error` |
 | lite-06 | own | after both | hard kill | 2 | every track ends (`internal error`); re-request | one alive after a 3 s stall; one **exits** on a timestamp below the previous group's start |
 | lite-07 | shared | after both | hard kill, standby started later | 3 | **nothing**: no error, no new subscription | alive, 3, 6 and 3 s stall |
 | lite-07 | shared | after both | hard kill, standby started earlier | 3 | nothing | two **exit** on a timestamp below the previous group's start; one alive, no stall |
-| lite-07 | shared | before the standby | hard kill | 3 | eight tracks end `not found`; re-request | **exits**, *missed a decode deadline on PID 111* |
-| lite-07 | shared | after both | SIGINT | 1 | five tracks end `not found` at the signal; re-request | **exits**, *missed a decode deadline on PID 131*, 4 s after the switch |
-| lite-07 | shared | after both | SIGTERM | 1 | nothing: resumed at the signal | **exits**, *missed a decode deadline on PID 131*, 3 s after the switch |
+| lite-07 | shared | before the standby | hard kill | 3 | eight tracks end `not found`; re-request | **exits**, _missed a decode deadline on PID 111_ |
+| lite-07 | shared | after both | SIGINT | 1 | five tracks end `not found` at the signal; re-request | **exits**, _missed a decode deadline on PID 131_, 4 s after the switch |
+| lite-07 | shared | after both | SIGTERM | 1 | nothing: resumed at the signal | **exits**, _missed a decode deadline on PID 131_, 3 s after the switch |
 | lite-07 | own | before the standby | its arrival | 1 | the standby's newer epoch replaces the broadcast | **exits**, `unroutable` |
 | lite-07 | own | after both | hard kill of the newer | 1 | — | **exits**, `internal error`; no return to the older epoch |
 | both | shared | after both | any signal to the idle publisher (control; one co-started) | 12 | nothing | alive, 0 s |
 
-One further lite-06 arm is void: both exporters exited 1.4 s after joining mid-GOP, before any
-signal, on *missed a decode deadline on PID 111*. [T47](test-47-fixed-delay-export.md) carries it
-as a limit of the merged export. The exporters run at the default `--delay 500ms`, which on this clip
-does not last a whole capture even in steady state (T47); at `--delay 1s`, which does, the
-early-subscriber hard kill fails the same way on both protocols, 2 runs each.
+One further lite-06 arm is void: both exporters exited 1.4 s after joining mid-GOP, before any signal, on _missed a decode deadline on PID 111_. [T47](test-47-fixed-delay-export.md) carries it as a limit of the merged export. The exporters run at the default `--delay 500ms`, which on this clip does not last a whole capture even in steady state (T47); at `--delay 1s`, which does, the early-subscriber hard kill fails the same way on both protocols, 2 runs each.
 
-- **On the default protocol `--epoch` declares nothing on the wire.** On `moq-lite-06` the relay
-  sees two anonymous routes: a subscription ends with the route that served it, and failover is the
-  exporter's re-request, the same path a crashed publisher replaced by a new process takes on that
-  version ([T13](test-13-downstream-grooming.md) § *Liveness*). That is the documented behaviour, not a
-  defect, but it means a deployment that passes `--epoch` and leaves the version at its default has
-  no 1+1 pair.
-- **A shared epoch removes the arrival teardown on both protocols.** No standby arrival ended a
-  subscriber, where on `ffa5b81b` and `2b689c24` a shared hop's late standby ended every one.
-- **On `moq-lite-07` a shared epoch moves a subscription to the standby without a seam, as
-  documented, and the media then decides.** The subscriber sees no error and opens no subscription;
-  the relay continues it on the other route. Each importer still numbers its groups from its own
-  start, so the continuation lands on different media. With the standby started 2 s later, all
-  three resumed, after a 3–6 s stall. With the standby started earlier, two of three aborted on a
-  timestamp below the previous group's start (its input lagging live: [Corrections](#corrections)): the [#4354](https://github.com/moq-dev/moq/issues/4354)
-  mechanism, reached by resume instead of reselection. Why the third survived with no stall is not
-  established. Upstream has since declined aligning such importers and removed the shared epoch
-  (§ *Conclusion*).
-- **A subscription made before the standby announced is not resumed on `moq-lite-07`.** It gets
-  `not found` on most of its tracks at the failover (3 of 3). That fits the standby's refusals at
-  its arrival being kept against those subscriptions, the mechanism of
-  [#4352](https://github.com/moq-dev/moq/issues/4352) no longer fatal at arrival. The mesh drill on
-  `f8215bc47` shows the refusals kept in the relay's own log (§ *Mesh source failover*); the code
-  path is not located.
-- **A clean exit on `moq-lite-07` is switched at the signal and still ends the export.** The relay
-  moves the subscriptions to the standby at once, not after the idle timeout. In the SIGTERM run it
-  did so with no error; in the SIGINT run five tracks drew `not found` and were re-requested. Both
-  exports ended on a late teletext unit within 4 s of the switch. Why the continuation arrives late
-  after a clean exit, when it does not after a hard kill, is not established.
-- **The exporter rarely survives a re-request.** Every `not found` and every lite-06 failover reaches
-  `export ts` as a re-request, after which units reach the release clock late. Late audio and data
-  frames are dropped, but the first late video or teletext unit is fatal. On the crash-replace rig
-  the late video units are the dead session's own, held through the silence
-  ([T13](test-13-downstream-grooming.md) § *Liveness*); here that is not traced, but the fix for it
-  removes the late video on the hard-kill arm (below). The export survived 2 of 9 re-requests: 2 of 5 on lite-06 and none of 4 on
-  lite-07. Six of the seven that ended did so on a missed decode deadline, and one on a timestamp
-  rewind.
-- **A different epoch on `moq-lite-07` is a replacement by design**: the newer epoch takes the
-  broadcast, and subscriptions on the older one end `unroutable`.
+- **On the default protocol `--epoch` declares nothing on the wire.** On `moq-lite-06` the relay sees two anonymous routes: a subscription ends with the route that served it, and failover is the exporter's re-request, the same path a crashed publisher replaced by a new process takes on that version ([T13](test-13-downstream-grooming.md) § _Liveness_). That is the documented behaviour, not a defect, but it means a deployment that passes `--epoch` and leaves the version at its default has no 1+1 pair.
+- **A shared epoch removes the arrival teardown on both protocols.** No standby arrival ended a subscriber, where on `ffa5b81b` and `2b689c24` a shared hop's late standby ended every one.
+- **On `moq-lite-07` a shared epoch moves a subscription to the standby without a seam, as documented, and the media then decides.** The subscriber sees no error and opens no subscription; the relay continues it on the other route. Each importer still numbers its groups from its own start, so the continuation lands on different media. With the standby started 2 s later, all three resumed, after a 3–6 s stall. With the standby started earlier, two of three aborted on a timestamp below the previous group's start (its input lagging live: [Corrections](#corrections)): the [#4354](https://github.com/moq-dev/moq/issues/4354) mechanism, reached by resume instead of reselection. Why the third survived with no stall is not established. Upstream has since declined aligning such importers and removed the shared epoch (§ _Conclusion_).
+- **A subscription made before the standby announced is not resumed on `moq-lite-07`.** It gets `not found` on most of its tracks at the failover (3 of 3). That fits the standby's refusals at its arrival being kept against those subscriptions, the mechanism of [#4352](https://github.com/moq-dev/moq/issues/4352) no longer fatal at arrival. The mesh drill on `f8215bc47` shows the refusals kept in the relay's own log (§ _Mesh source failover_); the code path is not located.
+- **A clean exit on `moq-lite-07` is switched at the signal and still ends the export.** The relay moves the subscriptions to the standby at once, not after the idle timeout. In the SIGTERM run it did so with no error; in the SIGINT run five tracks drew `not found` and were re-requested. Both exports ended on a late teletext unit within 4 s of the switch. Why the continuation arrives late after a clean exit, when it does not after a hard kill, is not established.
+- **The exporter rarely survives a re-request.** Every `not found` and every lite-06 failover reaches `export ts` as a re-request, after which units reach the release clock late. Late audio and data frames are dropped, but the first late video or teletext unit is fatal. On the crash-replace rig the late video units are the dead session's own, held through the silence ([T13](test-13-downstream-grooming.md) § _Liveness_); here that is not traced, but the fix for it removes the late video on the hard-kill arm (below). The export survived 2 of 9 re-requests: 2 of 5 on lite-06 and none of 4 on lite-07. Six of the seven that ended did so on a missed decode deadline, and one on a timestamp rewind.
+- **A different epoch on `moq-lite-07` is a replacement by design**: the newer epoch takes the broadcast, and subscriptions on the older one end `unroutable`.
 
-**The fix for the held video frames passes the shared-epoch hard kill, and removes the late video
-the base sends there.** The fix is [T13](test-13-downstream-grooming.md) § *Liveness*'s (`0ebef72c`).
-Criteria, fixed before its first run: the shared-epoch hard kill with subscribers started before the
-standby, on `moq-lite-06` and on `moq-lite-07-wip`, two runs each on the fix and one each on its base
-(`f8215bc47`), on the workstation's loopback; it passes if neither exporter exits on a missed decode
-deadline on the video PID and both resume on the standby's media. The teletext exits after a clean
-switch are outside it: teletext is not held for its DTS. Every exporter on both builds was alive at
-60 s, resumed 3–6 s after the kill and never restarted, so on this host the base did not reproduce
-the exits above, and `ts-tstd.py` on each output discriminates instead:
+**The fix for the held video frames passes the shared-epoch hard kill, and removes the late video the base sends there.** The fix is [T13](test-13-downstream-grooming.md) § _Liveness_'s (`0ebef72c`). Criteria, fixed before its first run: the shared-epoch hard kill with subscribers started before the standby, on `moq-lite-06` and on `moq-lite-07-wip`, two runs each on the fix and one each on its base (`f8215bc47`), on the workstation's loopback; it passes if neither exporter exits on a missed decode deadline on the video PID and both resume on the standby's media. The teletext exits after a clean switch are outside it: teletext is not held for its DTS. Every exporter on both builds was alive at 60 s, resumed 3–6 s after the kill and never restarted, so on this host the base did not reproduce the exits above, and `ts-tstd.py` on each output discriminates instead:
 
 | Protocol | Build | Runs × exporters | Held video frames dropped | Video units after their decode time | Audio unit over 1 s in B |
-|---|---|---|---|---|---|
+| --- | --- | --- | --- | --- | --- |
 | `moq-lite-06` | base | 1 × 2 | 0 | 20 each, the latest by 487.9 ms | 2 of 2, 7.4 s |
 | `moq-lite-06` | fix | 2 × 2 | 1 each | 0 (least margin 141.4 ms) | 0 of 4 |
 | `moq-lite-07-wip` | base | 1 × 2 | 0 | 4 each, the latest by 142.1 ms | 1 of 2, 6.7 s |
 | `moq-lite-07-wip` | fix | 2 × 2 | 1–2 each | 0 (least margin 141.2 ms) | 4 of 4, 7.8 s |
 
-The audio unit sent before the silence and decoded after it is on both builds, so it is not the
-fix's. One fix run on `moq-lite-07-wip` also overflows the system TB by one packet (676 of 512 B);
-the base's single run does not, and the fix does not touch table emission, so it is not attributed.
+The audio unit sent before the silence and decoded after it is on both builds, so it is not the fix's. One fix run on `moq-lite-07-wip` also overflows the system TB by one packet (676 of 512 B); the base's single run does not, and the fix does not touch table emission, so it is not attributed.
 
-So on this build no configuration of two `moq import ts` publishers survives every case on one
-relay. The closest is moq-lite 07 with a shared epoch, subscribers that joined after both publishers,
-and a hard kill. In that configuration whether the export survives depends on how the two importers'
-group numbering happens to compare.
+So on this build no configuration of two `moq import ts` publishers survives every case on one relay. The closest is moq-lite 07 with a shared epoch, subscribers that joined after both publishers, and a hard kill. In that configuration whether the export survives depends on how the two importers' group numbering happens to compare.
 
-This drill counts bytes and does not grade the splice for continuity or PCR. It runs on one host
-over loopback, one replicate per graceful arm, and the stall figures are at a 6 s idle timeout; at
-the 30 s default they would be expected to scale as the mesh drill's did, which is *reasoned*. The
-`2b689c24` arms ran beside a two-relay mesh drill on other ports of the same 8-vCPU host, with the
-load average under 2; the October arms ran one at a time on the same host. The mesh drill is
-§ *Mesh source failover*.
+This drill counts bytes and does not grade the splice for continuity or PCR. It runs on one host over loopback, one replicate per graceful arm, and the stall figures are at a 6 s idle timeout; at the 30 s default they would be expected to scale as the mesh drill's did, which is _reasoned_. The `2b689c24` arms ran beside a two-relay mesh drill on other ports of the same 8-vCPU host, with the load average under 2; the October arms ran one at a time on the same host. The mesh drill is § _Mesh source failover_.
 
 ### Single-source 1+1 failover — a common source is required; on `ffa5b81b` offset numbering also costs outage
 
-The maintainer's position on #2545 is that *"if you're publishing two separate broadcasts (different
-timestamps, codecs, segments) with the same name then failover is impossible … the application needs
-to reinitialise everything on a switch"*. Testing that requires a rig built around **one source
-feeding both publishers**, which is what a real 1+1 pair is — two views of a single feed, not two
-encodes. (A drill that feeds the two publishers *independent copies* of a clip measures its own clock
-skew instead; see [Corrections](#corrections).)
+The maintainer's position on #2545 is that _"if you're publishing two separate broadcasts (different timestamps, codecs, segments) with the same name then failover is impossible … the application needs to reinitialise everything on a switch"_. Testing that requires a rig built around **one source feeding both publishers**, which is what a real 1+1 pair is — two views of a single feed, not two encodes. (A drill that feeds the two publishers _independent copies_ of a clip measures its own clock skew instead; see [Corrections](#corrections).)
 
-**Why the source matters, from the code.** A publisher's moq group sequence numbers are a per-importer
-counter reset to 0 at its first keyframe (`append_group()` → `max_sequence + 1`, seeded 0, in
-`rs/moq-net/src/model/track.rs`); PTS and track names come from the source bytes (PMT-derived
-`unique_track` names; PCR/PTS from the TS). So two importers emit an *identical* broadcast only if
-they consume the same bytes from the same keyframe. Prediction: co-started publishers align exactly;
-a late/mid-stream joiner is offset in group numbering (its group 0 = the primary's group N).
+**Why the source matters, from the code.** A publisher's moq group sequence numbers are a per-importer counter reset to 0 at its first keyframe (`append_group()` → `max_sequence + 1`, seeded 0, in `rs/moq-net/src/model/track.rs`); PTS and track names come from the source bytes (PMT-derived `unique_track` names; PCR/PTS from the TS). So two importers emit an _identical_ broadcast only if they consume the same bytes from the same keyframe. Prediction: co-started publishers align exactly; a late/mid-stream joiner is offset in group numbering (its group 0 = the primary's group N).
 
-**Rig** (`src_failover.sh`, two meshed relays 4443/5443, `sub1` on relay A watched for failover,
-`sub3` on relay B; shared `--origin`; hard-kill = SIGKILL the active importer only, source survives):
+**Rig** (`src_failover.sh`, two meshed relays 4443/5443, `sub1` on relay A watched for failover, `sub3` on relay B; shared `--origin`; hard-kill = SIGKILL the active importer only, source survives):
 
-- **E1 — byte-identical** (`MODE=gtee`): one `tsp regulate` source fanned by `gtee --output-error=warn`
-  into two co-started importers (both open their fifo before the source flows, so both get byte 0).
-  `gtee` keeps feeding the survivor when the killed importer's fifo reader closes (EPIPE, not block).
-- **E2 — mid-stream standby** (`MODE=mcast`): one live multicast feed (`tsp -O ip 239.255.42.99:5000
-  --local-address <en0> --ttl 1`, host-local); `pubB` joins the running feed ~11 s after `pubA`, so
-  its group numbering is offset by construction. This is the production shape (publishers always join
-  an already-running feed).
+- **E1 — byte-identical** (`MODE=gtee`): one `tsp regulate` source fanned by `gtee --output-error=warn` into two co-started importers (both open their fifo before the source flows, so both get byte 0). `gtee` keeps feeding the survivor when the killed importer's fifo reader closes (EPIPE, not block).
+- **E2 — mid-stream standby** (`MODE=mcast`): one live multicast feed (`tsp -O ip 239.255.42.99:5000 --local-address <en0> --ttl 1`, host-local); `pubB` joins the running feed ~11 s after `pubA`, so its group numbering is offset by construction. This is the production shape (publishers always join an already-running feed).
 
 **Results** (hard kill, default 30 s idle unless noted):
 
-- **E1 proves the broadcasts are identical in content.** `sub1` (relay A/pubA) and `sub3` (relay
-  B/pubB) grow with **identical per-second deltas** before the kill, separated only by a **constant
-  752-byte (= exactly 4 TS packets) startup offset** on one leg — so steady-state content is
-  byte-identical and only the initial emission differs by a 4-packet preamble. (On builds before the
-  codec/track split [#2636](https://github.com/moq-dev/moq/pull/2636) and the origin-model changes,
-  the two legs were byte-for-byte equal including the preamble.) Kill pubA → `sub1` resumed **~31 s
-  later**, output TS **0 CC errors**, one `current group evicted; skipping to next buffered group`.
-  `gtee` kept feeding pubB throughout (sub3 uninterrupted).
-- **E2 — on those builds the mid-stream offset did not break failover.** Despite pubB's group numbers being offset,
-  `sub1` still reselected onto pubB and resumed **~30 s after the kill**, TS **0 CC errors**, and the
-  exporter **subscribed once** (`catalog.json`, `0.avc3`, `1.ts`, `2.ts`, `3.ts`, `4.ts`, `0.mp2`,
-  `0.ts`) and **never re-subscribed or reinitialised the catalog** across the switch — a single
-  `current group evicted; skipping to next buffered group error=Hang(Moq(Remote(24)))`.
-- **Mechanism, on those builds.** The exporter navigated by track name + live edge, not absolute
-  group number: on the reselect it dropped the evicted (dead-pubA) group and resumed at pubB's
-  current live edge. So the binding requirement was a **common source** — identical PMT/track layout
-  and a consistent PTS timeline, both guaranteed by one feed — **not** byte-identical segmentation.
-  Exact group-sequence identity was *sufficient* (E1) but not *necessary* (E2).
-- **On `ffa5b81b` the offset is no longer free.** The relay's splice does not deliver below the last
-  group it delivered, so the subscriber waits until the standby's numbering reaches it, and the
-  standby's lag adds to the outage (§ *Mesh source failover*: kill + 23 s at a 24 s lag, against
-  kill + 10 s at 4 s). A common source is still necessary; on this build aligned group numbering
-  across the pair is what keeps the outage at the detection bound.
+- **E1 proves the broadcasts are identical in content.** `sub1` (relay A/pubA) and `sub3` (relay B/pubB) grow with **identical per-second deltas** before the kill, separated only by a **constant 752-byte (= exactly 4 TS packets) startup offset** on one leg — so steady-state content is byte-identical and only the initial emission differs by a 4-packet preamble. (On builds before the codec/track split [#2636](https://github.com/moq-dev/moq/pull/2636) and the origin-model changes, the two legs were byte-for-byte equal including the preamble.) Kill pubA → `sub1` resumed **~31 s later**, output TS **0 CC errors**, one `current group evicted; skipping to next buffered group`. `gtee` kept feeding pubB throughout (sub3 uninterrupted).
+- **E2 — on those builds the mid-stream offset did not break failover.** Despite pubB's group numbers being offset, `sub1` still reselected onto pubB and resumed **~30 s after the kill**, TS **0 CC errors**, and the exporter **subscribed once** (`catalog.json`, `0.avc3`, `1.ts`, `2.ts`, `3.ts`, `4.ts`, `0.mp2`, `0.ts`) and **never re-subscribed or reinitialised the catalog** across the switch — a single `current group evicted; skipping to next buffered group error=Hang(Moq(Remote(24)))`.
+- **Mechanism, on those builds.** The exporter navigated by track name + live edge, not absolute group number: on the reselect it dropped the evicted (dead-pubA) group and resumed at pubB's current live edge. So the binding requirement was a **common source** — identical PMT/track layout and a consistent PTS timeline, both guaranteed by one feed — **not** byte-identical segmentation. Exact group-sequence identity was _sufficient_ (E1) but not _necessary_ (E2).
+- **On `ffa5b81b` the offset is no longer free.** The relay's splice does not deliver below the last group it delivered, so the subscriber waits until the standby's numbering reaches it, and the standby's lag adds to the outage (§ _Mesh source failover_: kill + 23 s at a 24 s lag, against kill + 10 s at 4 s). A common source is still necessary; on this build aligned group numbering across the pair is what keeps the outage at the detection bound.
 
-**"0 CC errors" is not "hitless."** Continuity_counter is a property of the exporter's single output
-mux, which never resets, so it stays clean across the splice and the TS is structurally valid/playable.
-The ~30 s outage instead shows up as a **PCR/PTS discontinuity** — `tsp analyze` reports `pcrleap=3`
-on the video/PCR PID (PID 111) while CC errors stay 0 — i.e. the media clock jumps forward over a
-content hole. Valid TS, but a real gap: **break-before-make**, not make-before-break.
+**"0 CC errors" is not "hitless."** Continuity_counter is a property of the exporter's single output mux, which never resets, so it stays clean across the splice and the TS is structurally valid/playable. The ~30 s outage instead shows up as a **PCR/PTS discontinuity** — `tsp analyze` reports `pcrleap=3` on the video/PCR PID (PID 111) while CC errors stay 0 — i.e. the media clock jumps forward over a content hole. Valid TS, but a real gap: **break-before-make**, not make-before-break.
 
-**Can the gap shrink?** The ~30 s is the QUIC idle timeout (a hard kill sends no CONNECTION_CLOSE, so
-the relay serves the dead source until idle expiry). It is tunable via `--server-quic-idle-timeout`
-(with keep-alive kept below it):
+**Can the gap shrink?** The ~30 s is the QUIC idle timeout (a hard kill sends no CONNECTION_CLOSE, so the relay serves the dead source until idle expiry). It is tunable via `--server-quic-idle-timeout` (with keep-alive kept below it):
 
 | relay idle (`RIDLE`) | reselect after kill | outcome |
-|---|---|---|
+| --- | --- | --- |
 | 30 s (default) | ~30–31 s | ✅ clean |
 | 10 s | ~11 s | ✅ clean |
 | 5 s (keep-alive 1 s) | — | ❌ only the trailing buffered group drained, then stalled; failover did not complete |
 
-So detection is reliably reducible to **~10 s**; a few seconds is fragile (the tight idle/keep-alive
-starts tearing down healthy sessions). **Sub-second / hitless is not reachable by relay reselect**,
-which is inherently detect-then-switch. True hitless needs make-before-break at the *receiver* —
-subscribe to both legs concurrently and switch locally with zero detection delay (ST 2022-7 style).
-The common-source result above is exactly what makes that receiver-side hitless switch feasible: the
-two legs are the same broadcast, so an IRD can merge them. MoQ does not do this dual-carriage natively.
+So detection is reliably reducible to **~10 s**; a few seconds is fragile (the tight idle/keep-alive starts tearing down healthy sessions). **Sub-second / hitless is not reachable by relay reselect**, which is inherently detect-then-switch. True hitless needs make-before-break at the _receiver_ — subscribe to both legs concurrently and switch locally with zero detection delay (ST 2022-7 style). The common-source result above is exactly what makes that receiver-side hitless switch feasible: the two legs are the same broadcast, so an IRD can merge them. MoQ does not do this dual-carriage natively.
 
-**Bearing on the maintainer's claim.** Confirmed in substance: with a common source the switch is not
-hitless and the consumer does re-anchor to the new live edge. Refined in one respect, on the builds
-of E1/E2: byte-identical *segmentation* was not required, because the exporter skipped to live
-rather than demanding group-number continuity. On `ffa5b81b` the relay's splice floor reintroduces a
-cost for offset numbering — not impossibility, but an outage extended by the standby's lag. What would
-genuinely make failover "impossible" is a divergent **track layout / codec** across the pair (two
-independent encodes), which a single shared source rules out by construction.
+**Bearing on the maintainer's claim.** Confirmed in substance: with a common source the switch is not hitless and the consumer does re-anchor to the new live edge. Refined in one respect, on the builds of E1/E2: byte-identical _segmentation_ was not required, because the exporter skipped to live rather than demanding group-number continuity. On `ffa5b81b` the relay's splice floor reintroduces a cost for offset numbering — not impossibility, but an outage extended by the standby's lag. What would genuinely make failover "impossible" is a divergent **track layout / codec** across the pair (two independent encodes), which a single shared source rules out by construction.
 
 ### What the cluster/detach/resume rewrite changed
 
-A dense sequence of upstream merges rewrote the exact routing, resume and detach paths these drills
-exercise. **No drill outcome changed**, which is the main thing to record — but the machinery beneath
-them did, and the resume path the mid-stream-standby drill exercises is now the hardened one. The
-relevant PRs:
+A dense sequence of upstream merges rewrote the exact routing, resume and detach paths these drills exercise. **No drill outcome changed**, which is the main thing to record — but the machinery beneath them did, and the resume path the mid-stream-standby drill exercises is now the hardened one. The relevant PRs:
 
-- **#2629 — MoQ Cluster extension over moq-transport.** Generalises the mesh machinery #2473 gave
-  moq-lite (append own Hop ID, discard a path already containing our Hop ID = loop prevention,
-  saturating link cost, advertise `0` while actively carrying then restore after a grace period, serve
-  by per-peer exclusion) to the IETF draft-17+ path, and **consolidates the policy into one place**
-  (`advertisable_routes` / `outgoing_cost` / `COST_LINGER` in `model/broadcast.rs`, called by both the
-  lite and IETF publishers). Link cost is now **per-direction** (paid-egress model). Also fixed a
-  pathless-advertisement interchangeability bug that "tore down the source a client was resolving a
-  track through," and a reflected-replacement leaving a superseded route attached.
-- **#2616 / #2654 / #2659 — namespace detach semantics.** An abnormally-lost namespace stream now
-  detaches **abruptly**, holding the front open for the origin's linger (moq-relay gives its cluster
-  origin a 5 s window) so a source re-attaching within the window splices back — the mesh analogue of
-  the #2469 exporter linger. #2659 also fixed a bug live on `main`: on IETF v14-16 a routine
-  `PUBLISH_NAMESPACE_DONE` decoded as `UnexpectedMessage` and closed the **whole session**.
-- **#2664 — v14/v15 namespace lookup keyed by direction.** In a mesh where two relays advertise the
-  same path to each other, a terminal message could tear down the wrong stream. IETF v14/15 only.
-- **#2666 — origin resume/route hardening.** Fixes that touch our resume path directly: an
-  empty-segment failover no longer turns a live-edge subscription into a **full-history backfill**; a
-  standby joining a live front before it has created every track **no longer kills the incumbent's
-  subscription** (the refuser is ruled out of that one track only); unbounded segment accumulation is
-  pruned; a stranded logical track on takeover failure is aborted; fetch gained failover.
+- **#2629 — MoQ Cluster extension over moq-transport.** Generalises the mesh machinery #2473 gave moq-lite (append own Hop ID, discard a path already containing our Hop ID = loop prevention, saturating link cost, advertise `0` while actively carrying then restore after a grace period, serve by per-peer exclusion) to the IETF draft-17+ path, and **consolidates the policy into one place** (`advertisable_routes` / `outgoing_cost` / `COST_LINGER` in `model/broadcast.rs`, called by both the lite and IETF publishers). Link cost is now **per-direction** (paid-egress model). Also fixed a pathless-advertisement interchangeability bug that "tore down the source a client was resolving a track through," and a reflected-replacement leaving a superseded route attached.
+- **#2616 / #2654 / #2659 — namespace detach semantics.** An abnormally-lost namespace stream now detaches **abruptly**, holding the front open for the origin's linger (moq-relay gives its cluster origin a 5 s window) so a source re-attaching within the window splices back — the mesh analogue of the #2469 exporter linger. #2659 also fixed a bug live on `main`: on IETF v14-16 a routine `PUBLISH_NAMESPACE_DONE` decoded as `UnexpectedMessage` and closed the **whole session**.
+- **#2664 — v14/v15 namespace lookup keyed by direction.** In a mesh where two relays advertise the same path to each other, a terminal message could tear down the wrong stream. IETF v14/15 only.
+- **#2666 — origin resume/route hardening.** Fixes that touch our resume path directly: an empty-segment failover no longer turns a live-edge subscription into a **full-history backfill**; a standby joining a live front before it has created every track **no longer kills the incumbent's subscription** (the refuser is ruled out of that one track only); unbounded segment accumulation is pruned; a stranded logical track on takeover failure is aborted; fetch gained failover.
 
 Two effects of this work are visible in the drills:
 
-- **The resume path is hardened where it matters to us.** E2 (standby joining mid-stream) resumes as a
-  buffered-group drain, **not a full-history backfill** — the #2666 live-edge fix holding. The
-  incumbent is **never torn down by the partially-joined standby**, the case #2666 specifically
-  hardens. `sub3` logs a transient `subscribe error … code=13` on every track at the kill instant,
-  then reselects.
-- **Two co-started exporters are no longer byte-identical from the first packet**, differing by the
-  4-packet startup preamble described under E1 above. Steady-state content is unaffected.
+- **The resume path is hardened where it matters to us.** E2 (standby joining mid-stream) resumes as a buffered-group drain, **not a full-history backfill** — the #2666 live-edge fix holding. The incumbent is **never torn down by the partially-joined standby**, the case #2666 specifically hardens. `sub3` logs a transient `subscribe error … code=13` on every track at the kill instant, then reselects.
+- **Two co-started exporters are no longer byte-identical from the first packet**, differing by the 4-packet startup preamble described under E1 above. Steady-state content is unaffected.
 
-Not drilled: a dedicated **relay↔relay transient-blip** to exercise #2616's abrupt-detach-with-linger
-splice-back. It cannot be isolated cleanly in this single-host loopback rig without peer-link fault
-injection, and upstream covers it with mutation-checked tests
-(`a_lost_namespace_stream_leaves_the_linger_window_open`, `the_last_owner_out_decides_the_detach`). Left
-as a future harness item (loopback `netem` on the cluster-peer connection).
+Not drilled: a dedicated **relay↔relay transient-blip** to exercise #2616's abrupt-detach-with-linger splice-back. It cannot be isolated cleanly in this single-host loopback rig without peer-link fault injection, and upstream covers it with mutation-checked tests (`a_lost_namespace_stream_leaves_the_linger_window_open`, `the_last_owner_out_decides_the_detach`). Left as a future harness item (loopback `netem` on the cluster-peer connection).
 
 ### Spec cross-check: the standard specifies relay object-dedup that this implementation does not
 
-An external briefing (Quortex, "Running Multiple Sources over Media over QUIC") describes MOQT
-active-active as *relays de-duplicate bit-for-bit-identical sources at the object level, ST 2022-7
-style*, whereas these drills show `moq-dev`/`moq-lite` doing **content-agnostic route selection**.
-Checked against **draft-ietf-moq-transport-19**, the briefing is faithful to the draft; the divergence
-is **implementation**, not spec:
+An external briefing (Quortex, "Running Multiple Sources over Media over QUIC") describes MOQT active-active as _relays de-duplicate bit-for-bit-identical sources at the object level, ST 2022-7 style_, whereas these drills show `moq-dev`/`moq-lite` doing **content-agnostic route selection**. Checked against **draft-ietf-moq-transport-19**, the briefing is faithful to the draft; the divergence is **implementation**, not spec:
 
-- **§9.3 Multiple Publishers.** *"Relays MUST handle Objects for the same Track from multiple
-  publishers and forward them to matching Established subscriptions. The Relay SHOULD attempt to
-  deduplicate Objects before forwarding, subject to implementation constraints."* So relay object-dedup
-  is the standard's model — a **SHOULD**, hedged by "implementation constraints."
-- **§9.1 Caching Relays.** Dedup is keyed on **Full Track Name + Group ID + Object ID**; on a collision
-  a relay *"MAY ignore subsequently received Objects"* (first-copy-wins, the ST 2022-7 analogue). A
-  duplicate object with a *different* Forwarding Preference, Subgroup ID, Priority **or Payload** →
-  the track is **Malformed**.
-- **§2.4.2 Malformed Tracks.** On a Malformed track a relay *"MUST immediately terminate downstream
-  subscriptions with PUBLISH_DONE"*. So the briefing's "two sources that disagree → treated as broken,
-  data dropped, receivers disconnected" is **also** spec-accurate.
-- **Make-before-break** is in the draft too (the network-migration text): the relay subscribes to both
-  sessions and *"will attempt to deduplicate Objects received on both subscriptions … the subscriptions
-  downstream from the relay do not observe this change."*
+- **§9.3 Multiple Publishers.** _"Relays MUST handle Objects for the same Track from multiple publishers and forward them to matching Established subscriptions. The Relay SHOULD attempt to deduplicate Objects before forwarding, subject to implementation constraints."_ So relay object-dedup is the standard's model — a **SHOULD**, hedged by "implementation constraints."
+- **§9.1 Caching Relays.** Dedup is keyed on **Full Track Name + Group ID + Object ID**; on a collision a relay _"MAY ignore subsequently received Objects"_ (first-copy-wins, the ST 2022-7 analogue). A duplicate object with a _different_ Forwarding Preference, Subgroup ID, Priority **or Payload** → the track is **Malformed**.
+- **§2.4.2 Malformed Tracks.** On a Malformed track a relay _"MUST immediately terminate downstream subscriptions with PUBLISH_DONE"_. So the briefing's "two sources that disagree → treated as broken, data dropped, receivers disconnected" is **also** spec-accurate.
+- **Make-before-break** is in the draft too (the network-migration text): the relay subscribes to both sessions and _"will attempt to deduplicate Objects received on both subscriptions … the subscriptions downstream from the relay do not observe this change."_
 
 Two things separate that from what we measured, and both matter:
 
-1. **`moq-dev`/`moq-lite` implements the permitted *alternative*, not object-dedup.** Its multi-source
-   model is per-peer route selection + a `moq --hop` (formerly `--origin`) interchangeability declaration
-   (`rs/moq-net/src/model/origin.rs` `best_route`/`reselect`); the relay never inspects object bytes and
-   never de-duplicates at the object level. That is a legitimate reading of "SHOULD … subject to
-   implementation constraints," but it means the **content-agnostic route-selection + break-before-make
-   reselect** we characterise is *this implementation's* behaviour, **not** MOQT's ceiling. `moq-lite` is
-   also a simplified variant, not the draft verbatim; the maintainer's "content-agnostic, won't bridge
-   two broadcasts" is a (core-author) design stance that diverges from the §9.3 SHOULD.
-2. **Even spec-conformant dedup needs identical object *identifiers*, not just identical media bytes.**
-   Dedup keys on Group ID + Object ID (§9.1), and a MoQ group sequence number is a **per-importer counter
-   reset to 0 at the first keyframe** (`append_group()`, `rs/moq-net/src/model/track.rs`) — so two
-   independent publishers of one feed do **not** naturally share IDs (our E2 mid-stream joiner is offset
-   by construction). A dedup relay would not recognise offset objects as duplicates. Spec dedup therefore
-   demands encoder+publisher determinism down to **object segmentation and numbering** — the object-layer
-   analogue of ST 2022-7's aligned RTP sequence numbers, and a strictly *stronger* bar than "bit-for-bit
-   identical output." This is the same determinism wall the ST 2022-7 precondition study hit (two
-   independent live pacers are not byte-identical; §"ST 2022-7 output-determinism precondition").
+1. **`moq-dev`/`moq-lite` implements the permitted _alternative_, not object-dedup.** Its multi-source model is per-peer route selection + a `moq --hop` (formerly `--origin`) interchangeability declaration (`rs/moq-net/src/model/origin.rs` `best_route`/`reselect`); the relay never inspects object bytes and never de-duplicates at the object level. That is a legitimate reading of "SHOULD … subject to implementation constraints," but it means the **content-agnostic route-selection + break-before-make reselect** we characterise is _this implementation's_ behaviour, **not** MOQT's ceiling. `moq-lite` is also a simplified variant, not the draft verbatim; the maintainer's "content-agnostic, won't bridge two broadcasts" is a (core-author) design stance that diverges from the §9.3 SHOULD.
+2. **Even spec-conformant dedup needs identical object _identifiers_, not just identical media bytes.** Dedup keys on Group ID + Object ID (§9.1), and a MoQ group sequence number is a **per-importer counter reset to 0 at the first keyframe** (`append_group()`, `rs/moq-net/src/model/track.rs`) — so two independent publishers of one feed do **not** naturally share IDs (our E2 mid-stream joiner is offset by construction). A dedup relay would not recognise offset objects as duplicates. Spec dedup therefore demands encoder+publisher determinism down to **object segmentation and numbering** — the object-layer analogue of ST 2022-7's aligned RTP sequence numbers, and a strictly _stronger_ bar than "bit-for-bit identical output." This is the same determinism wall the ST 2022-7 precondition study hit (two independent live pacers are not byte-identical; §"ST 2022-7 output-determinism precondition").
 
-**Bearing on our conclusions.** Unchanged in substance — receiver-side ST 2022-7 selection over a common
-source remains the robust, buildable-today posture, and it is *reinforced* by point 2 (aligning MoQ
-object numbering across two publishers is at least as hard as the RTP-sequence alignment ST 2022-7 needs).
-What changes is **framing**: "a seamless relay-side merge is out of scope" is true of *this
-implementation*, not of the standard, which specifies object-dedup as a SHOULD. The genuinely
-out-of-scope case in *both* spec and implementation is bridging two *different* broadcasts (timestamp
-rewriting) — that is Malformed under §9.1, and is the "won't merge two broadcasts" the maintainer means.
-Docs corrected accordingly ([evidence](evidence.md) §3.4, [architecture](../docs/architecture.md) §8.4/§5.1,
-[architecture](../docs/architecture.md) §8.4, [architecture](../docs/architecture.md) §5.5/§14.5).
+**Bearing on our conclusions.** Unchanged in substance — receiver-side ST 2022-7 selection over a common source remains the robust, buildable-today posture, and it is _reinforced_ by point 2 (aligning MoQ object numbering across two publishers is at least as hard as the RTP-sequence alignment ST 2022-7 needs). What changes is **framing**: "a seamless relay-side merge is out of scope" is true of _this implementation_, not of the standard, which specifies object-dedup as a SHOULD. The genuinely out-of-scope case in _both_ spec and implementation is bridging two _different_ broadcasts (timestamp rewriting) — that is Malformed under §9.1, and is the "won't merge two broadcasts" the maintainer means. Docs corrected accordingly ([evidence](evidence.md) §3.4, [architecture](../docs/architecture.md) §8.4/§5.1, [architecture](../docs/architecture.md) §8.4, [architecture](../docs/architecture.md) §5.5/§14.5).
 
 ### Reconnect latency and media retention
 
-- **[#2647](https://github.com/moq-dev/moq/pull/2647) — fail-fast retries (time-bounded jittered
-  backoff).** Reconnect ceiling drops 30 s → 5 s and the loop is bounded by a ~10 s budget instead of
-  the old 5-minute loop. `reconnect.sh` (kill relay t=12, restart t=24, `--client-quic-idle-timeout
-  6s`): both exporters survive, skip the evicted group (`current group evicted; skipping to next
-  buffered group error=Hang(Moq(Dropped))` — the resume path, not the fatal `json: dropped`), and
-  **`sub1` resumes 4 s after the relay returns**, versus the whole-outage ~16-17 s (which is
-  dominated by the fixed 12 s relay-down window). The reconnect log shows the new policy directly:
-  capped jittered backoff waits of **0.637 s then 1.51 s**. Separately, `export ts` against a **dead**
-  relay now **gives up** — `ERROR reconnect timed out after 10s: connect timed out after 30s` — instead
-  of retrying for 5 minutes; wall-clock to the error is **bounded by the QUIC connect timeout** (≈ 30 s
-  at the 30 s default, ≈ 17 s at `--client-quic-idle-timeout 8s`), so the 10 s budget stops the endless
-  loop while the actual detection time is tunable via the connect/idle timeout. Net: worst-case
-  re-attach tightened from ≤ 30 s to ≤ 5 s, and dead-relay detection from 5 min to tens of seconds —
-  the axis that matters for supervisor-driven subscriber re-home.
-- **[#2615](https://github.com/moq-dev/moq/pull/2615) — 30 s media-track retention + `moq import
-  --latency-max`.** The `--latency-max` knob is present on `moq import`. The 30 s retention does **not**
-  change live-edge follow: on resume the exporter skipped to the newest group (the reconnect above
-  drained **+5.6 MB ≈ a few seconds**, not a 30 s / ~37 MB history replay), because the subscription's
-  own `latency_max` still defaults to 0. No effect on our failover behaviour; retention is a relay-side
-  *ceiling*, not a playout change.
+- **[#2647](https://github.com/moq-dev/moq/pull/2647) — fail-fast retries (time-bounded jittered backoff).** Reconnect ceiling drops 30 s → 5 s and the loop is bounded by a ~10 s budget instead of the old 5-minute loop. `reconnect.sh` (kill relay t=12, restart t=24, `--client-quic-idle-timeout 6s`): both exporters survive, skip the evicted group (`current group evicted; skipping to next buffered group error=Hang(Moq(Dropped))` — the resume path, not the fatal `json: dropped`), and **`sub1` resumes 4 s after the relay returns**, versus the whole-outage ~16-17 s (which is dominated by the fixed 12 s relay-down window). The reconnect log shows the new policy directly: capped jittered backoff waits of **0.637 s then 1.51 s**. Separately, `export ts` against a **dead** relay now **gives up** — `ERROR reconnect timed out after 10s: connect timed out after 30s` — instead of retrying for 5 minutes; wall-clock to the error is **bounded by the QUIC connect timeout** (≈ 30 s at the 30 s default, ≈ 17 s at `--client-quic-idle-timeout 8s`), so the 10 s budget stops the endless loop while the actual detection time is tunable via the connect/idle timeout. Net: worst-case re-attach tightened from ≤ 30 s to ≤ 5 s, and dead-relay detection from 5 min to tens of seconds — the axis that matters for supervisor-driven subscriber re-home.
+- **[#2615](https://github.com/moq-dev/moq/pull/2615) — 30 s media-track retention + `moq import --latency-max`.** The `--latency-max` knob is present on `moq import`. The 30 s retention does **not** change live-edge follow: on resume the exporter skipped to the newest group (the reconnect above drained **+5.6 MB ≈ a few seconds**, not a 30 s / ~37 MB history replay), because the subscription's own `latency_max` still defaults to 0. No effect on our failover behaviour; retention is a relay-side _ceiling_, not a playout change.
 
 ### The #2701 takeover livelock — the most serious relay defect seen in this campaign
 
-This is a different failure mode from anything these drills grade, and it is recorded because of its
-severity and its operational consequence. `serve_track` cleared its
-`dead` set on every successful takeover, which un-skipped a *closing but still attached* source; the
-reselect then dispatched the corpse, the corpse failed instantly, and the fallback re-selected the
-healthy standby — all resolving synchronously, so the task **spun inside a single poll** and pinned a
-tokio worker. With as many spinning tasks as workers the process goes dark: no logs, no health
-endpoint, no accepts, 100 % CPU, and no path back to a good state. Upstream attributes a production
-relay-fleet wedge (three regions, 8+ hours) to it, triggered by **cluster peer session churn** — i.e.
-by running exactly the clustered topology this project recommends. It was present in every build
-drilled and signed off here, including the 0.14.7 release. These drills never hit it because
-provoking it needs a specific wake ordering, which is why upstream's deterministic
-`test_active_corpse_does_not_livelock_takeover` is the right net for it and a timed drill is not.
-Operational consequence: a clustered relay needs **liveness** monitoring (does it still accept and
-serve?), not just a process-alive check, because this failure keeps the process alive and unresponsive.
+This is a different failure mode from anything these drills grade, and it is recorded because of its severity and its operational consequence. `serve_track` cleared its `dead` set on every successful takeover, which un-skipped a _closing but still attached_ source; the reselect then dispatched the corpse, the corpse failed instantly, and the fallback re-selected the healthy standby — all resolving synchronously, so the task **spun inside a single poll** and pinned a tokio worker. With as many spinning tasks as workers the process goes dark: no logs, no health endpoint, no accepts, 100 % CPU, and no path back to a good state. Upstream attributes a production relay-fleet wedge (three regions, 8+ hours) to it, triggered by **cluster peer session churn** — i.e. by running exactly the clustered topology this project recommends. It was present in every build drilled and signed off here, including the 0.14.7 release. These drills never hit it because provoking it needs a specific wake ordering, which is why upstream's deterministic `test_active_corpse_does_not_livelock_takeover` is the right net for it and a timed drill is not. Operational consequence: a clustered relay needs **liveness** monitoring (does it still accept and serve?), not just a process-alive check, because this failure keeps the process alive and unresponsive.
 
 ### Segmented lane: the same questions, answered from the other side
 
-All figures are from a 75 s window with the event at t=25 s, the source at 9.95 Mbps, and
-`rate_ratio` measured against that source rate over the whole window — so a ratio of 1.0 means the
-receiver ended the window holding every byte the source produced during it, gap or no gap. The
-baseline's own noise floor is a 2–3 s stall, which is the 2 s segment cadence rather than an
-impairment; nothing below that is a finding.
+All figures are from a 75 s window with the event at t=25 s, the source at 9.95 Mbps, and `rate_ratio` measured against that source rate over the whole window — so a ratio of 1.0 means the receiver ended the window holding every byte the source produced during it, gap or no gap. The baseline's own noise floor is a 2–3 s stall, which is the 2 s segment cadence rather than an impairment; nothing below that is a finding.
 
 | Drill | Config | rate_ratio | max stall | CC disc | PCR rewinds | receiver alive |
-|---|---|---|---|---|---|---|
+| --- | --- | --- | --- | --- | --- | --- |
 | baseline | — | 1.012 | 2 s | 0 | 0 | ✅ |
 | origin restart (10 s down) | `tsp -I hls` | 0.354 | 49 s | 0 | 0 | ❌ **exits** |
 | origin restart (10 s down) | FFmpeg | 0.394 | 46 s | 0 | 0 | ❌ **exits** |
@@ -1023,146 +423,56 @@ impairment; nothing below that is a finding.
 | active/active, common source, SIGKILL | shared names | **1.012** | 2 s | 0 | **0** | ✅ |
 | active/active, common source, SIGTERM | shared names | **1.002** | 3 s | 0 | **0** | ✅ |
 
-**A dead serving node costs nothing but the outage — to a client that retries.** HTTP holds no
-session state, so nothing has to be re-established: the next successful GET *is* the recovery. With
-the retrying client the origin was killed for 10 s and the client logged `playlist recovered after
-10.10 s`, resumed on its first successful poll, and then **refetched everything it had missed** from
-the segment store, ending the window at 1.012 of source rate with zero continuity errors. The outage
-was a delay, not a hole.
+**A dead serving node costs nothing but the outage — to a client that retries.** HTTP holds no session state, so nothing has to be re-established: the next successful GET _is_ the recovery. With the retrying client the origin was killed for 10 s and the client logged `playlist recovered after 10.10 s`, resumed on its first successful poll, and then **refetched everything it had missed** from the segment store, ending the window at 1.012 of source rate with zero continuity errors. The outage was a delay, not a hole.
 
-The contrast with the media-aware relay restart is not really about how fast each resumes — that lane
-resumes about four seconds after the relay returns, which is the same order as one poll interval here.
-It is about what happens to the media produced while the node was down. The exporter skips to the live
-edge, so the outage is a **content hole**; the retrying client refetches the backlog from a store that
-kept accumulating, so the outage is a **delay**. One lane loses the content and the other does not.
+The contrast with the media-aware relay restart is not really about how fast each resumes — that lane resumes about four seconds after the relay returns, which is the same order as one poll interval here. It is about what happens to the media produced while the node was down. The exporter skips to the live edge, so the outage is a **content hole**; the retrying client refetches the backlog from a store that kept accumulating, so the outage is a **delay**. One lane loses the content and the other does not.
 
-The qualification is severe and belongs next to the result. **Neither off-the-shelf TS client
-survives at all.** `tsp -I hls` exits at the first refused connection and never returns; FFmpeg
-prints `Failed to reload playlist 0` and exits, with every retry knob it offers already set. So this
-lane's resilience to a serving-node failure is available in the protocol and absent from both tools
-a broadcaster would reach for first — a packaging problem rather than a transport one, but a real
-one, and it is why the drill needed a client written for it.
+The qualification is severe and belongs next to the result. **Neither off-the-shelf TS client survives at all.** `tsp -I hls` exits at the first refused connection and never returns; FFmpeg prints `Failed to reload playlist 0` and exits, with every retry knob it offers already set. So this lane's resilience to a serving-node failure is available in the protocol and absent from both tools a broadcaster would reach for first — a packaging problem rather than a transport one, but a real one, and it is why the drill needed a client written for it.
 
-**Naive active/active does not collapse the stream — it silently corrupts it.** Two independently
-started packagers writing into one namespace both keep running, and the playlist becomes a
-single mutable file with a last-writer-wins update rule; the watcher shows ownership alternating
-between the two and the media sequence resetting `4 → 0 → 7 → 0`. The receiver survives, fetches
-whatever it last read, and ends up with a stream that **repeatedly jumps backwards and forwards by
-about twenty seconds** — 5 rewinds of up to 23.7 s interleaved with 4 forward leaps of ~19 s.
+**Naive active/active does not collapse the stream — it silently corrupts it.** Two independently started packagers writing into one namespace both keep running, and the playlist becomes a single mutable file with a last-writer-wins update rule; the watcher shows ownership alternating between the two and the media sequence resetting `4 → 0 → 7 → 0`. The receiver survives, fetches whatever it last read, and ends up with a stream that **repeatedly jumps backwards and forwards by about twenty seconds** — 5 rewinds of up to 23.7 s interleaved with 4 forward leaps of ~19 s.
 
-Two things about that deserve emphasis. The first is that **the continuity counter cannot describe
-what happened**. Re-graded with a working matcher — the original one could not match the plugin's
-output at all, and reported a flat `cc_disc=0` here and everywhere else (see the
-[Corrections](#corrections)) — these cells post 95 to 96 continuity events over 707 to 716 packets.
-So the check does fire. What it reports is a few hundred missing packets, in a stream that actually
-travelled twenty seconds backwards and forwards five times. The magnitude is wrong by orders of
-magnitude and the nature is not conveyed at all, because CC is a property of each segment's own mux
-and every segment here is internally valid: the counter is measuring the seams between segments, not
-the timeline they were spliced into. **A conformance check that asks whether the counter advanced
-cannot grade a stream in which the clock moved backwards** — that requires the PCR rewind count, which
-is why this experiment requires one. The second thing is that this is the exact failure
-the media-aware lane refuses loudly — two publishers announcing one broadcast to one relay get
-`Error: moq: unroutable` and both are torn down immediately. Given a choice between an outage and
-undetected time-travel, the outage is the better failure, and the segmented lane picks the worse one
-by default.
+Two things about that deserve emphasis. The first is that **the continuity counter cannot describe what happened**. Re-graded with a working matcher — the original one could not match the plugin's output at all, and reported a flat `cc_disc=0` here and everywhere else (see the [Corrections](#corrections)) — these cells post 95 to 96 continuity events over 707 to 716 packets. So the check does fire. What it reports is a few hundred missing packets, in a stream that actually travelled twenty seconds backwards and forwards five times. The magnitude is wrong by orders of magnitude and the nature is not conveyed at all, because CC is a property of each segment's own mux and every segment here is internally valid: the counter is measuring the seams between segments, not the timeline they were spliced into. **A conformance check that asks whether the counter advanced cannot grade a stream in which the clock moved backwards** — that requires the PCR rewind count, which is why this experiment requires one. The second thing is that this is the exact failure the media-aware lane refuses loudly — two publishers announcing one broadcast to one relay get `Error: moq: unroutable` and both are torn down immediately. Given a choice between an outage and undetected time-travel, the outage is the better failure, and the segmented lane picks the worse one by default.
 
-Aligning the standby's `EXT-X-MEDIA-SEQUENCE` to continue the active's changes nothing (5 rewinds,
-≤22.2 s). The defect is not the numbering, it is that the two packagers sit at different points in
-the same media timeline — which is the artefact this experiment's own [Corrections](#corrections)
-section warns about, re-encountered on a new lane.
+Aligning the standby's `EXT-X-MEDIA-SEQUENCE` to continue the active's changes nothing (5 rewinds, ≤22.2 s). The defect is not the numbering, it is that the two packagers sit at different points in the same media timeline — which is the artefact this experiment's own [Corrections](#corrections) section warns about, re-encountered on a new lane.
 
-**Fed from one source, the pair is time-aligned but still duplicates everything.** With a single
-regulated stream fanned by `gtee` into both packagers, the forward leaps disappear entirely
-(`pcr_fwd_leaps=0`) — the two timelines now agree. What remains is pure duplication: the receiver
-ends the window at **1.389** of source rate, because a client keyed on URI cannot tell that
-`segA-000012.ts` and `segB-000012.ts` are the same media, so it fetches both. The residual "rewinds"
-are that second copy arriving. This is precisely the conclusion the media-aware lane reached about
-spec-level object dedup — identical *content* is not enough, the two sources must agree on
-*identifiers* — arrived at from the other direction.
+**Fed from one source, the pair is time-aligned but still duplicates everything.** With a single regulated stream fanned by `gtee` into both packagers, the forward leaps disappear entirely (`pcr_fwd_leaps=0`) — the two timelines now agree. What remains is pure duplication: the receiver ends the window at **1.389** of source rate, because a client keyed on URI cannot tell that `segA-000012.ts` and `segB-000012.ts` are the same media, so it fetches both. The residual "rewinds" are that second copy arriving. This is precisely the conclusion the media-aware lane reached about spec-level object dedup — identical _content_ is not enough, the two sources must agree on _identifiers_ — arrived at from the other direction.
 
-**Give the pair one source and one naming scheme and the failover is hitless.** With both packagers
-fed from `gtee` and writing the *same* segment filenames, killing the active is invisible:
+**Give the pair one source and one naming scheme and the failover is hitless.** With both packagers fed from `gtee` and writing the _same_ segment filenames, killing the active is invisible:
 
-| run | signal | rate_ratio | max stall | where | CC disc | PCR rewinds |
-|---|---|---|---|---|---|---|
-| 1 | SIGKILL | 1.012 | 2 s | t=5 | 0 | 0 |
-| 2 | SIGKILL | 1.012 | 2 s | t=5 | 0 | 0 |
-| 3 | SIGKILL | 1.012 | 2 s | t=5 | 0 | 0 |
-| 4 | SIGTERM | 1.002 | 3 s | t=25 | 0 | 0 |
+| run | signal  | rate_ratio | max stall | where | CC disc | PCR rewinds |
+| --- | ------- | ---------- | --------- | ----- | ------- | ----------- |
+| 1   | SIGKILL | 1.012      | 2 s       | t=5   | 0       | 0           |
+| 2   | SIGKILL | 1.012      | 2 s       | t=5   | 0       | 0           |
+| 3   | SIGKILL | 1.012      | 2 s       | t=5   | 0       | 0           |
+| 4   | SIGTERM | 1.002      | 3 s       | t=25  | 0       | 0           |
 
-The three hard-kill runs are identical to the byte (94,390,288 B each), which is itself a
-corroboration of the determinism result below. The largest stall equals the baseline's, and in the
-hard-kill runs it does not even fall at the kill instant — there is no recovery event to time,
-because there was no interruption to recover from. **No detection delay, no reselect, no gap**: the
-receiver never knew which of the two packagers served it, and killing one leaves the survivor
-writing the same files under the same names.
+The three hard-kill runs are identical to the byte (94,390,288 B each), which is itself a corroboration of the determinism result below. The largest stall equals the baseline's, and in the hard-kill runs it does not even fall at the kill instant — there is no recovery event to time, because there was no interruption to recover from. **No detection delay, no reselect, no gap**: the receiver never knew which of the two packagers served it, and killing one leaves the survivor writing the same files under the same names.
 
-Set against the media-aware lane, where source failover is one QUIC idle timeout (30–33 s by
-default, reliably reducible to ~10 s, fragile below that) and where the file states outright that
-*"sub-second / hitless is not reachable by relay reselect"*, this is the sharpest divergence in the
-campaign. It also needs no receiver-side machinery: no dual subscription, no ST 2022-7 merge, no
-second decode.
+Set against the media-aware lane, where source failover is one QUIC idle timeout (30–33 s by default, reliably reducible to ~10 s, fragile below that) and where the file states outright that _"sub-second / hitless is not reachable by relay reselect"_, this is the sharpest divergence in the campaign. It also needs no receiver-side machinery: no dual subscription, no ST 2022-7 merge, no second decode.
 
-**Graceful departure is a narrow race here, not an uncovered case.** `tsp -O hls` writes
-`#EXT-X-ENDLIST` on a clean EOF *and* on SIGTERM — that is, a departing leg announces the end of the
-*stream* rather than the end of *itself*, into a playlist its partner is still updating. Polling the
-shared playlist at 50 ms across a SIGTERM of one leg, ENDLIST is visible for **1.10 s** in a single
-window before the survivor's next rewrite removes it. Any conformant client that reads the playlist
-inside that window is entitled to stop; the retrying client used here ignores ENDLIST and sailed
-through, which is why the SIGTERM row above is clean. So the hazard is real but bounded by one
-playlist-rewrite interval, and it is designed out by letting the survivor own the playlist or by not
-emitting ENDLIST on a hot-standby departure. The media-aware equivalent is not a race at all: a
-graceful source exit is not failed over, and the subscriber terminates.
+**Graceful departure is a narrow race here, not an uncovered case.** `tsp -O hls` writes `#EXT-X-ENDLIST` on a clean EOF _and_ on SIGTERM — that is, a departing leg announces the end of the _stream_ rather than the end of _itself_, into a playlist its partner is still updating. Polling the shared playlist at 50 ms across a SIGTERM of one leg, ENDLIST is visible for **1.10 s** in a single window before the survivor's next rewrite removes it. Any conformant client that reads the playlist inside that window is entitled to stop; the retrying client used here ignores ENDLIST and sailed through, which is why the SIGTERM row above is clean. So the hazard is real but bounded by one playlist-rewrite interval, and it is designed out by letting the survivor own the playlist or by not emitting ENDLIST on a hot-standby departure. The media-aware equivalent is not a race at all: a graceful source exit is not failed over, and the subscriber terminates.
 
 **The determinism precondition passes on this lane, and passes for the reason that matters.**
 
 | Comparison | Segments | Byte-identical | Totals |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | two packagers, same file, co-started | 17 vs 17 | **17 / 17** | 48,480,312 B both |
 | two packagers, one live feed via `gtee` | 17 vs 17 | **17 / 17** | 48,480,312 B both |
 
-Both packagers cut the same feed in the same places and emit identical bytes. The reason is
-structural: with `--intra-close` the segment boundary is chosen by the *content* — the next
-intra-coded picture — and not by the packager's own emit clock. That is exactly where the
-media-aware live pacer originally failed: it gated its content-versus-null interleave on the
-wall-clock instant of each datagram, so 50 µs of scheduling jitter reshuffled the output and
-diverged two legs within ~30 ms. Keying placement to stream position rather than to an emit clock is
-what T12 later showed fixes it there; the segmented packager gets it for free because its only
-placement decision is where to cut, and the picture type decides that.
+Both packagers cut the same feed in the same places and emit identical bytes. The reason is structural: with `--intra-close` the segment boundary is chosen by the _content_ — the next intra-coded picture — and not by the packager's own emit clock. That is exactly where the media-aware live pacer originally failed: it gated its content-versus-null interleave on the wall-clock instant of each datagram, so 50 µs of scheduling jitter reshuffled the output and diverged two legs within ~30 ms. Keying placement to stream position rather than to an emit clock is what T12 later showed fixes it there; the segmented packager gets it for free because its only placement decision is where to cut, and the picture type decides that.
 
 #### What the segmented arm does not establish
 
-- **One filesystem stands in for a distributed store, and that is where the real engineering is.**
-  The hitless result requires both packagers to write the same names into the same store. On
-  loopback that is one directory; in a deployment it is two hosts writing a shared or replicated
-  object store, or two origins behind a load balancer with consistent naming. The measurement is of
-  the *client-visible* property given a consistent store — it does not measure the cost or the
-  failure modes of making the store consistent, which is the part a CDN already solves and a
-  broadcaster would have to buy or build.
-- **Concurrent in-place writes were not stressed.** Two packagers writing identical filenames wrote
-  the same bytes to the same paths at nearly the same instant, and no torn read occurred in any run
-  (no non-200s, no continuity errors). `tsp -O hls` does not write segments atomically, though, so
-  a client fetching mid-write is a live hazard that this rig did not provoke; production packagers
-  write to a temporary name and rename.
-- **The retrying client is a floor, not a product.** It has no ABR, no master playlist, no
-  discontinuity handling and no LL-HLS, and it ignores ENDLIST — which is why it survived the
-  graceful-exit race. It bounds what the protocol permits; it does not show that any deployable
-  player behaves this way.
-- **Recovery from a dead origin was measured with the packager still running.** Segments continued
-  to accumulate in the store throughout the outage, which is why nothing was lost. That is the right
-  analogue of the media-aware relay-restart drill (where the publisher also survives), but it is not
-  the case where the store itself is lost.
-- **The standby always joined at t=0 in the common-source drills.** A standby joining an
-  already-running feed — the production shape, and the case the media-aware lane drills as E2 —
-  needs a live fan-out this host would not provide; multicast did not work here. Whether a
-  mid-stream joiner's segment boundaries align with the incumbent's is therefore untested, and it is
-  the obvious next cell: content-chosen boundaries predict that they should, but that is a
-  prediction and not a measurement.
+- **One filesystem stands in for a distributed store, and that is where the real engineering is.** The hitless result requires both packagers to write the same names into the same store. On loopback that is one directory; in a deployment it is two hosts writing a shared or replicated object store, or two origins behind a load balancer with consistent naming. The measurement is of the _client-visible_ property given a consistent store — it does not measure the cost or the failure modes of making the store consistent, which is the part a CDN already solves and a broadcaster would have to buy or build.
+- **Concurrent in-place writes were not stressed.** Two packagers writing identical filenames wrote the same bytes to the same paths at nearly the same instant, and no torn read occurred in any run (no non-200s, no continuity errors). `tsp -O hls` does not write segments atomically, though, so a client fetching mid-write is a live hazard that this rig did not provoke; production packagers write to a temporary name and rename.
+- **The retrying client is a floor, not a product.** It has no ABR, no master playlist, no discontinuity handling and no LL-HLS, and it ignores ENDLIST — which is why it survived the graceful-exit race. It bounds what the protocol permits; it does not show that any deployable player behaves this way.
+- **Recovery from a dead origin was measured with the packager still running.** Segments continued to accumulate in the store throughout the outage, which is why nothing was lost. That is the right analogue of the media-aware relay-restart drill (where the publisher also survives), but it is not the case where the store itself is lost.
+- **The standby always joined at t=0 in the common-source drills.** A standby joining an already-running feed — the production shape, and the case the media-aware lane drills as E2 — needs a live fan-out this host would not provide; multicast did not work here. Whether a mid-stream joiner's segment boundaries align with the incumbent's is therefore untested, and it is the obvious next cell: content-chosen boundaries predict that they should, but that is a prediction and not a measurement.
 
 ### Results table
 
 | Scenario | Recovery time | Continuity | Result |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | Relay restart — **publisher** | ~1 s after detection (= QUIC idle timeout, 30 s default) | resumes (re-announces) | ✅ transport reconnect works |
 | Relay restart — **`moq export ts` subscriber** | ~17 s (detection + backoff + re-announce) | freezes at a clean object boundary, then **resumes** | ✅ fixed by #2469, on builds before the `dev` merge; ❌ exits `json: dropped` on the build under test (#2704), ✅ under a supervisor, which restarts it once |
 | End-to-end stream resumes after relay restart | ~17 s | **yes**, byte-identical across the gap | ✅ fixed by #2469, on builds before the `dev` merge; ✅ on the build under test only under a supervisor, whose restart splices the exporter's per-process values |
@@ -1184,7 +494,7 @@ placement decision is where to cut, and the picture type decides that.
 Segmented lane, same clip and host:
 
 | Scenario | Recovery time | Continuity | Result |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | Origin restart — `tsp -I hls` receiver | none — receiver exits at the first refused connection | no resume | ❌ client has no retry |
 | Origin restart — FFmpeg receiver | none — `Failed to reload playlist`, exits | no resume | ❌ demuxer abandons despite every retry knob |
 | Origin restart — retrying client | = the outage (10.10 s), resumes on the first successful poll | **no content lost**; backlog refetched from the store | ✅ nothing to re-establish; HTTP holds no session state |
@@ -1197,147 +507,44 @@ Segmented lane, same clip and host:
 
 ## Corrections
 
-> What stays here is what *this experiment* believed and what is true instead. The transferable
-> method rules each correction yields live once, in [method-notes.md](method-notes.md), and are
-> cross-referenced rather than restated.
+> What stays here is what _this experiment_ believed and what is true instead. The transferable method rules each correction yields live once, in [method-notes.md](method-notes.md), and are cross-referenced rather than restated.
 
-**Believed:** the continuity counter "sees nothing" during the two-packager oscillation. **True:** the
-rig grepped for a word `tsp -P continuity` prints only in `--help`; re-graded, the dual-source cells
-post 95–96 events and the shared-name hard-kill cells still 0, so the *hitless* result stands and the
-*blind counter* claim does not. A few hundred missing packets still describe neither the size nor the
-nature of a timeline that jumped backwards five times (method-notes §2).
+**Believed:** the continuity counter "sees nothing" during the two-packager oscillation. **True:** the rig grepped for a word `tsp -P continuity` prints only in `--help`; re-graded, the dual-source cells post 95–96 events and the shared-name hard-kill cells still 0, so the _hitless_ result stands and the _blind counter_ claim does not. A few hundred missing packets still describe neither the size nor the nature of a timeline that jumped backwards five times (method-notes §2).
 
-**Retracted: "the standby route never reaches the relay serving the active source".** The drill graded
-21 s into a 30 s idle timeout, which no build could pass; the baseline "no failover on `moq-lite-05`"
-stands, on a control frozen for 68 s (method-notes §1).
+**Retracted: "the standby route never reaches the relay serving the active source".** The drill graded 21 s into a 30 s idle timeout, which no build could pass; the baseline "no failover on `moq-lite-05`" stands, on a control frozen for 68 s (method-notes §1).
 
-**Retracted: the "8–9 s stall at the standby join" as a routing defect.** Two publishers replaying
-independent copies of the clip from its start leave the standby lagging by the join delay, and the
-stall tracks it with slope 1 while the relay switches in the millisecond the standby connects.
+**Retracted: the "8–9 s stall at the standby join" as a routing defect.** Two publishers replaying independent copies of the clip from its start leave the standby lagging by the join delay, and the stall tracks it with slope 1 while the relay switches in the millisecond the standby connects.
 
-**Re-walked: the segmented arm's first active/active drill measured its own 20 s start skew.** It is
-kept in the results as a real deployment mistake with a CC-clean signature, but whether a segmented
-pair fails over is answered only by the `gtee` common-source variant (method-notes §5: *"same file" is
-not "same stream"*).
+**Re-walked: the segmented arm's first active/active drill measured its own 20 s start skew.** It is kept in the results as a real deployment mistake with a CC-clean signature, but whether a segmented pair fails over is answered only by the `gtee` common-source variant (method-notes §5: _"same file" is not "same stream"_).
 
-**Rig:** one hard-kill cell's origin failed to bind and the client was served by the previous cell's
-origin, posting a plausible hitless result; and the rewind metric differenced an unsigned column, which
-wrapped on the event it exists for (6.8 × 10¹¹ s; the PCR value column gives 12–24 s). Both rules are in
-method-notes §2 and §5.
+**Rig:** one hard-kill cell's origin failed to bind and the client was served by the previous cell's origin, posting a plausible hitless result; and the rewind metric differenced an unsigned column, which wrapped on the event it exists for (6.8 × 10¹¹ s; the PCR value column gives 12–24 s). Both rules are in method-notes §2 and §5.
 
-**Rig: the standby arm's `fork` copy was not the live stream either.** Tapped in
-[T51](test-51-same-epoch-groups.md) with a 2 s stagger, the standby's input began at the clip's first
-packet, behind live, and lost 107–186 datagrams a run catching up; the first publisher's lost none.
-Every arm in § *Single-relay standby* ran on that feed, so its figures overstate how far the two
-importers diverge, the diagnostic table's 5–309 groups and 0.17–5.6 s included. With both inputs
-byte-identical, main still ended both passthrough exports on the rewind in its one run with the newest
-serving (T51): #4354's mechanism stands, its magnitudes are this rig's.
+**Rig: the standby arm's `fork` copy was not the live stream either.** Tapped in [T51](test-51-same-epoch-groups.md) with a 2 s stagger, the standby's input began at the clip's first packet, behind live, and lost 107–186 datagrams a run catching up; the first publisher's lost none. Every arm in § _Single-relay standby_ ran on that feed, so its figures overstate how far the two importers diverge, the diagnostic table's 5–309 groups and 0.17–5.6 s included. With both inputs byte-identical, main still ended both passthrough exports on the rewind in its one run with the newest serving (T51): #4354's mechanism stands, its magnitudes are this rig's.
 
-**Two of the four issues reported upstream from this work were real defects**, the shared-`--origin`
-`Unroutable` teardown and the exporter's fatal `json: dropped` (#2469); the record is in
-[upstream-contributions.md](upstream-contributions.md) §3.
+**Two of the four issues reported upstream from this work were real defects**, the shared-`--origin` `Unroutable` teardown and the exporter's fatal `json: dropped` (#2469); the record is in [upstream-contributions.md](upstream-contributions.md) §3.
 
 ## Observations
 
-- **The two lanes fail redundancy in opposite places, and neither is uniformly better.** The
-  media-aware relay owns source selection, so it fails *safely and slowly*: on the early builds a
-  naive pair was refused outright (on `ffa5b81b` a pair on one relay fails over, and a shared-hop
-  standby's late arrival is the unsafe case), and a correct pair fails over in one detection
-  interval that cannot be driven below a few seconds. The segmented origin owns nothing, so it fails *silently and instantly*: a naive pair
-  is accepted and produces CC-clean time-travel, and a correct pair fails over with no measurable
-  interruption at all. Whether that is an advantage depends entirely on whether the operator gets
-  the configuration right, which is a much weaker guarantee than the relay's.
-- **What the segmented lane needs for a hitless pair is cheap, and it is the same requirement the
-  media-aware lane has.** One source into both packagers, and agreement on segment identifiers. The
-  first is the common-source rule already established here for MoQ; the second is the naming
-  analogue of the Group ID / Object ID agreement that spec-level object dedup would demand. The
-  difference is that the segmented lane can satisfy both with a filename convention, whereas the
-  media-aware lane would need publisher-side determinism down to object segmentation and numbering.
-- **Segment boundaries being content-chosen is the property that makes it work.** Two packagers of
-  one feed emit byte-identical segments because the cut point is the next intra-coded picture, not
-  an emit instant. That is a structural advantage over a live pacer whose placement is wall-clock
-  gated, and it is why the determinism precondition that took T12 to satisfy on the media-aware lane
-  is satisfied here by default.
-- **A continuity-counter check cannot grade a lane that can be served by two sources at once.** Every
-  corrupt cell in the segmented arm reported zero CC discontinuities. Time running backwards is
-  invisible to CC and to any PCR-interval conformance test, both of which ask only whether the clock
-  moved. Any rig for a multi-source lane needs an explicit rewind counter.
-- **Resilience that only exists in the specification is not resilience.** Recovering from a dead
-  origin requires nothing of the protocol, and neither `tsp -I hls` nor FFmpeg does it. The lane's
-  best property in this experiment is one that no off-the-shelf TS client in the rig could actually
-  use.
-- Endpoint *reconnect* is solid (publisher and, since #2469, the exporter). Active/active *source*
-  failover across a mesh ships (#2473) but is **bounded, not hitless** (one idle timeout, and on
-  `ffa5b81b` the standby's group lag too), does not cover a graceful source exit reliably, and on
-  `ffa5b81b` loses the standby relay's own subscribers with or without a shared hop. This survived the cluster-extension (#2629), detach
-  (#2616/#2654/#2659/#2664) and resume-hardening (#2666) rewrite without regression, and the resume
-  path the mid-stream-standby drill exercises is now the hardened one (#2666 keeps the incumbent when
-  a partially-joined standby refuses a track, and stops an empty-segment failover from backfilling the
-  whole history). On upstream `main` it is narrower still: a shared-hop splice that waits for the
-  standby's numbering ends the dead publisher's relay's exporters too, and without a shared hop there
-  is no mesh failover.
-- The binding precondition for mesh source failover is a **common source** — identical PMT/track
-  layout + consistent PTS — not byte-identical segmentation. On the E2 builds a late-joining standby
-  with offset group numbering failed over cleanly; on `ffa5b81b` it still fails over, but the relay's
-  splice floor makes it wait out the standby's numbering lag, so a pair whose members start far
-  apart pays that gap as outage. On `main` the same wait ends in the exporter's live-edge abort
-  (§ *Mesh source failover*), so a common source is necessary there and not sufficient. Enforce one ingest path into both publishers and the pair is
-  interchangeable; keep a second ingest path as *source* redundancy upstream of the publishers.
-- "0 CC errors" means the output TS stays structurally valid across the splice, **not** that the
-  switch is gap-free: the outage is a PCR/PTS discontinuity (a content hole), sized by detection.
-  Detection is reliably tunable to ~10 s via `--server-quic-idle-timeout`; sub-second/hitless is not a
-  relay-reselect property and must live at the receiver (ST 2022-7 dual-subscribe over the common
-  source).
-- Recovery on a hard kill is architecturally detection-bound: a relay has no model of a broadcast's
-  expected cadence, so it must wait for the transport to declare the peer gone.
-- **Recommended posture, buildable today:** with the exporter crash fixed, no external subscriber
-  supervisor is needed for relay maintenance/transient loss. Service redundancy still comes from a
-  fully doubled chain — dual publishers → dual relays → dual subscribers → downstream ST 2022-7 /
-  IRD failover — letting the *receiver* do hitless selection, and that now includes the grooming
-  stage: [T12](test-12-dual-path-handoff.md) measured two independent groomers producing
-  byte-identical legs, provided each keys placement to stream position rather than to its own emit
-  clock. Two groomers keyed to their own emit clocks do not merge at all. Relay-mesh source failover
-  does not change that recommendation now that #2473 has landed. Where quick reconnect matters, lower
-  `--client-quic-idle-timeout` (keeping it above the keep-alive).
+- **The two lanes fail redundancy in opposite places, and neither is uniformly better.** The media-aware relay owns source selection, so it fails _safely and slowly_: on the early builds a naive pair was refused outright (on `ffa5b81b` a pair on one relay fails over, and a shared-hop standby's late arrival is the unsafe case), and a correct pair fails over in one detection interval that cannot be driven below a few seconds. The segmented origin owns nothing, so it fails _silently and instantly_: a naive pair is accepted and produces CC-clean time-travel, and a correct pair fails over with no measurable interruption at all. Whether that is an advantage depends entirely on whether the operator gets the configuration right, which is a much weaker guarantee than the relay's.
+- **What the segmented lane needs for a hitless pair is cheap, and it is the same requirement the media-aware lane has.** One source into both packagers, and agreement on segment identifiers. The first is the common-source rule already established here for MoQ; the second is the naming analogue of the Group ID / Object ID agreement that spec-level object dedup would demand. The difference is that the segmented lane can satisfy both with a filename convention, whereas the media-aware lane would need publisher-side determinism down to object segmentation and numbering.
+- **Segment boundaries being content-chosen is the property that makes it work.** Two packagers of one feed emit byte-identical segments because the cut point is the next intra-coded picture, not an emit instant. That is a structural advantage over a live pacer whose placement is wall-clock gated, and it is why the determinism precondition that took T12 to satisfy on the media-aware lane is satisfied here by default.
+- **A continuity-counter check cannot grade a lane that can be served by two sources at once.** Every corrupt cell in the segmented arm reported zero CC discontinuities. Time running backwards is invisible to CC and to any PCR-interval conformance test, both of which ask only whether the clock moved. Any rig for a multi-source lane needs an explicit rewind counter.
+- **Resilience that only exists in the specification is not resilience.** Recovering from a dead origin requires nothing of the protocol, and neither `tsp -I hls` nor FFmpeg does it. The lane's best property in this experiment is one that no off-the-shelf TS client in the rig could actually use.
+- Endpoint _reconnect_ is solid (publisher and, since #2469, the exporter). Active/active _source_ failover across a mesh ships (#2473) but is **bounded, not hitless** (one idle timeout, and on `ffa5b81b` the standby's group lag too), does not cover a graceful source exit reliably, and on `ffa5b81b` loses the standby relay's own subscribers with or without a shared hop. This survived the cluster-extension (#2629), detach (#2616/#2654/#2659/#2664) and resume-hardening (#2666) rewrite without regression, and the resume path the mid-stream-standby drill exercises is now the hardened one (#2666 keeps the incumbent when a partially-joined standby refuses a track, and stops an empty-segment failover from backfilling the whole history). On upstream `main` it is narrower still: a shared-hop splice that waits for the standby's numbering ends the dead publisher's relay's exporters too, and without a shared hop there is no mesh failover.
+- The binding precondition for mesh source failover is a **common source** — identical PMT/track layout + consistent PTS — not byte-identical segmentation. On the E2 builds a late-joining standby with offset group numbering failed over cleanly; on `ffa5b81b` it still fails over, but the relay's splice floor makes it wait out the standby's numbering lag, so a pair whose members start far apart pays that gap as outage. On `main` the same wait ends in the exporter's live-edge abort (§ _Mesh source failover_), so a common source is necessary there and not sufficient. Enforce one ingest path into both publishers and the pair is interchangeable; keep a second ingest path as _source_ redundancy upstream of the publishers.
+- "0 CC errors" means the output TS stays structurally valid across the splice, **not** that the switch is gap-free: the outage is a PCR/PTS discontinuity (a content hole), sized by detection. Detection is reliably tunable to ~10 s via `--server-quic-idle-timeout`; sub-second/hitless is not a relay-reselect property and must live at the receiver (ST 2022-7 dual-subscribe over the common source).
+- Recovery on a hard kill is architecturally detection-bound: a relay has no model of a broadcast's expected cadence, so it must wait for the transport to declare the peer gone.
+- **Recommended posture, buildable today:** with the exporter crash fixed, no external subscriber supervisor is needed for relay maintenance/transient loss. Service redundancy still comes from a fully doubled chain — dual publishers → dual relays → dual subscribers → downstream ST 2022-7 / IRD failover — letting the _receiver_ do hitless selection, and that now includes the grooming stage: [T12](test-12-dual-path-handoff.md) measured two independent groomers producing byte-identical legs, provided each keys placement to stream position rather than to its own emit clock. Two groomers keyed to their own emit clocks do not merge at all. Relay-mesh source failover does not change that recommendation now that #2473 has landed. Where quick reconnect matters, lower `--client-quic-idle-timeout` (keeping it above the keep-alive).
 
 ## Conclusion
 
-**On the media-aware lane** transport resilience holds; active/active source failover ships, bounded
-by detection and, on `ffa5b81b`, by the standby's group lag. A graceful exit is never reliably failed
-over, and on `ffa5b81b` a mesh pair loses the standby relay's own subscribers, at the join with a
-shared hop and at the failover without one. On upstream `main` a mesh pair fails over only when
-detection outlasts the standby's lag in numbering, and only with a shared hop. The ST 2022-7 determinism precondition is
-characterised in the Results above; [T12](test-12-dual-path-handoff.md) closes the live dual-pacer
-case with stream-clocked grooming. Every failover number in *this* file is a single-leg recovery
-time, so it is break-before-make by construction; the dual-leg drill it points to has since run as
-T12, which grades two concurrently live legs at a receiver and finds the switch hitless — including
-the graceful exit that has no single-leg answer. The full validated finding — including which of our
-reports were real vs harness artefacts — is recorded in [`evidence.md`](evidence.md) §3.4.
-On upstream `main` each importer mints its own epoch (#5967), and the demultiplexed export survives
-every takeover as a marked programme switch: a hard kill costs about one detection interval, a clean
-exit under 2 s, and a standby's start or restart is a switch of its own. A relay lost under one
-importer is not the seamless resume upstream documents: 7.02 s of programme is skipped unflagged.
-Every shared-hop and shared-epoch arm here records a build that had the mechanism.
+**On the media-aware lane** transport resilience holds; active/active source failover ships, bounded by detection and, on `ffa5b81b`, by the standby's group lag. A graceful exit is never reliably failed over, and on `ffa5b81b` a mesh pair loses the standby relay's own subscribers, at the join with a shared hop and at the failover without one. On upstream `main` a mesh pair fails over only when detection outlasts the standby's lag in numbering, and only with a shared hop. The ST 2022-7 determinism precondition is characterised in the Results above; [T12](test-12-dual-path-handoff.md) closes the live dual-pacer case with stream-clocked grooming. Every failover number in _this_ file is a single-leg recovery time, so it is break-before-make by construction; the dual-leg drill it points to has since run as T12, which grades two concurrently live legs at a receiver and finds the switch hitless — including the graceful exit that has no single-leg answer. The full validated finding — including which of our reports were real vs harness artefacts — is recorded in [`evidence.md`](evidence.md) §3.4. On upstream `main` each importer mints its own epoch (#5967), and the demultiplexed export survives every takeover as a marked programme switch: a hard kill costs about one detection interval, a clean exit under 2 s, and a standby's start or restart is a switch of its own. A relay lost under one importer is not the seamless resume upstream documents: 7.02 s of programme is skipped unflagged. Every shared-hop and shared-epoch arm here records a build that had the mechanism.
 
-**On the segmented lane the same three questions come out differently, and the reason is that the
-serving node holds no state.** A dead origin costs exactly its downtime and no content, because the
-next successful GET is the recovery and the store still holds what was missed — but neither
-`tsp -I hls` nor FFmpeg will do it, so that property is real in the protocol and absent from the
-tools. An active/active pair fed from one source and writing one set of segment names fails over
-**hitless**, reproducibly and with no receiver-side machinery, where the media-aware lane's floor is
-a detection interval of seconds; the determinism that makes this safe is free here, because segment
-boundaries are chosen by picture type rather than by an emit clock. The price is that the same lane
-accepts a *misconfigured* pair without complaint and delivers twenty-second time-travel that passes
-every continuity and PCR-interval check — the failure the media-aware relay refuses outright. So the
-segmented lane offers the better ceiling and the worse floor, and which one an operator gets is
-decided entirely by whether the pair shares a source and a naming scheme.
+**On the segmented lane the same three questions come out differently, and the reason is that the serving node holds no state.** A dead origin costs exactly its downtime and no content, because the next successful GET is the recovery and the store still holds what was missed — but neither `tsp -I hls` nor FFmpeg will do it, so that property is real in the protocol and absent from the tools. An active/active pair fed from one source and writing one set of segment names fails over **hitless**, reproducibly and with no receiver-side machinery, where the media-aware lane's floor is a detection interval of seconds; the determinism that makes this safe is free here, because segment boundaries are chosen by picture type rather than by an emit clock. The price is that the same lane accepts a _misconfigured_ pair without complaint and delivers twenty-second time-travel that passes every continuity and PCR-interval check — the failure the media-aware relay refuses outright. So the segmented lane offers the better ceiling and the worse floor, and which one an operator gets is decided entirely by whether the pair shares a source and a naming scheme.
 
 ## References
 
 - Redundancy model: [`docs/architecture.md`](../docs/architecture.md) §5 (ST 2022-7 in §5.1) and §8.4.
 - Upstream: [#2469](https://github.com/moq-dev/moq/pull/2469), [#2473](https://github.com/moq-dev/moq/pull/2473), [#2534](https://github.com/moq-dev/moq/pull/2534) (renumbered-takeover, closed unmerged), [#2545](https://github.com/moq-dev/moq/pull/2545), [#2556](https://github.com/moq-dev/moq/pull/2556), [#2565](https://github.com/moq-dev/moq/pull/2565), #2424, #2461, [#2330](https://github.com/moq-dev/moq/issues/2330), #2216/#2217. Cluster/detach/resume rewrite: [#2629](https://github.com/moq-dev/moq/pull/2629) (cluster ext), [#2616](https://github.com/moq-dev/moq/pull/2616)/[#2654](https://github.com/moq-dev/moq/pull/2654)/[#2659](https://github.com/moq-dev/moq/pull/2659)/[#2664](https://github.com/moq-dev/moq/pull/2664) (detach), [#2666](https://github.com/moq-dev/moq/pull/2666) (resume/route hardening), [#2611](https://github.com/moq-dev/moq/pull/2611) (broadcast-epoch drafts), [#2636](https://github.com/moq-dev/moq/pull/2636) (codec/track split).
-- Segmented arm: [`lab/scripts/t6-segmented-arm.sh`](scripts/t6-segmented-arm.sh) (drills),
-  [`lab/scripts/t6-segmented-sweep.sh`](scripts/t6-segmented-sweep.sh) (the set),
-  [`lab/scripts/t6-hls-pull.py`](scripts/t6-hls-pull.py) (the retrying client). Method rules in
-  [method-notes.md](method-notes.md) §5.
+- Segmented arm: [`lab/scripts/t6-segmented-arm.sh`](scripts/t6-segmented-arm.sh) (drills), [`lab/scripts/t6-segmented-sweep.sh`](scripts/t6-segmented-sweep.sh) (the set), [`lab/scripts/t6-hls-pull.py`](scripts/t6-hls-pull.py) (the retrying client). Method rules in [method-notes.md](method-notes.md) §5.
 - Finding: [`evidence.md`](evidence.md) §3.4.

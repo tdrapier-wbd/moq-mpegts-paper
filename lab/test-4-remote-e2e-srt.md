@@ -2,77 +2,39 @@
 
 ## Objective
 
-Put the path over the **public internet** with a cloud relay on AWS EC2, and answer two questions
-there.
+Put the path over the **public internet** with a cloud relay on AWS EC2, and answer two questions there.
 
-1. **What does each data plane do to a broadcast mux over a real path?** Carry the *same* clip from
-   the *same* EC2 origin to the *same* local receiver over three transports — MoQ's media-aware lane,
-   segmented HTTP (TS-in-HLS) and byte-faithful SRT — and score all three with one instrument.
-   [T3](test-3-opaque-transparency.md) asked this on loopback; asking it on the wire is what separates
-   "the lane alters the mux" from "the path altered the mux".
-2. **Can a live contribution feed traverse the whole chain?** local TS → FFmpeg SRT → EC2
-   SRT-receiver → MoQ publisher (EC2) → MoQ relay (EC2) → MoQ subscriber (local) → TSDuck/ffplay —
-   the bridge between "works on localhost" (T2/T3) and "works on the wire" (T7).
+1. **What does each data plane do to a broadcast mux over a real path?** Carry the _same_ clip from the _same_ EC2 origin to the _same_ local receiver over three transports — MoQ's media-aware lane, segmented HTTP (TS-in-HLS) and byte-faithful SRT — and score all three with one instrument. [T3](test-3-opaque-transparency.md) asked this on loopback; asking it on the wire is what separates "the lane alters the mux" from "the path altered the mux".
+2. **Can a live contribution feed traverse the whole chain?** local TS → FFmpeg SRT → EC2 SRT-receiver → MoQ publisher (EC2) → MoQ relay (EC2) → MoQ subscriber (local) → TSDuck/ffplay — the bridge between "works on localhost" (T2/T3) and "works on the wire" (T7).
 
-**The comparison is by construction, not by assembly.** A side-by-side stitched together from three
-separately-designed measurements is not a comparison, so the three lanes are driven by one script
-([`t4-three-lane.sh`](scripts/t4-three-lane.sh)) and differ in exactly one thing: the transport
-between the two ends. Same clip, same `tsp regulate --pcr-synchronous` pacing at the origin, same
-packet-count bound, same ungroomed measurement point, same analysis
-([`t3-transparency.py`](scripts/t3-transparency.py)). Where a lane cannot be measured on the same
-terms as the others, that is reported as a property of the lane rather than filled in with a number
-taken differently.
+**The comparison is by construction, not by assembly.** A side-by-side stitched together from three separately-designed measurements is not a comparison, so the three lanes are driven by one script ([`t4-three-lane.sh`](scripts/t4-three-lane.sh)) and differ in exactly one thing: the transport between the two ends. Same clip, same `tsp regulate --pcr-synchronous` pacing at the origin, same packet-count bound, same ungroomed measurement point, same analysis ([`t3-transparency.py`](scripts/t3-transparency.py)). Where a lane cannot be measured on the same terms as the others, that is reported as a property of the lane rather than filled in with a number taken differently.
 
-**State: all three lanes are measured**, each over the public internet on the current build, with the
-segmented lane's outcome scored against a prediction registered before it ran.
+**State: all three lanes are measured**, each over the public internet on the current build, with the segmented lane's outcome scored against a prediction registered before it ran.
 
 > The EC2 host IP is `<EC2_IP>` throughout (real value in `INSTRUCTIONS.local.md`).
 
 ## Pass criteria
 
-Fixed in [T3](test-3-opaque-transparency.md) before that experiment's lanes were run, and applied here
-unchanged so that the loopback and over-the-wire results are scored identically:
-(1) every source PID present at egress at its original number; (2) PSI/SI tables carried, within
-TR 101 290 P1 repetition limits; (3) TSID, ONID and service identity unchanged; (4) no continuity
-errors and no invalid sync; (5) PCR cadence preserved; (6) **nothing added** — no packets or PIDs at
-egress that the source did not have.
+Fixed in [T3](test-3-opaque-transparency.md) before that experiment's lanes were run, and applied here unchanged so that the loopback and over-the-wire results are scored identically: (1) every source PID present at egress at its original number; (2) PSI/SI tables carried, within TR 101 290 P1 repetition limits; (3) TSID, ONID and service identity unchanged; (4) no continuity errors and no invalid sync; (5) PCR cadence preserved; (6) **nothing added** — no packets or PIDs at egress that the source did not have.
 
-A lane is not required to pass. The purpose is to record *which* criteria each one fails and by how
-much, because that is what the paper's carriage-fidelity verdict is scored on.
+A lane is not required to pass. The purpose is to record _which_ criteria each one fails and by how much, because that is what the paper's carriage-fidelity verdict is scored on.
 
 ## Environment
 
-- **Deployed cloud path = the `moq-dev` media-aware lane, not the opaque lane.** SSH inspection
-  established this as a material fact: the relay is `moq-relay` on UDP 443 and both publishers use
-  `moq import ts` (a loop and the SRT-fed live broadcast).
-- **Build under test: `moq-relay 0.14.11-eab96019` / `moq 0.9.11-eab96019`**, a source build at `main`
-  `eab960192`. All three units point at it and none has restarted.
+- **Deployed cloud path = the `moq-dev` media-aware lane, not the opaque lane.** SSH inspection established this as a material fact: the relay is `moq-relay` on UDP 443 and both publishers use `moq import ts` (a loop and the SRT-fed live broadcast).
+- **Build under test: `moq-relay 0.14.11-eab96019` / `moq 0.9.11-eab96019`**, a source build at `main` `eab960192`. All three units point at it and none has restarted.
 - EC2 services (already running; relay never restarted during this test):
   - `moq-relay.service` → `moq-relay --server-bind 0.0.0.0:443 --tls-generate … --auth-public`
-  - `<loop-unit>.service` → `tsp -I file ~/contrib-10m.ts --infinite -P regulate
-    --pcr-synchronous -O file - | moq … import ts --broadcast <loop-broadcast>`
-  - `moq-publisher.service` → `ffmpeg -i "srt://0.0.0.0:9000?mode=listener&latency=6000…" -c copy -f
-    mpegts - | moq … import ts --broadcast <live-broadcast>`. **This unit is
-    retired**; the standing live ingest is now the two-stage chain below, and the ffmpeg leg is the
-    reason why.
-- Local: `moq` client from `~/bin-main`; SRT-capable FFmpeg is the local `~/FFmpeg` build (not OS
-  FFmpeg), and `tsp` carries the SRT plugins; TSDuck 3.44.
-- TLS verification disabled (`--client-tls-disable-verify`) for the relay's self-signed cert — a lab
-  convenience, not a production posture.
+  - `<loop-unit>.service` → `tsp -I file ~/contrib-10m.ts --infinite -P regulate --pcr-synchronous -O file - | moq … import ts --broadcast <loop-broadcast>`
+  - `moq-publisher.service` → `ffmpeg -i "srt://0.0.0.0:9000?mode=listener&latency=6000…" -c copy -f mpegts - | moq … import ts --broadcast <live-broadcast>`. **This unit is retired**; the standing live ingest is now the two-stage chain below, and the ffmpeg leg is the reason why.
+- Local: `moq` client from `~/bin-main`; SRT-capable FFmpeg is the local `~/FFmpeg` build (not OS FFmpeg), and `tsp` carries the SRT plugins; TSDuck 3.44.
+- TLS verification disabled (`--client-tls-disable-verify`) for the relay's self-signed cert — a lab convenience, not a production posture.
 
-**The loop leg's publisher is `tsp`, not `ffmpeg`, and that changes what the leg measures.** It was
-formerly `ffmpeg -re -stream_loop -1 -c copy`, whose default stream selection dropped the AC-3, teletext
-and all three SCTE-35 PIDs before MoQ ever saw them. Any carriage row taken through that publisher
-measured ffmpeg's remuxer as much as the lane. `tsp … -P regulate --pcr-synchronous`
-replays the file's own packets, so the broadcast now presents the source mux to the importer.
+**The loop leg's publisher is `tsp`, not `ffmpeg`, and that changes what the leg measures.** It was formerly `ffmpeg -re -stream_loop -1 -c copy`, whose default stream selection dropped the AC-3, teletext and all three SCTE-35 PIDs before MoQ ever saw them. Any carriage row taken through that publisher measured ffmpeg's remuxer as much as the lane. `tsp … -P regulate --pcr-synchronous` replays the file's own packets, so the broadcast now presents the source mux to the importer.
 
 ### The standing live ingest, for a contribution feed from a third party
 
-A contribution feed of a real service at ~10 Mb/s is expected on both EC2 hosts over SRT, so the live
-leg has been rebuilt to be the reference feed's carrier rather than a demonstration. Both hosts now
-run the same two-stage chain, installed by
-[`live-srt-ingest.sh`](scripts/live-srt-ingest.sh) and checked by
-[`live-feed-status.sh`](scripts/live-feed-status.sh):
+A contribution feed of a real service at ~10 Mb/s is expected on both EC2 hosts over SRT, so the live leg has been rebuilt to be the reference feed's carrier rather than a demonstration. Both hosts now run the same two-stage chain, installed by [`live-srt-ingest.sh`](scripts/live-srt-ingest.sh) and checked by [`live-feed-status.sh`](scripts/live-feed-status.sh):
 
 ```
 stage 1  srt-ingest.service          tsp -I srt --listener 0.0.0.0:9000 --multiple
@@ -81,123 +43,70 @@ stage 2  moq-live-publisher.service  tsp -I ip 239.255.0.1:5000 -O file -
                                        | moq --broadcast <name> import ts
 ```
 
-**The publisher is `tsp`, because the unit it replaces was measured discarding most of the multiplex
-before MoQ could see it.** Feeding a 20 s slice of `contrib-10m.ts` through the retired unit's own
-command on its own host (file domain, ffmpeg 8.0.1, no MoQ involved) reduces **13 PIDs to 5**:
+**The publisher is `tsp`, because the unit it replaces was measured discarding most of the multiplex before MoQ could see it.** Feeding a 20 s slice of `contrib-10m.ts` through the retired unit's own command on its own host (file domain, ffmpeg 8.0.1, no MoQ involved) reduces **13 PIDs to 5**:
 
-| | PIDs at egress | What is lost |
-|---|---|---|
+|  | PIDs at egress | What is lost |
+| --- | --- | --- |
 | Source slice | `0 16 17 20 100 111 121 123 131 141 142 143 8191` | — |
 | `ffmpeg -c copy -f mpegts` | `0 17 256 257 4096` | NIT, TDT/TOT, second audio, teletext, **all three SCTE-35 PIDs**; video/audio renumbered to 256/257, PMT to 4096 |
 | `tsp` passthrough | `0 16 17 20 100 111 121 123 131 141 142 143 8191` | nothing — byte-identical to the source |
 
-That is the same defect the loop leg was moved off ffmpeg for, and it is unrecoverable downstream: no
-lane, opaque or media-aware, can carry a PID that never arrived. It also disqualifies the retired unit
-from carrying the feed for the splice, subtitle and DVB-table work the live source exists to unblock.
+That is the same defect the loop leg was moved off ffmpeg for, and it is unrecoverable downstream: no lane, opaque or media-aware, can carry a PID that never arrived. It also disqualifies the retired unit from carrying the feed for the splice, subtitle and DVB-table work the live source exists to unblock.
 
-**The two stages are separate processes joined by a loopback multicast group, not one pipeline**, and
-that is a deliberate choice with three consequences. Restarting the MoQ side — which every experiment
-does — leaves the contribution session untouched. Stage 2's input is UDP now and can be real multicast
-later, so moving the source off SRT is a change to stage 1 only, and disappears entirely if the
-publisher is ever placed inside the multicast domain. And the group is a tap point a reference
-recorder or a TSDuck analyser can join without opening a second SRT session.
+**The two stages are separate processes joined by a loopback multicast group, not one pipeline**, and that is a deliberate choice with three consequences. Restarting the MoQ side — which every experiment does — leaves the contribution session untouched. Stage 2's input is UDP now and can be real multicast later, so moving the source off SRT is a change to stage 1 only, and disappears entirely if the publisher is ever placed inside the multicast domain. And the group is a tap point a reference recorder or a TSDuck analyser can join without opening a second SRT session.
 
-**The tap point is a measured fan-out, not an assumed one.** Three independent readers joined
-`239.255.0.1:5000` simultaneously while `moq-live-publisher` was reading it as a fourth, each capturing
-a 6 s window:
+**The tap point is a measured fan-out, not an assumed one.** Three independent readers joined `239.255.0.1:5000` simultaneously while `moq-live-publisher` was reading it as a fourth, each capturing a 6 s window:
 
 | Reader | Bytes | PIDs | Digest |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | tap 1 | 7,480,332 | `0 16 17 20 100 111 121 123 131 141 142 143 8191` | `b03a6d20…` |
 | tap 2 | 7,480,332 | same | `b03a6d20…` |
 | tap 3 | 7,480,332 | same | `b03a6d20…` |
 
-The three captures are **byte-identical**, carry the full 13-PID mux including TDT/TOT and stuffing,
-and the publisher held `NRestarts=0` throughout. A consumer attached to the group therefore sees
-exactly the bytes the publisher sees, on the same host and the same clock, which makes the group the
-campaign's reference point for anything downstream of the contribution hop: a non-MoQ comparison feed,
-a second publisher on a different build fed byte-identical input, or a recorder. It is a strictly
-better reference than a separate encoder output would be, because it removes the encoder from the
-difference being measured.
+The three captures are **byte-identical**, carry the full 13-PID mux including TDT/TOT and stuffing, and the publisher held `NRestarts=0` throughout. A consumer attached to the group therefore sees exactly the bytes the publisher sees, on the same host and the same clock, which makes the group the campaign's reference point for anything downstream of the contribution hop: a non-MoQ comparison feed, a second publisher on a different build fed byte-identical input, or a recorder. It is a strictly better reference than a separate encoder output would be, because it removes the encoder from the difference being measured.
 
 Measured on the secondary with a PCR-paced caller attached, the chain carries the mux intact:
 
 | Measurement point | Result |
-|---|---|
+| --- | --- |
 | Local group, 8 s sample | **9.98 Mb/s**, PIDs `0 16 17 100 111 121 123 131 141 142 143 8191`, **0 continuity errors**, the source's service name |
 | MoQ subscriber, `export ts` | PIDs `0 16 17 100 111 121 123 131 141 142 143` — every source PID except null stuffing, **all three SCTE-35 PIDs, teletext and both audios preserved** |
 
-TDT/TOT (PID 20) appears in neither sample, but the window is too short to distinguish a dropped table
-from one that simply did not repeat inside it; the carriage tables above remain authoritative for that
-row.
+TDT/TOT (PID 20) appears in neither sample, but the window is too short to distinguish a dropped table from one that simply did not repeat inside it; the carriage tables above remain authoritative for that row.
 
 #### What recovers by itself, and the one thing that does not
 
 Measured on the secondary by killing each element in turn with a caller attached throughout:
 
 | Event | Outcome |
-|---|---|
+| --- | --- |
 | MoQ publisher killed | Contribution session **unaffected**; unit back inside 8 s; group never stops carrying |
 | Caller closes gracefully | Listener stays up, `NRestarts=0`, and **admits the next caller** — this is what `--multiple` buys |
 | Caller killed with `SIGKILL` (no clean SRT close) | Outage detected, group goes to 0 bytes, listener stays up at `NRestarts=0` |
 | Caller redials after either | Feed resumes, and **the MoQ publisher resumes with it at `NRestarts=0`** — no intervention anywhere |
 | `srt-ingest` itself restarted | **The caller is dropped and must redial.** Our side returns to listening; recovery from here depends on the encoder's own retry policy |
 
-So the chain is self-healing against everything except its own restart, and against that it depends on
-the far end retrying — which is a requirement on the contribution encoder, not something this side can
-supply while it is the listener. **A reboot restores the whole chain**: both hosts were rebooted with
-all units enabled, and relay, ingest, publisher and the loop publisher all returned active at
-`NRestarts=0` with `udp/9000` and `udp/443` bound, inside ~26 s.
+So the chain is self-healing against everything except its own restart, and against that it depends on the far end retrying — which is a requirement on the contribution encoder, not something this side can supply while it is the listener. **A reboot restores the whole chain**: both hosts were rebooted with all units enabled, and relay, ingest, publisher and the loop publisher all returned active at `NRestarts=0` with `udp/9000` and `udp/443` bound, inside ~26 s.
 
 #### Why the receive-latency floor is 2000 ms and not the 6000 ms it replaced
 
-The retired unit carried `latency=6000`, and that figure was right for the path it was written for:
-[Leg B](#leg-b--the-live-srt-contribution-chain) contributed from a domestic uplink that dropped a
-3.5 Mb/s feed outright, where a six-second buffer was buying real recovery. **The contribution source
-is now AWS MediaConnect**, and the same number on that path is a straight loss.
+The retired unit carried `latency=6000`, and that figure was right for the path it was written for: [Leg B](#leg-b--the-live-srt-contribution-chain) contributed from a domestic uplink that dropped a 3.5 Mb/s feed outright, where a six-second buffer was buying real recovery. **The contribution source is now AWS MediaConnect**, and the same number on that path is a straight loss.
 
-SRT's recovery headroom is the latency divided by the round-trip time, so the useful question is how
-many retransmission attempts a buffer buys rather than how many seconds it holds. At the 18.6 ms RTT
-measured from this workstation, 2000 ms buys ~100 attempts; on an intra-region AWS path of a few
-milliseconds it buys several hundred. Six seconds buys a multiple of an already unreachable number,
-and charges the whole chain a fixed six-second delay for it — which would dominate every end-to-end
-figure the campaign takes and would have to be declared and subtracted in each one. The floor is
-therefore 2000 ms, and **whether it binds at all is the sender's choice**: SRT negotiates
-`max(our rcv-latency, the caller's peer-latency)`, so our value is a floor and not a setting. Sizing
-it properly means reading the RTT that SRT reports once the real source is dialled in, then lowering
-it if the path deserves it — a one-line change to one unit, which does not disturb the encoder.
+SRT's recovery headroom is the latency divided by the round-trip time, so the useful question is how many retransmission attempts a buffer buys rather than how many seconds it holds. At the 18.6 ms RTT measured from this workstation, 2000 ms buys ~100 attempts; on an intra-region AWS path of a few milliseconds it buys several hundred. Six seconds buys a multiple of an already unreachable number, and charges the whole chain a fixed six-second delay for it — which would dominate every end-to-end figure the campaign takes and would have to be declared and subtracted in each one. The floor is therefore 2000 ms, and **whether it binds at all is the sender's choice**: SRT negotiates `max(our rcv-latency, the caller's peer-latency)`, so our value is a floor and not a setting. Sizing it properly means reading the RTT that SRT reports once the real source is dialled in, then lowering it if the path deserves it — a one-line change to one unit, which does not disturb the encoder.
 
 ### The three-lane arm
 
-- **Rig:** [`t4-three-lane.sh`](scripts/t4-three-lane.sh), one lane per invocation. It starts its own
-  origin-side sender (so the sender's file position at the join is known and the local reference can be
-  cut to match), captures generously, then trims to the packet bound. The standing relay and both
-  standing publishers are left exactly as found; the rig tears its own sender down **by process group**,
-  never by process name, because on that box the standing units are `tsp`/`moq`/`ffmpeg` processes too.
-- **Source:** `~/contrib-10m.ts` on `<EC2_IP>` (745,917,260 B, 1080i25 H.264, ~9.95 Mbps PCR-derived, 13
-  PIDs, 600 s). The local copy is byte-identical in length and supplies the reference cut, so no
-  745 MB transfer is needed to compare against the source.
-- **One instrument, one version, both ends:** TSDuck **3.44-4676** on EC2 *and* locally — the same
-  build, so nothing in these tables is an instrument difference between origin and receiver.
-- **MoQ binaries differ by a patch version across the lane** — `moq 0.9.11-eab96019` importing on EC2,
-  `moq 0.9.10-eab960192` exporting locally — but both are built from the same `main` commit
-  `eab960192`, so the difference is a version string rather than a code difference.
-- **Lane transports:** MoQ media-aware over QUIC **UDP 443** *through the relay*; byte-faithful SRT
-  **UDP 9010** point-to-point (T8's port; the standing SRT receiver on 9000 is untouched); segmented
-  HTTP over **TCP** from a static origin with no relay.
-- **Window:** 30 s of media = **198,389 packets** at the clip's PCR-derived 9,945,951 b/s. Every lane
-  is trimmed to that count.
-- A **fresh broadcast name per MoQ run** (`t4.3lane.<pid>.hang`): reusing a name the relay has already
-  announced can leave a stale announce, after which the subscriber receives only `catalog.json` and
-  stalls at zero bytes.
+- **Rig:** [`t4-three-lane.sh`](scripts/t4-three-lane.sh), one lane per invocation. It starts its own origin-side sender (so the sender's file position at the join is known and the local reference can be cut to match), captures generously, then trims to the packet bound. The standing relay and both standing publishers are left exactly as found; the rig tears its own sender down **by process group**, never by process name, because on that box the standing units are `tsp`/`moq`/`ffmpeg` processes too.
+- **Source:** `~/contrib-10m.ts` on `<EC2_IP>` (745,917,260 B, 1080i25 H.264, ~9.95 Mbps PCR-derived, 13 PIDs, 600 s). The local copy is byte-identical in length and supplies the reference cut, so no 745 MB transfer is needed to compare against the source.
+- **One instrument, one version, both ends:** TSDuck **3.44-4676** on EC2 _and_ locally — the same build, so nothing in these tables is an instrument difference between origin and receiver.
+- **MoQ binaries differ by a patch version across the lane** — `moq 0.9.11-eab96019` importing on EC2, `moq 0.9.10-eab960192` exporting locally — but both are built from the same `main` commit `eab960192`, so the difference is a version string rather than a code difference.
+- **Lane transports:** MoQ media-aware over QUIC **UDP 443** _through the relay_; byte-faithful SRT **UDP 9010** point-to-point (T8's port; the standing SRT receiver on 9000 is untouched); segmented HTTP over **TCP** from a static origin with no relay.
+- **Window:** 30 s of media = **198,389 packets** at the clip's PCR-derived 9,945,951 b/s. Every lane is trimmed to that count.
+- A **fresh broadcast name per MoQ run** (`t4.3lane.<pid>.hang`): reusing a name the relay has already announced can leave a stale announce, after which the subscriber receives only `catalog.json` and stalls at zero bytes.
 
-**Perimeter, as it stands: inbound `22`, `80`, `443` and `8080` on TCP, and all UDP.** An inbound rule
-for TCP 8080 was added during this session for the segmented lane; the two UDP ports the other lanes
-need (443 QUIC, 9010 SRT) fall under the blanket UDP rule. All three lanes therefore run from home.
+**Perimeter, as it stands: inbound `22`, `80`, `443` and `8080` on TCP, and all UDP.** An inbound rule for TCP 8080 was added during this session for the segmented lane; the two UDP ports the other lanes need (443 QUIC, 9010 SRT) fall under the blanket UDP rule. All three lanes therefore run from home.
 
-**Reachability probes need a listener.** A closed-port check with nothing bound cannot distinguish a
-filtered port from an admitted one with no server; the measured discriminator and the rule are in
-Corrections.
+**Reachability probes need a listener.** A closed-port check with nothing bound cannot distinguish a filtered port from an admitted one with no server; the measured discriminator and the rule are in Corrections.
 
 ## Procedure
 
@@ -246,13 +155,10 @@ tsp -I file t4_live_out.ts -P analyze -O drop     # + continuity, pcrextract per
 
 ### The three lanes, side by side
 
-Same clip, same origin, same path, same 198,389-packet window, same instrument. Reference cuts offset
-to the media each receiver joined (MoQ 5 s, SRT 6 s, segmented HTTP 3 s into the clip); all three
-references are homogeneous across the window to 0.09–0.10 points of stuffing, so the census rows measure
-the lane and not the cut.
+Same clip, same origin, same path, same 198,389-packet window, same instrument. Reference cuts offset to the media each receiver joined (MoQ 5 s, SRT 6 s, segmented HTTP 3 s into the clip); all three references are homogeneous across the window to 0.09–0.10 points of stuffing, so the census rows measure the lane and not the cut.
 
 | Criterion (T3's, applied over the wire) | MoQ media-aware — QUIC 443, via relay | Segmented HTTP — TCP 8080, no relay | SRT byte-faithful — UDP 9010, point-to-point |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | **(1)** Every source PID at its original number | **11 of 13** | **13 of 13** | **13 of 13** |
 | TDT/TOT (0x0014) | **dropped** | preserved | preserved |
 | Null stuffing (0x1FFF) | **stripped** — 4.51 % → 0 | preserved — 4.50 % | preserved — 4.53 % |
@@ -264,59 +170,30 @@ the lane and not the cut.
 | **(5)** PCR grid | **not reproduced** — 1,123 of 1,307 intervals < 1 ms, max **319.94 ms**, 8.19 % > 40 ms | **reproduced** — max 24.95 ms, 0 % > 40 ms | **reproduced exactly** — max 24.95 ms, 0 % > 40 ms |
 | PCR accuracy at the 481 ns P2 gate | **gate degenerate** — 1,248 "violations", and the bound it reports (319.93 ms) is just the largest PCR gap | **302.1 µs**, 1,223 violations — the injected pair, priced; 0 violations at 500 µs | **0 violations**; tightest clean bound 1 tick (37 ns) |
 | Mux rate | **none** — `analyze` reads 15.66 Gb/s on ~10 Mb/s content | 9,950,239 b/s — source **+0.043 %**, the injected bytes | 9,945,951 b/s — the source value exactly |
-| **(6)** Nothing added | no new PIDs; PSI *reduced* rather than added | **fails** — no new PIDs, but **+13 PAT and +13 PMT: exactly 1.00 pair per segment head** | no new PIDs, no added packets |
+| **(6)** Nothing added | no new PIDs; PSI _reduced_ rather than added | **fails** — no new PIDs, but **+13 PAT and +13 PMT: exactly 1.00 pair per segment head** | no new PIDs, no added packets |
 | Media carried in the 198,389-packet window | **31.12 s** | 29.98 s | 29.99 s |
 
-**SRT over the public internet is byte-faithful on every criterion, and the measurement is now on the
-record rather than inferred.** Thirteen PIDs of thirteen at their source numbers, both SI tables,
-TDT/TOT, all three splice PIDs, stuffing, the exact source mux rate, an identical PSI cadence, a PCR
-grid indistinguishable from the file's, 0 continuity errors, and 0 PCR-accuracy violations at the
-481 ns P2 gate over a ~125 ms internet path. This is the first time the campaign has graded PCR
-*accuracy* on a lane's delivered capture over a real path; on loopback,
-[T3](test-3-opaque-transparency.md) found the media-aware lane has no mux rate for the gate to work
-against. It grades the bytes, the source's PCR-to-position relationship arriving intact, which
-byte-faithful carriage implies; when the receiver released them was not graded.
+**SRT over the public internet is byte-faithful on every criterion, and the measurement is now on the record rather than inferred.** Thirteen PIDs of thirteen at their source numbers, both SI tables, TDT/TOT, all three splice PIDs, stuffing, the exact source mux rate, an identical PSI cadence, a PCR grid indistinguishable from the file's, 0 continuity errors, and 0 PCR-accuracy violations at the 481 ns P2 gate over a ~125 ms internet path. This is the first time the campaign has graded PCR _accuracy_ on a lane's delivered capture over a real path; on loopback, [T3](test-3-opaque-transparency.md) found the media-aware lane has no mux rate for the gate to work against. It grades the bytes, the source's PCR-to-position relationship arriving intact, which byte-faithful carriage implies; when the receiver released them was not graded.
 
-**The media-aware lane's carriage result over the wire is much better than T4 first reported and its
-timing result is worse.** Service identity, TSID, ONID, both source PIDs and every elementary stream
-including the splice PIDs survive — the half that [#2440](https://github.com/moq-dev/moq/pull/2440)
-fixed. What does not survive is everything to do with the *mux as a timed object*: stuffing, the mux
-rate, PSI cadence and the PCR grid. Those are not path damage — the same 0 continuity errors say the
-bytes arrived intact — they are what demuxing to tracks and reassembling without a rate does to a
-broadcast mux.
+**The media-aware lane's carriage result over the wire is much better than T4 first reported and its timing result is worse.** Service identity, TSID, ONID, both source PIDs and every elementary stream including the splice PIDs survive — the half that [#2440](https://github.com/moq-dev/moq/pull/2440) fixed. What does not survive is everything to do with the _mux as a timed object_: stuffing, the mux rate, PSI cadence and the PCR grid. Those are not path damage — the same 0 continuity errors say the bytes arrived intact — they are what demuxing to tracks and reassembling without a rate does to a broadcast mux.
 
 #### Three of this lane's rows are not numbers, and saying so is the result
 
-The media-aware column above contains four entries that a reader could mistake for measurements of
-timing quality. They are not, and the reason is the same in each case: **the ungroomed egress carries
-no stuffing, so it has no mux rate, and every instrument that needs one degenerates.**
+The media-aware column above contains four entries that a reader could mistake for measurements of timing quality. They are not, and the reason is the same in each case: **the ungroomed egress carries no stuffing, so it has no mux rate, and every instrument that needs one degenerates.**
 
-- **`analyze`'s bitrate (15.66 Gb/s)** is header arithmetic on a stream with no rate. Any rate for
-  this lane has to come from bytes over a known window.
-- **`pcrverify --absolute`'s 1,248 violations** is the degeneracy [T3](test-3-opaque-transparency.md)
-  characterised, now confirmed over a real path: with no mux rate the tool has no expected PCR to
-  compare against, so the "worst error" it reports (319.93 ms) is simply the largest gap in the PCR
-  series. It is not a 320 ms clock error.
-- **The PSI repetition columns** `analyze` prints for this lane (PAT 0/0 ms, SDT 1/1 ms) are derived
-  from that same absent rate and are meaningless. The 2.51 PAT/s and 399 ms figures in the table are
-  computed instead from the capture's own PCR span (31.12 s of media), which is a defensible *average*
-  — but it is an average only. **The maximum PAT interval on this lane cannot be measured**, so
-  whether it ever breaches P1's 500 ms limit is unknown, and 399 ms mean leaves little margin.
-- **Equal packets are not equal media on this lane.** The 198,389-packet window carries **31.12 s** of
-  media at egress against **29.98 s** at the source, because 4.5 % of the source's packets were
-  stuffing and none of the egress's are. The packet bound equalises the *window*, not the *content*,
-  wherever a lane strips padding — so this lane's absolute counts carry a ~3.8 % content offset, and
-  only the per-100k-packet and per-second-of-media figures are directly comparable with the others.
+- **`analyze`'s bitrate (15.66 Gb/s)** is header arithmetic on a stream with no rate. Any rate for this lane has to come from bytes over a known window.
+- **`pcrverify --absolute`'s 1,248 violations** is the degeneracy [T3](test-3-opaque-transparency.md) characterised, now confirmed over a real path: with no mux rate the tool has no expected PCR to compare against, so the "worst error" it reports (319.93 ms) is simply the largest gap in the PCR series. It is not a 320 ms clock error.
+- **The PSI repetition columns** `analyze` prints for this lane (PAT 0/0 ms, SDT 1/1 ms) are derived from that same absent rate and are meaningless. The 2.51 PAT/s and 399 ms figures in the table are computed instead from the capture's own PCR span (31.12 s of media), which is a defensible _average_ — but it is an average only. **The maximum PAT interval on this lane cannot be measured**, so whether it ever breaches P1's 500 ms limit is unknown, and 399 ms mean leaves little margin.
+- **Equal packets are not equal media on this lane.** The 198,389-packet window carries **31.12 s** of media at egress against **29.98 s** at the source, because 4.5 % of the source's packets were stuffing and none of the egress's are. The packet bound equalises the _window_, not the _content_, wherever a lane strips padding — so this lane's absolute counts carry a ~3.8 % content offset, and only the per-100k-packet and per-second-of-media figures are directly comparable with the others.
 
 #### The 320 ms PCR gaps are the lane's, not the encoder's
 
 T4 previously reported the media-aware egress at "mean/max 33.52 / 319.98 ms, 12.59 % of intervals
-> 40 ms" and attributed the maximum to the source, concluding that the lane "transports the cadence
-the encoder produced". **That attribution was wrong.** Profiling the source clip's own PCR spacing
-across every span of it shows no such gap anywhere:
+
+> 40 ms" and attributed the maximum to the source, concluding that the lane "transports the cadence the encoder produced". **That attribution was wrong.** Profiling the source clip's own PCR spacing across every span of it shows no such gap anywhere:
 
 | Span of `contrib-10m.ts` | n | min (ms) | mean (ms) | max (ms) | > 40 ms |
-|---|---:|---:|---:|---:|---:|
+| --- | --: | --: | --: | --: | --: |
 | 0–30 s | 1,225 | 1.51 | 24.48 | **24.95** | **0** |
 | 5–35 s (this run's window) | 1,225 | 1.51 | 24.47 | **24.95** | **0** |
 | 0–60 s (the window leg A used) | 2,456 | 0.15 | 24.42 | **24.95** | **0** |
@@ -325,73 +202,37 @@ across every span of it shows no such gap anywhere:
 | 300–600 s | 12,281 | 0.15 | 24.42 | **24.95** | **0** |
 | **whole clip, 0–600 s** | **24,573** | 0.15 | 24.42 | **24.95** | **0** |
 
-The source is a flat ~24.4 ms PCR grid with a 24.95 ms maximum and **not one interval above 40 ms in
-600 s**. So the 320 ms maximum and the 8–13 % of intervals over 40 ms are introduced between the
-importer and the exporter.
+The source is a flat ~24.4 ms PCR grid with a 24.95 ms maximum and **not one interval above 40 ms in 600 s**. So the 320 ms maximum and the 8–13 % of intervals over 40 ms are introduced between the importer and the exporter.
 
-**This was already the campaign's finding, and T4 was the file that contradicted it.**
-[T2](test-2-media-aware-transparency.md) records exactly these figures in a table headed *"impairments
-introduced by the lane"*, with a source column at 20–28 ms and 0 % above 40 ms against the same clip's
-319.9 ms egress maximum and 13.7 %. [T8](test-8-srt-vs-moq.md) shows the same split from the other
-side — native SRT-carried cadence "mean 24.5 ms, 0 % > 40 ms" beside a raw MoQ egress at 10.78 % with a
-1,200 ms maximum. What this arm adds is confirmation over a real path on the current build, the source
-profile that kills the 319.98 ms coincidence outright, and the shape of the distribution below.
+**This was already the campaign's finding, and T4 was the file that contradicted it.** [T2](test-2-media-aware-transparency.md) records exactly these figures in a table headed _"impairments introduced by the lane"_, with a source column at 20–28 ms and 0 % above 40 ms against the same clip's 319.9 ms egress maximum and 13.7 %. [T8](test-8-srt-vs-moq.md) shows the same split from the other side — native SRT-carried cadence "mean 24.5 ms, 0 % > 40 ms" beside a raw MoQ egress at 10.78 % with a 1,200 ms maximum. What this arm adds is confirmation over a real path on the current build, the source profile that kills the 319.98 ms coincidence outright, and the shape of the distribution below.
 
-What the lane does is not reordering, and it is not loss. The egress PCR series is **monotonic** (0
-intervals going backwards) and carries *more* PCRs than the source window (1,307 against 1,225), yet
-**1,123 of its 1,307 intervals are under 1 millisecond**, with the residual time collected into 107
-gaps of up to 319.94 ms. PCR values are timestamps, so this is independent of the missing stuffing:
-the lane emits PCR-bearing packets in near-simultaneous clusters separated by long gaps, conserving
-the mean (23.81 ms against the source's 24.47 ms) while destroying the spacing. The clustering is
-consistent with group-wise reassembly — the exporter writing out a group's packets back-to-back — but
-that mechanism is inferred from the shape of the distribution, **not** confirmed against the code, and
-is recorded below as an open question.
+What the lane does is not reordering, and it is not loss. The egress PCR series is **monotonic** (0 intervals going backwards) and carries _more_ PCRs than the source window (1,307 against 1,225), yet **1,123 of its 1,307 intervals are under 1 millisecond**, with the residual time collected into 107 gaps of up to 319.94 ms. PCR values are timestamps, so this is independent of the missing stuffing: the lane emits PCR-bearing packets in near-simultaneous clusters separated by long gaps, conserving the mean (23.81 ms against the source's 24.47 ms) while destroying the spacing. The clustering is consistent with group-wise reassembly — the exporter writing out a group's packets back-to-back — but that mechanism is inferred from the shape of the distribution, **not** confirmed against the code, and is recorded below as an open question.
 
-The practical consequence is unchanged by any of this and is already the campaign's position: raw
-media-aware egress needs a groomer before it is a broadcast mux, and with one it measures IRD-grade
-(T7/T13/T16, and T8's paced column at 0 % > 40 ms and 0 `pcrverify` violations at ±500 ns). What
-changes is the *reason*: the groomer is not tidying up an awkward encoder, it is rebuilding a timeline
-the lane discarded.
+The practical consequence is unchanged by any of this and is already the campaign's position: raw media-aware egress needs a groomer before it is a broadcast mux, and with one it measures IRD-grade (T7/T13/T16, and T8's paced column at 0 % > 40 ms and 0 `pcrverify` violations at ±500 ns). What changes is the _reason_: the groomer is not tidying up an awkward encoder, it is rebuilding a timeline the lane discarded.
 
 #### Segmented HTTP over the real path matches its loopback prediction to 0.1 %
 
-The prediction was registered before the lane ran, taken from T3's loopback arm: content intact, and
-criterion 6 failed by one injected PAT/PMT pair per segment head, costing ~302 µs of PCR accuracy —
-scaling with segment *count* rather than segment *size*. All of it held.
+The prediction was registered before the lane ran, taken from T3's loopback arm: content intact, and criterion 6 failed by one injected PAT/PMT pair per segment head, costing ~302 µs of PCR accuracy — scaling with segment _count_ rather than segment _size_. All of it held.
 
 | Pre-registered prediction | Measured over the internet |
-|---|---|
+| --- | --- |
 | Content survives intact | **13 of 13 PIDs**, SDT, NIT, TDT/TOT, splice ×3, stuffing preserved, 0 CC |
 | One PAT/PMT pair injected per segment | **+13 PAT, +13 PMT over equal media; 13 back-to-back pairs — 1.00 per segment head** |
 | PCR accuracy degrades to ~302 µs | **302.148 µs** against 302.4 µs predicted from 376 bytes at the source rate |
-| PCR *repetition* untouched | max 24.95 ms, **0 % above 40 ms** — the source grid |
+| PCR _repetition_ untouched | max 24.95 ms, **0 % above 40 ms** — the source grid |
 
-Mean achieved segment duration was **2.396 s** against a 2 s target, `--intra-close` overshooting to
-land on an I-frame, so "13 segments" is 13 heads across 29.98 s of media rather than 15.
+Mean achieved segment duration was **2.396 s** against a 2 s target, `--intra-close` overshooting to land on an I-frame, so "13 segments" is 13 heads across 29.98 s of media rather than 15.
 
-**The real path changes nothing about the injection accounting, which was the open question this leg
-existed to answer.** Injection is a property of the segmenter, not of the delivery: the count per
-segment, the 302 µs displacement and the P1-clean repetition are all indistinguishable from loopback
-across a ~125 ms path with per-segment TCP connections. What the path adds is visible only in rate —
-the egress declares 9,950,239 b/s against the source's 9,945,951, **+0.043 %**, which is the injected
-bytes and nothing else.
+**The real path changes nothing about the injection accounting, which was the open question this leg existed to answer.** Injection is a property of the segmenter, not of the delivery: the count per segment, the 302 µs displacement and the P1-clean repetition are all indistinguishable from loopback across a ~125 ms path with per-segment TCP connections. What the path adds is visible only in rate — the egress declares 9,950,239 b/s against the source's 9,945,951, **+0.043 %**, which is the injected bytes and nothing else.
 
-The one number worth reading carefully is the P2 row. **1,223 violations at 481 ns and 0 at 500 µs**
-bounds the error rather than merely counting it: the injection displaces PCRs by a fixed ~302 µs, so it
-breaches a 481 ns gate constantly and a 500 µs gate never. Unlike the media-aware lane's 1,248
-"violations", this figure is a real measurement — the mux rate survives, so the gate has a byte clock to
-grade against.
+The one number worth reading carefully is the P2 row. **1,223 violations at 481 ns and 0 at 500 µs** bounds the error rather than merely counting it: the injection displaces PCRs by a fixed ~302 µs, so it breaches a 481 ns gate constantly and a 500 µs gate never. Unlike the media-aware lane's 1,248 "violations", this figure is a real measurement — the mux rate survives, so the gate has a byte clock to grade against.
 
 ### Leg A — what changed on the media-aware lane, and what changed it
 
-This leg's value now is the *delta*, not the absolute figures: the three-lane table above is the
-authoritative carriage record for this lane, taken with matched windows and one instrument. Leg A is a
-60 s capture of the standing loop broadcast (72.2 MB / 383,930 packets) on the current deployed build,
-and **the whole non-transparency half of its original result has been reversed by
-[#2440](https://github.com/moq-dev/moq/pull/2440) and by the publisher change**:
+This leg's value now is the _delta_, not the absolute figures: the three-lane table above is the authoritative carriage record for this lane, taken with matched windows and one instrument. Leg A is a 60 s capture of the standing loop broadcast (72.2 MB / 383,930 packets) on the current deployed build, and **the whole non-transparency half of its original result has been reversed by [#2440](https://github.com/moq-dev/moq/pull/2440) and by the publisher change**:
 
 | Metric | **`0.9.11-eab96019`, `tsp` publisher** |
-|---|---|
+| --- | --- |
 | Relay reachable over internet | yes (~125 ms RTT) |
 | Elementary streams delivered | **7, all at source PIDs**, plus verbatim `N.ts` tracks |
 | AC-3 / teletext / SCTE-35 ×3 | **all present** — 0x007B typed AC-3, 0x0083, 0x008D/8E/8F |
@@ -407,24 +248,16 @@ and **the whole non-transparency half of its original result has been reversed b
 | PCR interval mean / max | 33.52 / 319.98 ms — **lane-introduced**, see above |
 | PCR intervals > 40 ms | 12.59 % — **lane-introduced**, source has none in 600 s |
 
-**Over the public internet, the deployed media-aware lane now carries the DVB service layer it used to
-strip, with 0 continuity errors.** Only TDT/TOT is still missing, and that has a known cause and a
-merged fix the deployed build predates. The two PCR rows barely moved across the change — but that
-stability is not the reassurance this leg originally read into it, because the gaps those rows count
-are produced by the lane and not by the encoder.
+**Over the public internet, the deployed media-aware lane now carries the DVB service layer it used to strip, with 0 continuity errors.** Only TDT/TOT is still missing, and that has a known cause and a merged fix the deployed build predates. The two PCR rows barely moved across the change — but that stability is not the reassurance this leg originally read into it, because the gaps those rows count are produced by the lane and not by the encoder.
 
-**The egress has no mux rate, so its "bitrate" is not a figure** — `analyze` reports 24.8 Gb/s here on
-~10 Mb/s content. That property and its consequences for the P1 and P2 gates are set out in full in the
-three-lane section above.
+**The egress has no mux rate, so its "bitrate" is not a figure** — `analyze` reports 24.8 Gb/s here on ~10 Mb/s content. That property and its consequences for the P1 and P2 gates are set out in full in the three-lane section above.
 
 ### Leg B — the live SRT contribution chain
 
-Three SRT runs were taken. Run 1 (3.5 Mbps) delivered ~3.3 MB then the home uplink dropped the SRT
-link (`code=24`) — the access-link constraint, not the transport. Run 3 (2 Mbps, matched SRT latency)
-was stable; figures below are from run 3, and were taken on the **pre-#2440** build.
+Three SRT runs were taken. Run 1 (3.5 Mbps) delivered ~3.3 MB then the home uplink dropped the SRT link (`code=24`) — the access-link constraint, not the transport. Run 3 (2 Mbps, matched SRT latency) was stable; figures below are from run 3, and were taken on the **pre-#2440** build.
 
 | Metric | Live SRT chain → media-aware |
-|---|---|
+| --- | --- |
 | SRT contribution leg (local → EC2:9000) | **works** — caller connected, feed delivered end-to-end |
 | Captured egress | **10.3 MB / ~48 s** |
 | Continuity-counter errors (P1) | **0** |
@@ -433,137 +266,56 @@ was stable; figures below are from run 3, and were taken on the **pre-#2440** bu
 | Encoded PCR interval min/mean/max | **40.00 / 40.00 / 40.00 ms** |
 | PCR intervals > 40 ms | **0 %** (n=1235) |
 
-A live SRT contribution feed traversed the whole chain with **0 CC errors**. QUIC carried the media
-losslessly; the non-transparency was the *lane*, not the network, exactly as local T2 predicted.
+A live SRT contribution feed traversed the whole chain with **0 CC errors**. QUIC carried the media losslessly; the non-transparency was the _lane_, not the network, exactly as local T2 predicted.
 
-Two limits on this leg, both of which make it weaker than the three-lane arm rather than wrong. Its
-carriage rows are pre-#2440 and have not been re-measured, so read the three-lane table for what the
-lane does today. And the feed was **transcoded** (`h264_videotoolbox`, 2 Mbps) to fit the home uplink,
-so this leg never tested byte-faithful carriage in the first place — the campaign's later rule is to
-keep ffmpeg out of an SRT carriage path entirely and use `tsp -O srt` / `tsp -I srt`
-([T8](test-8-srt-vs-moq.md), [method-notes](method-notes.md)).
+Two limits on this leg, both of which make it weaker than the three-lane arm rather than wrong. Its carriage rows are pre-#2440 and have not been re-measured, so read the three-lane table for what the lane does today. And the feed was **transcoded** (`h264_videotoolbox`, 2 Mbps) to fit the home uplink, so this leg never tested byte-faithful carriage in the first place — the campaign's later rule is to keep ffmpeg out of an SRT carriage path entirely and use `tsp -O srt` / `tsp -I srt` ([T8](test-8-srt-vs-moq.md), [method-notes](method-notes.md)).
 
-**That second gap is now closed, in the other direction.** The three-lane arm runs SRT byte-faithfully
-with `tsp` at both ends and grades it against the source, so "what SRT does to a mux over this path" is
-measured. It is measured **downstream** (EC2 → home), because the home uplink cannot carry a full-rate
-mux; this leg remains the only *contribution*-direction evidence, and it is transcoded. Byte-faithful
-contribution from this workstation is not measurable on this access link at all.
+**That second gap is now closed, in the other direction.** The three-lane arm runs SRT byte-faithfully with `tsp` at both ends and grades it against the source, so "what SRT does to a mux over this path" is measured. It is measured **downstream** (EC2 → home), because the home uplink cannot carry a full-rate mux; this leg remains the only _contribution_-direction evidence, and it is transcoded. Byte-faithful contribution from this workstation is not measurable on this access link at all.
 
-Full-rate confirmation is in [test-8-srt-vs-moq.md](test-8-srt-vs-moq.md) (clean path): the same
-media-aware lane pulled the full ~9.93 Mbps `contrib-10m.ts` loop home over QUIC at **9.48 Mbps
-sustained for 4 min, 0 CC** — the low Mbps here was the source (SRT-latency/uplink-limited), not the
-transport.
+Full-rate confirmation is in [test-8-srt-vs-moq.md](test-8-srt-vs-moq.md) (clean path): the same media-aware lane pulled the full ~9.93 Mbps `contrib-10m.ts` loop home over QUIC at **9.48 Mbps sustained for 4 min, 0 CC** — the low Mbps here was the source (SRT-latency/uplink-limited), not the transport.
 
 ## Observations
 
-- **On PCR cadence: the media-aware lane does not transport the spacing the encoder produced.** It
-  conserves the *mean* while destroying the *distribution* — clustering PCRs sub-millisecond and
-  collecting the residual into gaps up to 320 ms, from a source that has no interval above 40 ms
-  anywhere in 600 s. Timing conformance remains a groomer/egress responsibility (T7).
-- **The three lanes separate "the mux as bytes" from "the mux as a timed object", and only the second
-  is where they differ.** SRT preserves both. The media-aware lane now preserves the first completely
-  (identity, PIDs, SI, splice) and none of the second (stuffing, mux rate, PSI cadence, PCR grid). That
-  split is sharper over the wire than on loopback, because 0 continuity errors on the same capture rule
-  out the path as the cause.
-- **Injection is a property of the segmenter, not of the path.** Segmented HTTP's per-segment PAT/PMT
-  pair, its ~302 µs PCR displacement and its clean P1 repetition are indistinguishable from T3's
-  loopback figures across a ~125 ms internet path with per-segment TCP connections. The only thing the
-  path adds is 0.043 % of declared rate, which is the injected bytes. So T3's loopback carriage result
-  for this lane generalises, which is not something that could be assumed of a lane whose delivery model
-  is a sequence of separate HTTP fetches.
-- **The two lanes that preserve stuffing carry equal media in an equal packet count; the one that strips
-  it does not.** Segmented HTTP and SRT both put 29.98–29.99 s of media in the 198,389-packet window
-  against the source's 29.97 s. The media-aware lane puts **31.12 s** in the same count. A packet bound
-  is therefore an equal-media bound only for a byte-faithful lane, and the choice of bound has to be
-  justified per lane rather than per rig.
-- **Home uplink < 10 Mbps sustained**, so a full-rate mux cannot be *published* from the local end;
-  the SRT leg was transcoded (`h264_videotoolbox`). 3.5 Mbps dropped after ~30 s; 2 Mbps was stable.
-  Publish-side figures are bounded by the access link, and the SRT transcode is not byte-transparent
-  (that is T3's claim, not T4's).
+- **On PCR cadence: the media-aware lane does not transport the spacing the encoder produced.** It conserves the _mean_ while destroying the _distribution_ — clustering PCRs sub-millisecond and collecting the residual into gaps up to 320 ms, from a source that has no interval above 40 ms anywhere in 600 s. Timing conformance remains a groomer/egress responsibility (T7).
+- **The three lanes separate "the mux as bytes" from "the mux as a timed object", and only the second is where they differ.** SRT preserves both. The media-aware lane now preserves the first completely (identity, PIDs, SI, splice) and none of the second (stuffing, mux rate, PSI cadence, PCR grid). That split is sharper over the wire than on loopback, because 0 continuity errors on the same capture rule out the path as the cause.
+- **Injection is a property of the segmenter, not of the path.** Segmented HTTP's per-segment PAT/PMT pair, its ~302 µs PCR displacement and its clean P1 repetition are indistinguishable from T3's loopback figures across a ~125 ms internet path with per-segment TCP connections. The only thing the path adds is 0.043 % of declared rate, which is the injected bytes. So T3's loopback carriage result for this lane generalises, which is not something that could be assumed of a lane whose delivery model is a sequence of separate HTTP fetches.
+- **The two lanes that preserve stuffing carry equal media in an equal packet count; the one that strips it does not.** Segmented HTTP and SRT both put 29.98–29.99 s of media in the 198,389-packet window against the source's 29.97 s. The media-aware lane puts **31.12 s** in the same count. A packet bound is therefore an equal-media bound only for a byte-faithful lane, and the choice of bound has to be justified per lane rather than per rig.
+- **Home uplink < 10 Mbps sustained**, so a full-rate mux cannot be _published_ from the local end; the SRT leg was transcoded (`h264_videotoolbox`). 3.5 Mbps dropped after ~30 s; 2 Mbps was stable. Publish-side figures are bounded by the access link, and the SRT transcode is not byte-transparent (that is T3's claim, not T4's).
 
 ## Conclusion
 
 Over the public internet the data planes fail **different halves of the same question**.
 
-**SRT is byte-faithful, and that is now measured rather than assumed** — 13 PIDs of 13 at their source
-numbers, both SI tables, TDT/TOT, three splice PIDs, stuffing, the exact source mux rate, an identical
-PSI cadence and PCR grid, 0 continuity errors, and 0 PCR-accuracy violations at the 481 ns P2 gate,
-across a ~125 ms path. With segmented HTTP's 302 µs beside it, these are the campaign's first
-over-the-wire PCR-*accuracy* grades of any lane, and the two of them bracket the useful range: one lane
-at the instrument's floor, one at a known and fully explained displacement.
+**SRT is byte-faithful, and that is now measured rather than assumed** — 13 PIDs of 13 at their source numbers, both SI tables, TDT/TOT, three splice PIDs, stuffing, the exact source mux rate, an identical PSI cadence and PCR grid, 0 continuity errors, and 0 PCR-accuracy violations at the 481 ns P2 gate, across a ~125 ms path. With segmented HTTP's 302 µs beside it, these are the campaign's first over-the-wire PCR-_accuracy_ grades of any lane, and the two of them bracket the useful range: one lane at the instrument's floor, one at a known and fully explained displacement.
 
-**The MoQ media-aware lane is now faithful to the mux as a set of bytes and unfaithful to it as a timed
-object.** Identity, PIDs, SI and splice signalling survive the internet path intact with 0 continuity
-errors; TDT/TOT does not, and has a merged upstream fix this build predates. What does not survive
-is stuffing, the mux rate, PSI density (8.04 → 2.51 PAT/s) and the PCR grid (gaps to 320 ms from a source with none above 40 ms in 600 s). So "works on the
-wire" is closed for delivery *and* for carriage, and is **not** closed for cadence — and the groomer
-rebuilds a timeline rather than tidying one.
+**The MoQ media-aware lane is now faithful to the mux as a set of bytes and unfaithful to it as a timed object.** Identity, PIDs, SI and splice signalling survive the internet path intact with 0 continuity errors; TDT/TOT does not, and has a merged upstream fix this build predates. What does not survive is stuffing, the mux rate, PSI density (8.04 → 2.51 PAT/s) and the PCR grid (gaps to 320 ms from a source with none above 40 ms in 600 s). So "works on the wire" is closed for delivery _and_ for carriage, and is **not** closed for cadence — and the groomer rebuilds a timeline rather than tidying one.
 
-**Segmented HTTP is transparent to the mux's content over the real path and additive by exactly one
-PAT/PMT pair per segment — the loopback result, reproduced to 0.1 % on a prediction made before the
-run.** 13 PIDs of 13, TDT/TOT, stuffing, 0 CC, the source PCR grid; +13 PAT and +13 PMT over equal
-media, 302.148 µs of PCR displacement against 302.4 µs predicted, and 0.043 % of added rate. **The path
-does not touch the injection accounting**: per-segment TCP fetches across ~125 ms behave, on every
-carriage measure, exactly as loopback did. So of the three lanes, the two byte-faithful ones differ from
-each other only in whether the segmenter's two packets are there.
+**Segmented HTTP is transparent to the mux's content over the real path and additive by exactly one PAT/PMT pair per segment — the loopback result, reproduced to 0.1 % on a prediction made before the run.** 13 PIDs of 13, TDT/TOT, stuffing, 0 CC, the source PCR grid; +13 PAT and +13 PMT over equal media, 302.148 µs of PCR displacement against 302.4 µs predicted, and 0.043 % of added rate. **The path does not touch the injection accounting**: per-segment TCP fetches across ~125 ms behave, on every carriage measure, exactly as loopback did. So of the three lanes, the two byte-faithful ones differ from each other only in whether the segmenter's two packets are there.
 
-The live contribution chain works end to end: SRT contribution into EC2, MoQ publish, relay and local
-subscribe, with 0 continuity errors.
+The live contribution chain works end to end: SRT contribution into EC2, MoQ publish, relay and local subscribe, with 0 continuity errors.
 
-Opaque-remote (leg C) is [T48](test-48-passthrough-export.md)'s internet leg: the passthrough's
-output over this kind of path is the source's bytes.
-Recorded as a permanent finding in [`evidence.md`](evidence.md) §1.
+Opaque-remote (leg C) is [T48](test-48-passthrough-export.md)'s internet leg: the passthrough's output over this kind of path is the source's bytes. Recorded as a permanent finding in [`evidence.md`](evidence.md) §1.
 
 ## Still open
 
-1. **Why this build's media-aware lane clusters PCRs.** The distribution's shape (86 % of intervals
-   sub-1 ms, monotonic, mean conserved) points at group-wise reassembly, inferred from the output and
-   not confirmed against the exporter's code. Not pursued: the current export puts a PCR in every
-   25 ms slot ([T47](test-47-fixed-delay-export.md)).
-2. **The maximum PAT interval on the media-aware lane**, which no instrument can currently give: with
-   no mux rate, `analyze`'s repetition figures are meaningless and only an average over the PCR span is
-   available (399 ms against P1's 500 ms limit). Whether individual gaps breach P1 is unknown.
+1. **Why this build's media-aware lane clusters PCRs.** The distribution's shape (86 % of intervals sub-1 ms, monotonic, mean conserved) points at group-wise reassembly, inferred from the output and not confirmed against the exporter's code. Not pursued: the current export puts a PCR in every 25 ms slot ([T47](test-47-fixed-delay-export.md)).
+2. **The maximum PAT interval on the media-aware lane**, which no instrument can currently give: with no mux rate, `analyze`'s repetition figures are meaningless and only an average over the PCR span is available (399 ms against P1's 500 ms limit). Whether individual gaps breach P1 is unknown.
 3. **Byte-faithful SRT in the contribution direction** is not measurable on this access link.
-4. **Delivery cadence per lane over this path** is deliberately out of scope here — this arm scores
-   carriage and integrity. T8 holds the delivered-rate comparison and T18 the latency work.
+4. **Delivery cadence per lane over this path** is deliberately out of scope here — this arm scores carriage and integrity. T8 holds the delivered-rate comparison and T18 the latency work.
 
 ## Corrections
 
-**Believed:** the standing loop leg stripped the service layer — 2 elementary streams (`0.avc3` +
-`0.mp2`), AC-3 / teletext / SCTE-35 dropped, TSID regenerated to 0x0001, service identity lost, PMT
-renumbered to 0x1000. **True:** those rows were taken on a build predating #2440 through an
-`ffmpeg -c copy` publisher that dropped those PIDs before MoQ saw them; on the current build with a
-`tsp` publisher the three-lane and Leg A tables above are authoritative. **Rule:** a service-layer
-census must be taken against the deployed build *and* feed, not an earlier one; a leg whose publisher
-is not part of the rig needs its publisher recorded as an input — the same class of error as feeding
-a lane an ffmpeg remux and attributing the remuxer's output to the transport
-([T3](test-3-opaque-transparency.md)).
+**Believed:** the standing loop leg stripped the service layer — 2 elementary streams (`0.avc3` + `0.mp2`), AC-3 / teletext / SCTE-35 dropped, TSID regenerated to 0x0001, service identity lost, PMT renumbered to 0x1000. **True:** those rows were taken on a build predating #2440 through an `ffmpeg -c copy` publisher that dropped those PIDs before MoQ saw them; on the current build with a `tsp` publisher the three-lane and Leg A tables above are authoritative. **Rule:** a service-layer census must be taken against the deployed build _and_ feed, not an earlier one; a leg whose publisher is not part of the rig needs its publisher recorded as an input — the same class of error as feeding a lane an ffmpeg remux and attributing the remuxer's output to the transport ([T3](test-3-opaque-transparency.md)).
 
-**Believed:** the lane's 320 ms PCR gaps were the encoder's — the egress maximum (319.98 ms over 60 s)
-was "identical to the source's own", so the lane "transports the cadence the encoder produced", and
-13.2 % of intervals above 40 ms "reflects the source". **True:** the source's maximum PCR interval is
-**24.95 ms** in every span of the clip and over all 600 s of it; the gaps are introduced between
-importer and exporter, as [T2](test-2-media-aware-transparency.md) already recorded (source 20–28 ms,
-0 % above 40 ms). The error was comparing a 60 s egress extremum against a whole-clip source extremum.
-**Rule:** a matching pair of extrema is the easiest agreement to fake, so compare in the same window
-and prefer a distribution (here the 0.01 ms minimum gave it away, which no conformant mux produces); and
-before recording that a lane preserves a property, check whether another experiment found it does not.
+**Believed:** the lane's 320 ms PCR gaps were the encoder's — the egress maximum (319.98 ms over 60 s) was "identical to the source's own", so the lane "transports the cadence the encoder produced", and 13.2 % of intervals above 40 ms "reflects the source". **True:** the source's maximum PCR interval is **24.95 ms** in every span of the clip and over all 600 s of it; the gaps are introduced between importer and exporter, as [T2](test-2-media-aware-transparency.md) already recorded (source 20–28 ms, 0 % above 40 ms). The error was comparing a 60 s egress extremum against a whole-clip source extremum. **Rule:** a matching pair of extrema is the easiest agreement to fake, so compare in the same window and prefer a distribution (here the 0.01 ms minimum gave it away, which no conformant mux produces); and before recording that a lane preserves a property, check whether another experiment found it does not.
 
-**Believed:** the origin security group admitted no inbound TCP but SSH. **True:** an `nc -z` probe with
-nothing listening measures the absence of a server, not a filter — refusal is expected whether or not a
-rule exists; with `python3 -m http.server` on 8080 the path completed in **17 ms**, while TCP **81** (in
-no rule) took the full **8 s** timeout. **Rule:** a negative reachability result is evidence about the
-network only if the far end would have answered a positive one — bind a listener, or read the failure
-mode (drop times out, refusal returns immediately).
+**Believed:** the origin security group admitted no inbound TCP but SSH. **True:** an `nc -z` probe with nothing listening measures the absence of a server, not a filter — refusal is expected whether or not a rule exists; with `python3 -m http.server` on 8080 the path completed in **17 ms**, while TCP **81** (in no rule) took the full **8 s** timeout. **Rule:** a negative reachability result is evidence about the network only if the far end would have answered a positive one — bind a listener, or read the failure mode (drop times out, refusal returns immediately).
 
 ## References
 
 - Deployed cloud path and end-to-end result: [`evidence.md`](evidence.md) §1.
-- Three-lane rig: [`scripts/t4-three-lane.sh`](scripts/t4-three-lane.sh); shared instrument:
-  [`scripts/t3-transparency.py`](scripts/t3-transparency.py).
+- Three-lane rig: [`scripts/t4-three-lane.sh`](scripts/t4-three-lane.sh); shared instrument: [`scripts/t3-transparency.py`](scripts/t3-transparency.py).
 - Same criteria on loopback, and the P2-gate degeneracy: [test-3-opaque-transparency.md](test-3-opaque-transparency.md).
 - Full-rate confirmation and the SRT-vs-MoQ delivery comparison: [test-8-srt-vs-moq.md](test-8-srt-vs-moq.md).
-- Media-aware fingerprint origin, and the lane's PCR impairment as first measured locally:
-  [test-2-media-aware-transparency.md](test-2-media-aware-transparency.md).
-- What a groomer puts back: [test-13-downstream-grooming.md](test-13-downstream-grooming.md),
-  [test-16-grooming-segmented-http.md](test-16-grooming-segmented-http.md).
+- Media-aware fingerprint origin, and the lane's PCR impairment as first measured locally: [test-2-media-aware-transparency.md](test-2-media-aware-transparency.md).
+- What a groomer puts back: [test-13-downstream-grooming.md](test-13-downstream-grooming.md), [test-16-grooming-segmented-http.md](test-16-grooming-segmented-http.md).

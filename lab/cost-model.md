@@ -1,17 +1,12 @@
 # Desk analysis — always-on primary-distribution cost model (v1)
 
-**Type:** desk model, not a rig experiment. No measurements were taken here; this combines the
-capacity constants measured in [T9](test-9-performance.md) and [T8](test-8-srt-vs-moq.md) with
-**public list prices** to produce the numeric cost model behind the always-on trunk case.
+**Type:** desk model, not a rig experiment. No measurements were taken here; this combines the capacity constants measured in [T9](test-9-performance.md) and [T8](test-8-srt-vs-moq.md) with **public list prices** to produce the numeric cost model behind the always-on trunk case.
 
 **State:** complete. Findings promoted to [economics](../docs/economics.md) §4.
 
-**Reproduce:** `python3 lab/cost-model.py` — prints every table below. All rates are
-constants at the top of that script, so re-pricing is a one-line edit per rate.
+**Reproduce:** `python3 lab/cost-model.py` — prints every table below. All rates are constants at the top of that script, so re-pricing is a one-line edit per rate.
 
-**Rates retrieved:** 2026-08-10. The AWS figures come from the machine-readable price list
-(`AmazonEC2` / `AWSDataTransfer` / `AWSMediaConnect` offer files, publication version
-`20260810185419`), not from the rendered pricing pages, so they are exact rather than transcribed.
+**Rates retrieved:** 2026-08-10. The AWS figures come from the machine-readable price list (`AmazonEC2` / `AWSDataTransfer` / `AWSMediaConnect` offer files, publication version `20260810185419`), not from the rendered pricing pages, so they are exact rather than transcribed.
 
 ---
 
@@ -19,46 +14,36 @@ constants at the top of that script, so re-pricing is a one-line edit per rate.
 
 The question asked of this model:
 
-> For always-on (24/7/365) primary distribution at 10 and 25 Mbps, fully redundant
-> active/active 1+1, what does an Internet-native path actually cost per year at public list
-> prices — for one channel to one destination, and for a transponder's worth of channels to many
-> destinations — how does MoQ compare against SRT and against the managed services that already
-> sell this, and how much does the answer depend on which supplier market the delivery is bought in?
+> For always-on (24/7/365) primary distribution at 10 and 25 Mbps, fully redundant active/active 1+1, what does an Internet-native path actually cost per year at public list prices — for one channel to one destination, and for a transponder's worth of channels to many destinations — how does MoQ compare against SRT and against the managed services that already sell this, and how much does the answer depend on which supplier market the delivery is bought in?
 
-That last clause turns out to carry the result. Protocol choice moves the total by single-digit
-percentages; supplier category moves it by more than an order of magnitude.
+That last clause turns out to carry the result. Protocol choice moves the total by single-digit percentages; supplier category moves it by more than an order of magnitude.
 
-Deliberately excluded: staffing and NOC cost (fixed, dominant at low route counts, and a separate
-exercise); customer pricing; any incumbent's actual or depreciated route cost. Satellite appears
-only as a *parity threshold* expressed against our own modelled numbers, so no transponder rate is
-disclosed or needed.
+Deliberately excluded: staffing and NOC cost (fixed, dominant at low route counts, and a separate exercise); customer pricing; any incumbent's actual or depreciated route cost. Satellite appears only as a _parity threshold_ expressed against our own modelled numbers, so no transponder rate is disclosed or needed.
 
 ## 2. Assumptions
 
 | Assumption | Value | Basis |
-|---|---|---|
+| --- | --- | --- |
 | Availability | 24/7/365 — 8,760 h, 31,536,000 s | always-on trunk, the hardest case |
 | Bitrate profiles | 10 Mbps and 25 Mbps TS | arbitrary but representative; 10 Mbps now, 25 Mbps aspirational |
 | Redundancy | active/active 1+1, both legs always live | [architecture](../docs/architecture.md) §5; two full-rate copies at all times |
 | Regions | EU (Ireland), US East (N. Virginia), US West (Oregon) | egress rates are identical across all three |
-| MoQ carriage multiplier | **0.982x** source TS rate on the wire | T9 measured on a WAN path, media-aware lane. Below 1.0 because the lane strips the source's null stuffing (4.57 % of this clip) and the edge groomer regenerates it. **0.973x with path MTU discovery on**, a flag that is off by default ([T9](test-9-performance.md)). **1.033x on the stuffing-free live feed** ([T14](test-14-data-plane-comparison.md) § *On the live feed's profile*) |
+| MoQ carriage multiplier | **0.982x** source TS rate on the wire | T9 measured on a WAN path, media-aware lane. Below 1.0 because the lane strips the source's null stuffing (4.57 % of this clip) and the edge groomer regenerates it. **0.973x with path MTU discovery on**, a flag that is off by default ([T9](test-9-performance.md)). **1.033x on the stuffing-free live feed** ([T14](test-14-data-plane-comparison.md) § _On the live feed's profile_) |
 | SRT carriage multiplier | **1.037x** | T9 measured on the same path with the same clip; matches its framing arithmetic (7 × 188 B TS + 16 B SRT + 8 B UDP + 20 B IPv4 = 1,360 / 1,316 = 1.0334); 1.035x on the live feed |
 | MoQ ingest CPU | 0.34 core per 10 Mbps feed | T8, `moq import ts` on 2-vCPU EC2 |
 | SRT ingest CPU | ~0.01 core per feed | T8, `tsp regulate` + SRT carriage |
 | Relay CPU per session | 0.865 % core at 10 Mbps; 1.175 % at 25 Mbps | T9 bitrate sweep (25 Mbps uses the 27 Mbps point) |
-| Instance sizing | 60 % target utilisation, sized on the *worse* of cores and sustained network baseline | see §7 |
+| Instance sizing | 60 % target utilisation, sized on the _worse_ of cores and sustained network baseline | see §7 |
 | Billing unit | AWS in GiB, Azure/Cloudflare in decimal GB, GCP in GiB | each provider's own stated convention |
 
-**One Mbps held for a year moves 3,942 GB (3,671 GiB).** That constant does all the work in an
-always-on model: bitrate and volume are interchangeable, so every rate can be quoted as
-`$/Mbps-year`, which is what §4 does.
+**One Mbps held for a year moves 3,942 GB (3,671 GiB).** That constant does all the work in an always-on model: bitrate and volume are interchangeable, so every rate can be quoted as `$/Mbps-year`, which is what §4 does.
 
 ## 3. Published rates used
 
 Internet egress, per GB/GiB, monthly tiers (all $USD, EMEA/NA):
 
 | Provider / product | Free | Tier 1 | Tier 2 | Tier 3 | Tier 4 |
-|---|---|---|---|---|---|
+| --- | --- | --- | --- | --- | --- |
 | AWS data transfer out (EC2, MediaConnect) | 100 GB | 0.09 (→10 TB) | 0.085 (→50 TB) | 0.07 (→150 TB) | 0.05 (>150 TB) |
 | Azure, Microsoft premium backbone | 100 GB | 0.087 | 0.083 | 0.07 | 0.05 |
 | Azure, routing-preference transit ISP | 100 GB | 0.08 | 0.065 | 0.06 | 0.04 |
@@ -67,160 +52,110 @@ Internet egress, per GB/GiB, monthly tiers (all $USD, EMEA/NA):
 | Cloudflare MoQ relay | tech preview is free | 0.05 announced GA self-serve, inbound free | — | — | — |
 | moq.pro MoQ relay (upstream's `moq-relay`) | 400 GB/month | 0.04, inbound free | — | — | — |
 
-AWS tier boundaries are binary (`10 TB` = 10,240 GB in the price list), so AWS volumes are billed in
-GiB here. Azure states 1 TB = 1,000 GB.
+AWS tier boundaries are binary (`10 TB` = 10,240 GB in the price list), so AWS volumes are billed in GiB here. Azure states 1 TB = 1,000 GB.
 
 CDN delivery, per GB, NA/EU list (retrieved from each provider's own pricing page):
 
 | Provider / product | Rate |
-|---|---|
+| --- | --- |
 | AWS CloudFront | 0.085 (first 10 TB) → ~0.020 at 5 PB+ |
 | Fastly | 0.12 (North America), 0.085 (Europe) |
 | Google Cloud CDN / Azure Front Door | 0.080 / 0.0825 first tier |
 | **bunny.net standard network (119 PoPs)** | **0.01** |
 | **bunny.net volume network (10 PoPs)** | **0.005** (<500 TB) · 0.004 (500 TB–1 PB) · 0.002 (1–2 PB) |
 
-The independent CDNs matter to the model more than the hyperscaler CDNs do: bunny.net's volume
-network publishes $0.005/GB on a public page with no request fees and no negotiation, an order of
-magnitude below cloud egress list, while the hyperscalers' own CDNs price within a few percent of
-their raw egress. The volume network runs far fewer points of presence, which is a reach
-constraint rather than a delivery-quality one and matters much less for a few hundred fixed
-professional endpoints than for a consumer audience.
+The independent CDNs matter to the model more than the hyperscaler CDNs do: bunny.net's volume network publishes $0.005/GB on a public page with no request fees and no negotiation, an order of magnitude below cloud egress list, while the hyperscalers' own CDNs price within a few percent of their raw egress. The volume network runs far fewer points of presence, which is a reach constraint rather than a delivery-quality one and matters much less for a few hundred fixed professional endpoints than for a consumer audience.
 
-Third-party reports of what large CDN customers pay at negotiated volume are **deliberately not
-modelled**. They are unverifiable, they vary by an order of magnitude between sources, and quoting
-them would imply a rate is obtainable when no one has published it. Every rate in this model is
-either on a public price page or derived in the open from one that is; where a rate is assumed, it
-is labelled.
+Third-party reports of what large CDN customers pay at negotiated volume are **deliberately not modelled**. They are unverifiable, they vary by an order of magnitude between sources, and quoting them would imply a rate is obtainable when no one has published it. Every rate in this model is either on a public price page or derived in the open from one that is; where a rate is assumed, it is labelled.
 
-**Two CDNs publish a MoQ relay rate: moq.pro's $0.04/GB is in force, Cloudflare's $0.05/GB is
-announced.** Where this model prices a CDN-operated MoQ relay below them it does so as an explicit
-assumption — a modest premium over the commodity delivery rates above at committed volume — and
-labels it as such.
+**Two CDNs publish a MoQ relay rate: moq.pro's $0.04/GB is in force, Cloudflare's $0.05/GB is announced.** Where this model prices a CDN-operated MoQ relay below them it does so as an explicit assumption — a modest premium over the commodity delivery rates above at committed volume — and labels it as such.
 
 Other published rates:
 
 | Item | Rate |
-|---|---|
+| --- | --- |
 | AWS inter-region, Ireland → US East / US West | $0.02 / GiB |
 | MediaConnect transport-stream flow | $0.16 / hour / flow (all three regions) = $1,402 / flow-year |
 | MediaConnect reserved outbound bandwidth, 1 yr | 50 Mbps $1.161/h · 150 Mbps $2.834/h · 500 Mbps $6.474/h · 1500 Mbps $11.444/h |
-| Zixi Broadcaster (AWS Marketplace, public list) | $0.05 / GB "Broadcaster Transport Traffic", *on top of* AWS egress and compute |
+| Zixi Broadcaster (AWS Marketplace, public list) | $0.05 / GB "Broadcaster Transport Traffic", _on top of_ AWS egress and compute |
 | Zixi ZEN Master (AWS Marketplace, public list) | $0.025 / GB |
 | EC2 1-yr standard reserved, all-upfront, Linux, Ireland | c7g.large $420/yr · c7g.xlarge $839/yr · c6gn.large $502/yr · c6gn.xlarge $1,004/yr |
 | Same, US East (N. Virginia) | c7g.large $391/yr · c7g.xlarge $781/yr · c6gn.large $446/yr · c6gn.xlarge $892/yr |
 | EC2 sustained network baseline | c7g.large 0.937 Gbps · c7g.xlarge 1.876 · c6gn.large 3.0 · c6gn.xlarge 6.3 (burst 12.5–25) |
 | IP transit, lowest posted, competitive hubs, Q2 2025 | $0.07 / Mbps / month (10 GigE port), $0.05 (100 GigE) — TeleGeography |
 
-Zixi and Net Insight otherwise sell by private offer, so the Marketplace lines above are the only
-public commercial-software rates found. Haivision publishes none.
+Zixi and Net Insight otherwise sell by private offer, so the Marketplace lines above are the only public commercial-software rates found. Haivision publishes none.
 
 ## 4. Result — the price ladder
 
-What it costs to deliver one always-on unidirectional Mbps for a year, and the same rate
-expressed per GB. Grouped by who operates the infrastructure — the grouping
-[economics](../docs/economics.md) §4.2 uses — and ordered by price within each group:
+What it costs to deliver one always-on unidirectional Mbps for a year, and the same rate expressed per GB. Grouped by who operates the infrastructure — the grouping [economics](../docs/economics.md) §4.2 uses — and ordered by price within each group:
 
 | Category | Option | $/GB-equiv | $/Mbps-yr | × transit |
-|---|---|---:|---:|---:|
-| **Self-hosted** — own the egress, unmetered per GB | IP transit, 10 GigE port, competitive hub *(bandwidth only — see §10.1)* | 0.00021 | 0.84 | 1× |
-| | IP transit, 100 GigE port, competitive hub *(bandwidth only — see §10.1)* | 0.00015 | 0.60 | 1× |
-| | *Illustrative all-in PoP, 40–100 % utilised (§10.1)* | *0.0009–0.0023* | *3.5–9.1* | *4–11×* |
+| --- | --- | --: | --: | --: |
+| **Self-hosted** — own the egress, unmetered per GB | IP transit, 10 GigE port, competitive hub _(bandwidth only — see §10.1)_ | 0.00021 | 0.84 | 1× |
+|  | IP transit, 100 GigE port, competitive hub _(bandwidth only — see §10.1)_ | 0.00015 | 0.60 | 1× |
+|  | _Illustrative all-in PoP, 40–100 % utilised (§10.1)_ | _0.0009–0.0023_ | _3.5–9.1_ | _4–11×_ |
 | **Cloud** — own software on rented compute, metered egress | AWS / Azure list, first tier | 0.0900 | 330 | 393× |
-| | Azure premium backbone, first tier | 0.0870 | 343 | 408× |
-| | Azure transit routing, first tier | 0.0800 | 315 | 375× |
-| | GCP premium, >10 TiB/mo | 0.0800 | 294 | 350× |
-| | AWS, >150 TB/mo marginal tier | 0.0500 | 184 | 219× |
-| | GCP standard tier, >150 TiB/mo | 0.0450 | 165 | 197× |
-| | Azure transit routing, >150 TB/mo | 0.0400 | 158 | 188× |
+|  | Azure premium backbone, first tier | 0.0870 | 343 | 408× |
+|  | Azure transit routing, first tier | 0.0800 | 315 | 375× |
+|  | GCP premium, >10 TiB/mo | 0.0800 | 294 | 350× |
+|  | AWS, >150 TB/mo marginal tier | 0.0500 | 184 | 219× |
+|  | GCP standard tier, >150 TiB/mo | 0.0450 | 165 | 197× |
+|  | Azure transit routing, >150 TB/mo | 0.0400 | 158 | 188× |
 | **Vendor / managed** — buy delivery as an outcome | Zixi Broadcaster licence + AWS list egress | 0.1400 | 528 | 628× |
-| | MediaConnect reserved, 50 Mbps tier | 0.0516 | 203 | 242× |
-| | Cloudflare MoQ, announced GA self-serve | 0.0500 | 197 | 235× |
-| | MediaConnect reserved, 150 Mbps tier | 0.0420 | 166 | 197× |
-| | MediaConnect reserved, 500 Mbps tier | 0.0288 | 113 | 135× |
-| | **MediaConnect reserved, 1500 Mbps tier** | **0.0170** | **67** | **80×** |
-| | bunny.net CDN, standard network, NA/EU | 0.0100 | 39 | 47× |
-| | bunny.net CDN, volume network, <500 TB | 0.0050 | 20 | 23× |
-| | bunny.net CDN, volume network, 1–2 PB | 0.0020 | 8 | 9× |
+|  | MediaConnect reserved, 50 Mbps tier | 0.0516 | 203 | 242× |
+|  | Cloudflare MoQ, announced GA self-serve | 0.0500 | 197 | 235× |
+|  | MediaConnect reserved, 150 Mbps tier | 0.0420 | 166 | 197× |
+|  | MediaConnect reserved, 500 Mbps tier | 0.0288 | 113 | 135× |
+|  | **MediaConnect reserved, 1500 Mbps tier** | **0.0170** | **67** | **80×** |
+|  | bunny.net CDN, standard network, NA/EU | 0.0100 | 39 | 47× |
+|  | bunny.net CDN, volume network, <500 TB | 0.0050 | 20 | 23× |
+|  | bunny.net CDN, volume network, 1–2 PB | 0.0020 | 8 | 9× |
 
-The `$/Mbps-yr` column is the model's working unit and the bridge between a port rate and a
-per-GB rate; `$/GB-equiv` is the comparable figure and the only one the paper quotes. The two
-columns rank AWS and Azure differently — AWS's $0.090 is per GiB and Azure's $0.087 per GB, so
-AWS is the cheaper of the two once the 7.4 % unit difference is applied, which is exactly why
-`$/GB-equiv` is the column to compare on. Three things fall out:
+The `$/Mbps-yr` column is the model's working unit and the bridge between a port rate and a per-GB rate; `$/GB-equiv` is the comparable figure and the only one the paper quotes. The two columns rank AWS and Azure differently — AWS's $0.090 is per GiB and Azure's $0.087 per GB, so AWS is the cheaper of the two once the 7.4 % unit difference is applied, which is exactly why `$/GB-equiv` is the column to compare on. Three things fall out:
 
-1. **The cheapest published delivery is not on cloud at all; it is on commodity CDN.** bunny.net
-   publishes $0.005/GB, and $0.002/GB at 1–2 PB, against $0.09 first-tier cloud egress — 18× to 45×
-   cheaper, on a public page, with no negotiation. The hyperscalers' own CDNs sit within a few
-   percent of their raw egress, so that spread reflects commercial positioning rather than cost.
-2. **Within a single hyperscaler, the managed video product undercuts the platform it runs on.**
-   MediaConnect reserved outbound bandwidth at the 1500 Mbps tier is $0.017/GB — 5.3× cheaper than
-   raw EC2 data transfer out at first-tier list. A DIY relay fleet on EC2 cannot buy that rate; it
-   is a MediaConnect-only construct. So the "build it ourselves and save the service margin"
-   instinct is **inverted at list prices** — but only inside that hyperscaler, since a commodity CDN
-   undercuts MediaConnect by a further 2–8×.
-3. **List cloud egress is two to three orders of magnitude above the cost of raw carriage, and
-   about one order above the cost of delivery.** At $0.07/Mbps/month a Mbps-year of IP transit is
-   $0.84 against $330 on AWS list — but transit is a port and a BGP session, not a delivery
-   service. Loaded with facilities, hardware and diversity, self-hosted delivery lands at
-   $0.001–0.004/GB (§10.1), which is the same band as commodity CDN list. **Two independent routes
-   to delivery, one built and one bought, agree on the cost; cloud egress sits ten times above
-   both.** That is the single most important result in the model, and it says the trunk case is
-   decided by commercial terms rather than by engineering. Quote the tenfold figure, not the
-   four-hundredfold one — §10.1 explains why the latter is not a rate anyone can transact at.
+1. **The cheapest published delivery is not on cloud at all; it is on commodity CDN.** bunny.net publishes $0.005/GB, and $0.002/GB at 1–2 PB, against $0.09 first-tier cloud egress — 18× to 45× cheaper, on a public page, with no negotiation. The hyperscalers' own CDNs sit within a few percent of their raw egress, so that spread reflects commercial positioning rather than cost.
+2. **Within a single hyperscaler, the managed video product undercuts the platform it runs on.** MediaConnect reserved outbound bandwidth at the 1500 Mbps tier is $0.017/GB — 5.3× cheaper than raw EC2 data transfer out at first-tier list. A DIY relay fleet on EC2 cannot buy that rate; it is a MediaConnect-only construct. So the "build it ourselves and save the service margin" instinct is **inverted at list prices** — but only inside that hyperscaler, since a commodity CDN undercuts MediaConnect by a further 2–8×.
+3. **List cloud egress is two to three orders of magnitude above the cost of raw carriage, and about one order above the cost of delivery.** At $0.07/Mbps/month a Mbps-year of IP transit is $0.84 against $330 on AWS list — but transit is a port and a BGP session, not a delivery service. Loaded with facilities, hardware and diversity, self-hosted delivery lands at $0.001–0.004/GB (§10.1), which is the same band as commodity CDN list. **Two independent routes to delivery, one built and one bought, agree on the cost; cloud egress sits ten times above both.** That is the single most important result in the model, and it says the trunk case is decided by commercial terms rather than by engineering. Quote the tenfold figure, not the four-hundredfold one — §10.1 explains why the latter is not a rate anyone can transact at.
 
 ## 5. Result — one channel, one destination, 1+1
 
 Annual USD, EU (Ireland), egress + compute, no staffing:
 
 | Category | Option | 10 Mbps | 25 Mbps |
-|---|---|---:|---:|
-| **Self-hosted** *(marginal transit only)* | MoQ wire rate at IP transit list price | 16 | 41 |
-| | SRT wire rate at IP transit list price | 17 | 44 |
+| --- | --- | --: | --: |
+| **Self-hosted** _(marginal transit only)_ | MoQ wire rate at IP transit list price | 16 | 41 |
+|  | SRT wire rate at IP transit list price | 17 | 44 |
 | **Cloud** | MoQ, DIY on EC2 | **7,385** | **16,832** |
-| | — of which egress | 6,381 | 15,828 |
-| | — of which compute (2 × c6gn.large reserved) | 1,004 | 1,004 |
-| | SRT, DIY on EC2 | 7,749 | 17,691 |
-| | MoQ, DIY on Azure transit routing | 6,098 | 14,303 |
-| | MoQ, DIY on GCP standard tier | 5,925 | 13,970 |
+|  | — of which egress | 6,381 | 15,828 |
+|  | — of which compute (2 × c6gn.large reserved) | 1,004 | 1,004 |
+|  | SRT, DIY on EC2 | 7,749 | 17,691 |
+|  | MoQ, DIY on Azure transit routing | 6,098 | 14,303 |
+|  | MoQ, DIY on GCP standard tier | 5,925 | 13,970 |
 | **Vendor / managed** | Zixi Broadcaster on EC2 (licence + egress + compute) | 11,837 | 27,910 |
-| | MediaConnect (SRT), on-demand egress | 9,548 | 19,490 |
-| | MediaConnect (SRT), cheapest reserved mix | 9,548 | 13,477 |
-| | MoQ on Cloudflare, announced GA rate | 3,871 | 9,678 |
-| | MoQ relay on a commodity CDN @ $0.010/GB *(assumed)* | 774 | 1,936 |
-| | MoQ relay on a commodity CDN @ $0.005/GB *(assumed)* | 387 | 968 |
+|  | MediaConnect (SRT), on-demand egress | 9,548 | 19,490 |
+|  | MediaConnect (SRT), cheapest reserved mix | 9,548 | 13,477 |
+|  | MoQ on Cloudflare, announced GA rate | 3,871 | 9,678 |
+|  | MoQ relay on a commodity CDN @ $0.010/GB _(assumed)_ | 774 | 1,936 |
+|  | MoQ relay on a commodity CDN @ $0.005/GB _(assumed)_ | 387 | 968 |
 
-Both legs of the 1+1 pair are tiered as one volume, because volume bands and the monthly free
-allowance accrue per account, not per flow. Pricing each leg separately would grant the free
-allowance twice and miss the band crossing that appears at 25 Mbps.
+Both legs of the 1+1 pair are tiered as one volume, because volume bands and the monthly free allowance accrue per account, not per flow. Pricing each leg separately would grant the free allowance twice and miss the band crossing that appears at 25 Mbps.
 
-**The self-hosted rows are marginal transit only and are not comparable totals.** They exclude
-ports, facilities, hardware, staff and any control-plane or provisioning software, which the cloud
-and managed rows include or do not need. §10.1 builds the all-in figure; treat these two rows as
-the wire cost of the bytes, not the cost of running the service.
+**The self-hosted rows are marginal transit only and are not comparable totals.** They exclude ports, facilities, hardware, staff and any control-plane or provisioning software, which the cloud and managed rows include or do not need. §10.1 builds the all-in figure; treat these two rows as the wire cost of the bytes, not the cost of running the service.
 
 Observations:
 
-- **Egress is 86 % of the DIY bill at 10 Mbps and 94 % at 25 Mbps.** The measured compute
-  advantage sits on a line that barely registers. T9's "compute is not the constraint" has a
-  number: about a thousand dollars a year against six to sixteen thousand of egress.
-- **MoQ is the cheaper DIY row**, by $364/yr at 10 Mbps, entirely from carriage: it puts
-  9.82 Mbps on the wire against SRT's 10.37. That is the smallest gap in the table and it reverses
-  if the source is tightly packed (§2).
-- **Reserved bandwidth is granular, and the grain matters.** At one channel 1+1 (19.6 Mbps) the
-  smallest 50 Mbps block over-buys, so on-demand per-GB wins; at 25 Mbps 1+1 (49.1 Mbps) the
-  reserved mix is 31 % cheaper than on-demand MediaConnect. Reserved pricing rewards filling the
-  tier, which is a scale and planning question, not a technology one.
-- **Compute is a floor, not a slope, at this scale.** Two instances are needed for two legs
-  whatever the traffic, and one channel uses ~4 % of one. The 10 and 25 Mbps compute figures are
-  identical for exactly that reason.
+- **Egress is 86 % of the DIY bill at 10 Mbps and 94 % at 25 Mbps.** The measured compute advantage sits on a line that barely registers. T9's "compute is not the constraint" has a number: about a thousand dollars a year against six to sixteen thousand of egress.
+- **MoQ is the cheaper DIY row**, by $364/yr at 10 Mbps, entirely from carriage: it puts 9.82 Mbps on the wire against SRT's 10.37. That is the smallest gap in the table and it reverses if the source is tightly packed (§2).
+- **Reserved bandwidth is granular, and the grain matters.** At one channel 1+1 (19.6 Mbps) the smallest 50 Mbps block over-buys, so on-demand per-GB wins; at 25 Mbps 1+1 (49.1 Mbps) the reserved mix is 31 % cheaper than on-demand MediaConnect. Reserved pricing rewards filling the tier, which is a scale and planning question, not a technology one.
+- **Compute is a floor, not a slope, at this scale.** Two instances are needed for two legs whatever the traffic, and one channel uses ~4 % of one. The 10 and 25 Mbps compute figures are identical for exactly that reason.
 
 ### 5.1 One channel to many destinations
 
 Same channel at 10 Mbps, 1+1, fanned out to N independent receiving sites:
 
 | Destinations | MoQ wire | AWS list | Cloudflare | MediaConnect reserved | AWS $/destination |
-|---|---:|---:|---:|---:|---:|
+| --- | --: | --: | --: | --: | --: |
 | 1 | 20 Mbps | 7,385 | 3,871 | 9,548 | 7,385 |
 | 2 | 39 Mbps | 13,768 | 7,742 | 12,974 | 6,884 |
 | 4 | 79 Mbps | 26,026 | 15,484 | 23,144 | 6,506 |
@@ -233,34 +168,20 @@ Same channel at 10 Mbps, 1+1, fanned out to N independent receiving sites:
 | 512 | 10,056 Mbps | 1,893,448 | 1,981,975 | 729,375 | 3,698 |
 | 1024 | 20,111 Mbps | 3,739,306 | 3,963,949 | 1,455,947 | 3,652 |
 
-Cost is near-linear in destinations. Unicast has no fan-out economy at the last hop, so
-"one to many" is "one to one" repeated: per-destination cost halves across a thousandfold
-scale-up and then asymptotes at the deepest volume band, and all of that improvement comes from
-volume bands and from amortising the fixed pair of instances — none of it from the transport.
-MediaConnect crosses below DIY as soon as the second destination makes a reserved block worth
-buying. Cloudflare's flat rate wins at small scale and loses above ~128 destinations, where enough
-volume falls into AWS's deep bands.
+Cost is near-linear in destinations. Unicast has no fan-out economy at the last hop, so "one to many" is "one to one" repeated: per-destination cost halves across a thousandfold scale-up and then asymptotes at the deepest volume band, and all of that improvement comes from volume bands and from amortising the fixed pair of instances — none of it from the transport. MediaConnect crosses below DIY as soon as the second destination makes a reserved block worth buying. Cloudflare's flat rate wins at small scale and loses above ~128 destinations, where enough volume falls into AWS's deep bands.
 
-The linearity is structural and holds under every price regime; only the *level* moves. The same
-thousand destinations cost $3.74M at cloud list and roughly $400,000 at commodity CDN rates.
+The linearity is structural and holds under every price regime; only the _level_ moves. The same thousand destinations cost $3.74M at cloud list and roughly $400,000 at commodity CDN rates.
 
 ## 6. Result — a transponder's worth of channels
 
-Channel count derived from the incumbent, so the comparison is like-for-like. EBU Technical Review
-300 (Morello & Mignone, *DVB-S2 — ready for lift-off*) gives **58.8 Mbps useful** for a 36 MHz-class
-transponder at DVB-S2 8PSK 2/3, 29.7 Mbaud, and counts 6 AVC HD programmes on it. Dividing by
-statmux averages: 9.8 Mbps → 6 services, 7.3 → 8, 5.9 → 10. **The model uses 8 HD services**, with
-6–10 as the honest range.
+Channel count derived from the incumbent, so the comparison is like-for-like. EBU Technical Review 300 (Morello & Mignone, _DVB-S2 — ready for lift-off_) gives **58.8 Mbps useful** for a 36 MHz-class transponder at DVB-S2 8PSK 2/3, 29.7 Mbaud, and counts 6 AVC HD programmes on it. Dividing by statmux averages: 9.8 Mbps → 6 services, 7.3 → 8, 5.9 → 10. **The model uses 8 HD services**, with 6–10 as the honest range.
 
-Note the profile mismatch and do not conflate the two: the transponder sets the *channel count*,
-while the 10/25 Mbps profiles are primary-distribution rates well above DTH emission rates.
+Note the profile mismatch and do not conflate the two: the transponder sets the _channel count_, while the 10/25 Mbps profiles are primary-distribution rates well above DTH emission rates.
 
-On-demand cloud list is deliberately not a column here: a transponder is leased for years, so the
-honest counterpart is committed or commodity capacity, not a rate that assumes the traffic could
-stop tomorrow. Eight services × 10 Mbps × 1+1, delivery cost only, no relay compute, annual USD:
+On-demand cloud list is deliberately not a column here: a transponder is leased for years, so the honest counterpart is committed or commodity capacity, not a rate that assumes the traffic could stop tomorrow. Eight services × 10 Mbps × 1+1, delivery cost only, no relay compute, annual USD:
 
-| Destinations | Aggregate wire | MediaConnect reserved | Cloud at 70 % private *(hypothetical)* | CDN @ $0.010/GB *(assumed)* | CDN @ $0.005/GB *(assumed)* | IP transit *(bandwidth only)* |
-|---:|---:|---:|---:|---:|---:|---:|
+| Destinations | Aggregate wire | MediaConnect reserved | Cloud at 70 % private _(hypothetical)_ | CDN @ $0.010/GB _(assumed)_ | CDN @ $0.005/GB _(assumed)_ | IP transit _(bandwidth only)_ |
+| --: | --: | --: | --: | --: | --: | --: |
 | 1 | 157 Mbps | 52,404 | 14,861 | 6,194 | 3,097 | 132 |
 | 2 | 314 Mbps | 79,138 | 27,144 | 12,387 | 6,194 | 264 |
 | 4 | 628 Mbps | 108,376 | 48,586 | 24,775 | 12,387 | 528 |
@@ -276,115 +197,71 @@ stop tomorrow. Eight services × 10 Mbps × 1+1, delivery cost only, no relay co
 Marginal cost of one additional destination for the whole 8-service 1+1 multiplex (157.1 Mbps):
 
 | Price point | $/destination-yr | Destinations to parity per $1M/yr of incumbent cost |
-|---|---:|---:|
+| --- | --: | --: |
 | AWS first tier | 51,915 | 19.3 |
 | Cloudflare MoQ, announced | 30,968 | 32.3 |
 | AWS deepest tier | 28,842 | 34.7 |
 | MediaConnect reserved, 1500 Mbps tier | 10,501 | 95.2 |
-| AWS deepest tier less 70 % *(hypothetical)* | 8,653 | 115.6 |
-| CDN MoQ relay @ $0.010/GB *(assumed)* | 6,194 | 161.5 |
-| CDN MoQ relay @ $0.005/GB *(assumed)* | 3,097 | 322.9 |
-| IP transit, 10 GigE *(bandwidth only, §10)* | 132 | 7,577 |
+| AWS deepest tier less 70 % _(hypothetical)_ | 8,653 | 115.6 |
+| CDN MoQ relay @ $0.010/GB _(assumed)_ | 6,194 | 161.5 |
+| CDN MoQ relay @ $0.005/GB _(assumed)_ | 3,097 | 322.9 |
+| IP transit, 10 GigE _(bandwidth only, §10)_ | 132 | 7,577 |
 
-The parity column is a normaliser, not a price: divide the incumbent's real annual space-segment
-cost by the $/destination figure to get the destination count at which unicast IP stops being
-cheaper. **This is the structural asymmetry, and it is not a pricing artefact:** satellite fan-out
-inside the footprint is free, unicast IP is linear in destinations.
+The parity column is a normaliser, not a price: divide the incumbent's real annual space-segment cost by the $/destination figure to get the destination count at which unicast IP stops being cheaper. **This is the structural asymmetry, and it is not a pricing artefact:** satellite fan-out inside the footprint is free, unicast IP is linear in destinations.
 
-But the *level* at which that asymmetry bites is set entirely by which market the delivery is
-bought in, and the range is wide: parity moves from about 19 destinations at cloud first-tier list
-to 95 at the deepest published committed rate and 323 at assumed commodity CDN rates. **A
-cloud-priced model would write off the several-hundred-destination case that the commodity market
-puts back in contention** — which is the finding this table exists to support, and the basis of
-the market-structure argument in [economics](../docs/economics.md) §4.6.
+But the _level_ at which that asymmetry bites is set entirely by which market the delivery is bought in, and the range is wide: parity moves from about 19 destinations at cloud first-tier list to 95 at the deepest published committed rate and 323 at assumed commodity CDN rates. **A cloud-priced model would write off the several-hundred-destination case that the commodity market puts back in contention** — which is the finding this table exists to support, and the basis of the market-structure argument in [economics](../docs/economics.md) §4.6.
 
-Two mechanics worth noting. Cloudflare's flat $0.05/GB *loses* to AWS at 22 destinations and above
-(3,457 Mbps, ~1,136 TB/month), where enough volume falls in AWS's $0.05/GiB (= $0.0466/GB) band to
-undercut it — flat rates win at small scale and lose at large. And AWS volume tiers accumulate per
-*account*, across services and regions, so the deep-tier columns are only reachable by an operator
-whose total traffic gets there.
+Two mechanics worth noting. Cloudflare's flat $0.05/GB _loses_ to AWS at 22 destinations and above (3,457 Mbps, ~1,136 TB/month), where enough volume falls in AWS's $0.05/GiB (= $0.0466/GB) band to undercut it — flat rates win at small scale and lose at large. And AWS volume tiers accumulate per _account_, across services and regions, so the deep-tier columns are only reachable by an operator whose total traffic gets there.
 
 ## 7. What actually binds a relay instance
 
-Combining T9's ~1.1 Gbps per core with published sustained-network baselines contradicts the
-intuition that CPU is what you buy:
+Combining T9's ~1.1 Gbps per core with published sustained-network baselines contradicts the intuition that CPU is what you buy:
 
-| Instance | vCPU | Net baseline | CPU-limited | Net-limited | Binds |
-|---|---:|---:|---:|---:|---|
-| c7g.large | 2 | 0.937 Gbps | 2.20 Gbps | 0.94 Gbps | **network** |
-| c7g.xlarge | 4 | 1.876 Gbps | 4.40 Gbps | 1.88 Gbps | **network** |
-| c6gn.large | 2 | 3.0 Gbps | 2.20 Gbps | 3.00 Gbps | cores |
-| c6gn.xlarge | 4 | 6.3 Gbps | 4.40 Gbps | 6.30 Gbps | cores |
+| Instance    | vCPU | Net baseline | CPU-limited | Net-limited | Binds       |
+| ----------- | ---: | -----------: | ----------: | ----------: | ----------- |
+| c7g.large   |    2 |   0.937 Gbps |   2.20 Gbps |   0.94 Gbps | **network** |
+| c7g.xlarge  |    4 |   1.876 Gbps |   4.40 Gbps |   1.88 Gbps | **network** |
+| c6gn.large  |    2 |     3.0 Gbps |   2.20 Gbps |   3.00 Gbps | cores       |
+| c6gn.xlarge |    4 |     6.3 Gbps |   4.40 Gbps |   6.30 Gbps | cores       |
 
-Sessions per instance at 9.8 Mbps of MoQ wire rate: c7g.large 231 by CPU but **95** by network
-baseline; c6gn.large 231 by CPU and 305 by network, so 231. That CPU column is T9's co-resident
-rate; at the cross-host rate the paper sizes on, about 80 sessions a core
-([Evidence](evidence.md) §3.6), CPU allows 159 on either and every binding stands. **On a
-general-purpose instance the sustained network allowance throws away 40–60 % of the relay's measured
-compute headroom.**
-The "up to 12.5 Gbps" headline is burst credit, irrelevant to a 24/7 feed. Network-optimised
-families cost ~20 % more per instance and remove the ceiling, which is the correct trade for an
-always-on relay.
+Sessions per instance at 9.8 Mbps of MoQ wire rate: c7g.large 231 by CPU but **95** by network baseline; c6gn.large 231 by CPU and 305 by network, so 231. That CPU column is T9's co-resident rate; at the cross-host rate the paper sizes on, about 80 sessions a core ([Evidence](evidence.md) §3.6), CPU allows 159 on either and every binding stands. **On a general-purpose instance the sustained network allowance throws away 40–60 % of the relay's measured compute headroom.** The "up to 12.5 Gbps" headline is burst credit, irrelevant to a 24/7 feed. Network-optimised families cost ~20 % more per instance and remove the ceiling, which is the correct trade for an always-on relay.
 
 ## 8. Where relay fan-out changes the bill — and where it does not
 
-Fan-out to N receivers *outside* the cloud costs N copies of internet egress whether the protocol
-has a relay or not. MoQ's 1:N amplification changes only the hops before the last one. For the
-8-service 1+1 multiplex, backhauled Ireland → US at $0.02/GiB:
+Fan-out to N receivers _outside_ the cloud costs N copies of internet egress whether the protocol has a relay or not. MoQ's 1:N amplification changes only the hops before the last one. For the 8-service 1+1 multiplex, backhauled Ireland → US at $0.02/GiB:
 
 | Receivers in one remote region | Naive per-receiver backhaul | With a regional relay | Saved |
-|---:|---:|---:|---:|
+| --: | --: | --: | --: |
 | 2 | 23,073 | 11,537 | 11,537 |
 | 4 | 46,146 | 11,537 | 34,610 |
 | 8 | 92,293 | 11,537 | 80,756 |
 | 16 | 184,586 | 11,537 | 173,049 |
 
-The origin uplink likewise carries 16 streams once rather than once per receiver — a
-contribution-link sizing saving rather than a cloud invoice line. **So the relay's economic value is
-real but bounded and specific: it removes duplicated backhaul and duplicated uplink, not
-last-mile egress.** Any claim that MoQ's fan-out reduces distribution cost must say which hop it
-means, or it is wrong.
+The origin uplink likewise carries 16 streams once rather than once per receiver — a contribution-link sizing saving rather than a cloud invoice line. **So the relay's economic value is real but bounded and specific: it removes duplicated backhaul and duplicated uplink, not last-mile egress.** Any claim that MoQ's fan-out reduces distribution cost must say which hop it means, or it is wrong.
 
-The same is true of HTTP caching, and the symmetry matters: a CDN edge fetches a segment once and
-serves N receivers over N unicast connections, exactly as a relay receives an object once and
-serves N subscribers over N unicast connections. **A MoQ relay is a cache.** Neither breaks
-last-mile linearity, so the tables above apply to segmented HTTP formats as much as to MoQ, and no
-transport on the list has a fan-out advantage over another. What differs between them is the price
-the operator charges, not the topology — which is why §4's ladder, not §8's mechanism, is where the
-fan-out case is won or lost.
+The same is true of HTTP caching, and the symmetry matters: a CDN edge fetches a segment once and serves N receivers over N unicast connections, exactly as a relay receives an object once and serves N subscribers over N unicast connections. **A MoQ relay is a cache.** Neither breaks last-mile linearity, so the tables above apply to segmented HTTP formats as much as to MoQ, and no transport on the list has a fan-out advantage over another. What differs between them is the price the operator charges, not the topology — which is why §4's ladder, not §8's mechanism, is where the fan-out case is won or lost.
 
 ## 9. The carriage difference, priced — and it is the source's stuffing
 
-MoQ's 0.982x against SRT's 1.037x is a **5.3 % lower wire rate for the same service**, on the line
-that dominates, because the media-aware lane declines to carry null stuffing a byte pipe cannot
-refuse. At AWS list (negative = MoQ cheaper):
+MoQ's 0.982x against SRT's 1.037x is a **5.3 % lower wire rate for the same service**, on the line that dominates, because the media-aware lane declines to carry null stuffing a byte pipe cannot refuse. At AWS list (negative = MoQ cheaper):
 
-| Scenario | Δ $/yr | Δ % |
-|---|---:|---:|
-| 1 channel, 1 destination, 10 Mbps | −363 | −5.4 % |
-| 1 channel, 1 destination, 25 Mbps | −858 | −5.1 % |
-| 8 channels, 4 destinations, 10 Mbps | −6,461 | −3.8 % |
+| Scenario                             |  Δ $/yr |    Δ % |
+| ------------------------------------ | ------: | -----: |
+| 1 channel, 1 destination, 10 Mbps    |    −363 | −5.4 % |
+| 1 channel, 1 destination, 25 Mbps    |    −858 | −5.1 % |
+| 8 channels, 4 destinations, 10 Mbps  |  −6,461 | −3.8 % |
 | 8 channels, 16 destinations, 10 Mbps | −25,846 | −4.8 % |
 
-Percentages fall below 5.3 % only because the avoided volume comes off the cheaper tiers. Two
-qualifications keep this from being over-read: the saving **is the source's stuffing** — on the
-stuffing-free live feed the two multipliers measured level, 1.033x against 1.035x, and a loosely filled
-carrier would widen the gap — and MoQ's return path is four to eight times SRT's, which takes the
-all-in advantage to 4.3 % on the clip and reverses it on the feed ([T9](test-9-performance.md),
-[T14](test-14-data-plane-comparison.md)).
+Percentages fall below 5.3 % only because the avoided volume comes off the cheaper tiers. Two qualifications keep this from being over-read: the saving **is the source's stuffing** — on the stuffing-free live feed the two multipliers measured level, 1.033x against 1.035x, and a loosely filled carrier would widen the gap — and MoQ's return path is four to eight times SRT's, which takes the all-in advantage to 4.3 % on the clip and reverses it on the feed ([T9](test-9-performance.md), [T14](test-14-data-plane-comparison.md)).
 
-Either way it is not decisive. It is roughly the size of the difference between two providers' list prices,
-smaller than the reserved-versus-on-demand gap, and an order of magnitude smaller than the gap
-between supplier categories in §4 — which is the model's central point: **a 5 % carriage difference
-is not worth choosing a transport over against a 45× procurement decision.** It is a reason not to
-count carriage against MoQ, not a reason to buy it.
+Either way it is not decisive. It is roughly the size of the difference between two providers' list prices, smaller than the reserved-versus-on-demand gap, and an order of magnitude smaller than the gap between supplier categories in §4 — which is the model's central point: **a 5 % carriage difference is not worth choosing a transport over against a 45× procurement decision.** It is a reason not to count carriage against MoQ, not a reason to buy it.
 
 ## 10. Egress price sensitivity, and what the transit floor is not
 
 8 services × 1+1 × 4 destinations = 628 Mbps = 2,477 TB/yr:
 
 | Egress price ($/GB) | Annual egress | vs AWS list | What this rate is |
-|---:|---:|---:|---|
+| --: | --: | --: | --- |
 | 0.0900 | 222,972 | 100 % | cloud first-tier list |
 | 0.0700 | 173,423 | 78 % | — |
 | 0.0500 | 123,873 | 56 % | cloud deepest published tier; Cloudflare announced MoQ rate |
@@ -392,105 +269,59 @@ count carriage against MoQ, not a reason to buy it.
 | 0.0100 | 24,775 | 11 % | commodity CDN list, standard network |
 | 0.0050 | 12,387 | 6 % | commodity CDN list, volume network |
 | 0.0020 | 4,955 | 2 % | commodity CDN list, 1–2 PB tier |
-| 0.0010 | 2,477 | 1 % | *illustrative* self-hosted all-in at high utilisation (below) |
+| 0.0010 | 2,477 | 1 % | _illustrative_ self-hosted all-in at high utilisation (below) |
 | 0.00021 | 520 | 0.2 % | **wholesale transit bandwidth only — not a delivery rate** |
 | 0.00010 | 248 | 0.1 % | below anything observed; included to show the floor is asymptotic |
 
-The output is very nearly linear in a single input. Every other modelled quantity — compute,
-protocol overhead, instance family, region — moves the total by single-digit percentages, while
-the egress rate spans 18× across the *published* ladder in §3 and §4 alone.
+The output is very nearly linear in a single input. Every other modelled quantity — compute, protocol overhead, instance family, region — moves the total by single-digit percentages, while the egress rate spans 18× across the _published_ ladder in §3 and §4 alone.
 
 ### 10.1 Where $0.0002/GB comes from, and why it is not an achievable rate
 
-The bottom of the ladder is derived, not quoted, and it is the number most likely to be misread,
-so the arithmetic is given in full. TeleGeography's lowest posted IP transit price at competitive
-hubs is **$0.07 per Mbps per month** on a 10 GigE port ($0.05 on 100 GigE). One Mbps held for a
-year costs $0.84 and moves 3,942 GB, so:
+The bottom of the ladder is derived, not quoted, and it is the number most likely to be misread, so the arithmetic is given in full. TeleGeography's lowest posted IP transit price at competitive hubs is **$0.07 per Mbps per month** on a 10 GigE port ($0.05 on 100 GigE). One Mbps held for a year costs $0.84 and moves 3,942 GB, so:
 
 > $0.84 ÷ 3,942 GB = **$0.000213/GB** (10 GigE) · $0.60 ÷ 3,942 GB = **$0.000152/GB** (100 GigE)
 
-**This is the price of wholesale bandwidth at 100 % port utilisation for 8,760 hours. It is not an
-egress rate, not a CDN rate, and not a discount anyone can negotiate on any of them.** Four things
-separate it from a rate a buyer could actually transact at:
+**This is the price of wholesale bandwidth at 100 % port utilisation for 8,760 hours. It is not an egress rate, not a CDN rate, and not a discount anyone can negotiate on any of them.** Four things separate it from a rate a buyer could actually transact at:
 
-- **It is a different product.** Cloud egress and CDN delivery bundle a global network, PoPs,
-  routing, DDoS absorption, support and an SLA. IP transit is a port and a BGP session. No
-  enterprise discount programme converts one into the other, and **nothing in this model should be
-  read as suggesting a hyperscaler or CDN rate can approach it.**
-- **It assumes the port is full.** Real deployments size for peak and run well below it; at 40 %
-  average utilisation the effective rate is 2.5× higher before anything else is counted.
-- **It is bandwidth only.** No ports, cross-connects, colocation, power, hardware, IP space,
-  routers, transit diversity, or staff.
-- **It is the lowest posted rate at the most competitive hubs**, available at large commitment —
-  not a typical price, and not available everywhere a broadcaster needs to land traffic.
+- **It is a different product.** Cloud egress and CDN delivery bundle a global network, PoPs, routing, DDoS absorption, support and an SLA. IP transit is a port and a BGP session. No enterprise discount programme converts one into the other, and **nothing in this model should be read as suggesting a hyperscaler or CDN rate can approach it.**
+- **It assumes the port is full.** Real deployments size for peak and run well below it; at 40 % average utilisation the effective rate is 2.5× higher before anything else is counted.
+- **It is bandwidth only.** No ports, cross-connects, colocation, power, hardware, IP space, routers, transit diversity, or staff.
+- **It is the lowest posted rate at the most competitive hubs**, available at large commitment — not a typical price, and not available everywhere a broadcaster needs to land traffic.
 
-An illustrative all-in build-up shows the gap. A 10 Gbps-capable point of presence with transit
-from two providers for diversity, rack, power, cross-connects and amortised hardware comes to
-roughly $36,000 a year on the assumptions below — of which the transit itself is under half:
+An illustrative all-in build-up shows the gap. A 10 Gbps-capable point of presence with transit from two providers for diversity, rack, power, cross-connects and amortised hardware comes to roughly $36,000 a year on the assumptions below — of which the transit itself is under half:
 
 | Line | Annual USD | Basis |
-|---|---:|---|
+| --- | --: | --- |
 | Transit, 10 Gbps committed | 8,400 | $0.07/Mbps/mo, lowest posted |
 | Second transit provider (diversity) | 8,400 | same rate; assumed, not required by any published source |
 | Colocation, power, cross-connects | 15,000 | **illustrative** — no public rate modelled |
 | Hardware, 2 relay servers over 4 years | 4,000 | **illustrative** |
-| **Total** | **35,800** | |
+| **Total** | **35,800** |  |
 
 | Average port utilisation | Effective all-in $/GB |
-|---:|---:|
-| 100 % | 0.0009 |
-| 60 % | 0.0015 |
-| 40 % | 0.0023 |
-| 25 % | 0.0036 |
+| -----------------------: | --------------------: |
+|                    100 % |                0.0009 |
+|                     60 % |                0.0015 |
+|                     40 % |                0.0023 |
+|                     25 % |                0.0036 |
 
-**A realistic self-hosted operation therefore lands around $0.001–0.004/GB, four to seventeen times
-the bandwidth-only floor** — and, notably, in the same band as commodity CDN volume pricing
-($0.002–0.005/GB). That coincidence is the useful result: it suggests the published commodity CDN
-rates are close to the real cost of operating delivery at scale, which makes them a credible
-reference point for what a competitive MoQ relay market would charge, and confirms that $0.0002/GB
-is an asymptote nobody transacts at rather than a target anybody should quote. The colocation and
-hardware lines are illustrative assumptions, not published rates, and are the weakest inputs
-anywhere in this model.
+**A realistic self-hosted operation therefore lands around $0.001–0.004/GB, four to seventeen times the bandwidth-only floor** — and, notably, in the same band as commodity CDN volume pricing ($0.002–0.005/GB). That coincidence is the useful result: it suggests the published commodity CDN rates are close to the real cost of operating delivery at scale, which makes them a credible reference point for what a competitive MoQ relay market would charge, and confirms that $0.0002/GB is an asymptote nobody transacts at rather than a target anybody should quote. The colocation and hardware lines are illustrative assumptions, not published rates, and are the weakest inputs anywhere in this model.
 
 ## 11. Limitations
 
-- **List prices only.** Enterprise discount programmes, private pricing, committed-spend
-  agreements and Cloudflare's "usual media delivery pricing" for enterprise are all materially
-  below list and all confidential. Every DIY and managed figure here is therefore an *upper* bound,
-  and the ranking between them can invert under real contracts.
-- **Cloudflare's $0.05/GB is announced, not in force.** It is free in tech preview, with commercial
-  pricing signposted for 2026 H2. Modelling it as a firm rate is a forward assumption.
-- **No MoQ relay is priced near commodity delivery.** Both published rates (§3) sit four to ten
-  times above it. The $0.010 and $0.005/GB relay columns apply
-  commodity CDN *delivery* rates to a MoQ relay, assuming one would price near them rather than at a
-  large premium: an argument from market structure, not an observed price.
-- **The self-hosted all-in build-up in §10.1 is illustrative.** Colocation, power and hardware
-  lines carry no published source, and no control-plane, provisioning or software-licensing cost is
-  included on the self-hosted path — which is not free and cannot be assumed away.
-- **Both carriage multipliers are two sources on clean paths.** They are measured back-to-back, but
-  the *size* of MoQ's advantage is a property of the source rather than of the protocol: 5.3 % on a
-  clip with 4.57 % null stuffing, none on a stuffing-free feed, and a loosely filled carrier would
-  widen it. Read the input as "carriage does not count against MoQ", not as 5 % of banked egress.
-- **Carriage is modelled clean-path.** Measured at 1 % random forward loss both multipliers rose by
-  about the loss rate and the ranking held, so loss is not a hidden reversal; no real lossy path is
-  measured, and the sender-side retransmission cost is inferred from shaper counters rather than
-  captured directly ([T9](test-9-performance.md)).
-- **MoQ's multiplier is the media-aware lane.** The opaque lane carries the source verbatim,
-  stuffing included, and measured 1.054x per leg on the live feed, two points above SRT; a deployment
-  that needs byte-verbatim carriage should price that, not this one
-  ([T14](test-14-data-plane-comparison.md)).
-- **The GiB/GB convention shifts AWS figures by 7.4 %.** AWS's binary tier boundaries imply GiB
-  billing and that is what is modelled; a decimal-GB reading raises every AWS number by 7.4 %.
-- **The 100 GB/month AWS free tier is applied per scenario**, whereas it is per account. Worth up
-  to ~$108/yr per scenario — noise here, but wrong if scenarios are summed.
-- **No staffing, tooling, monitoring, integration or grooming cost.** For a small route count these
-  plausibly exceed everything modelled here.
-- **No receive-side cost on either side**, and no satellite uplink, teleport or IRD cost. The
-  comparison is transport-only.
-- **Ingest CPU at 25 Mbps is assumed linear in bitrate** from the 10 Mbps measurement. It is not
-  measured, and it does not matter: the whole compute line is 6 % of the 25 Mbps total.
-- **One region-pair, one currency, no tax.** Rates are USD ex-VAT for Ireland / N. Virginia /
-  Oregon, which happen to share identical egress pricing.
+- **List prices only.** Enterprise discount programmes, private pricing, committed-spend agreements and Cloudflare's "usual media delivery pricing" for enterprise are all materially below list and all confidential. Every DIY and managed figure here is therefore an _upper_ bound, and the ranking between them can invert under real contracts.
+- **Cloudflare's $0.05/GB is announced, not in force.** It is free in tech preview, with commercial pricing signposted for 2026 H2. Modelling it as a firm rate is a forward assumption.
+- **No MoQ relay is priced near commodity delivery.** Both published rates (§3) sit four to ten times above it. The $0.010 and $0.005/GB relay columns apply commodity CDN _delivery_ rates to a MoQ relay, assuming one would price near them rather than at a large premium: an argument from market structure, not an observed price.
+- **The self-hosted all-in build-up in §10.1 is illustrative.** Colocation, power and hardware lines carry no published source, and no control-plane, provisioning or software-licensing cost is included on the self-hosted path — which is not free and cannot be assumed away.
+- **Both carriage multipliers are two sources on clean paths.** They are measured back-to-back, but the _size_ of MoQ's advantage is a property of the source rather than of the protocol: 5.3 % on a clip with 4.57 % null stuffing, none on a stuffing-free feed, and a loosely filled carrier would widen it. Read the input as "carriage does not count against MoQ", not as 5 % of banked egress.
+- **Carriage is modelled clean-path.** Measured at 1 % random forward loss both multipliers rose by about the loss rate and the ranking held, so loss is not a hidden reversal; no real lossy path is measured, and the sender-side retransmission cost is inferred from shaper counters rather than captured directly ([T9](test-9-performance.md)).
+- **MoQ's multiplier is the media-aware lane.** The opaque lane carries the source verbatim, stuffing included, and measured 1.054x per leg on the live feed, two points above SRT; a deployment that needs byte-verbatim carriage should price that, not this one ([T14](test-14-data-plane-comparison.md)).
+- **The GiB/GB convention shifts AWS figures by 7.4 %.** AWS's binary tier boundaries imply GiB billing and that is what is modelled; a decimal-GB reading raises every AWS number by 7.4 %.
+- **The 100 GB/month AWS free tier is applied per scenario**, whereas it is per account. Worth up to ~$108/yr per scenario — noise here, but wrong if scenarios are summed.
+- **No staffing, tooling, monitoring, integration or grooming cost.** For a small route count these plausibly exceed everything modelled here.
+- **No receive-side cost on either side**, and no satellite uplink, teleport or IRD cost. The comparison is transport-only.
+- **Ingest CPU at 25 Mbps is assumed linear in bitrate** from the 10 Mbps measurement. It is not measured, and it does not matter: the whole compute line is 6 % of the 25 Mbps total.
+- **One region-pair, one currency, no tax.** Rates are USD ex-VAT for Ireland / N. Virginia / Oregon, which happen to share identical egress pricing.
 
 ## 12. What to measure or obtain next
 
@@ -499,15 +330,13 @@ The model's open inputs are [economics](../docs/economics.md) §9's questions.
 ## References
 
 - Model script: [`cost-model.py`](cost-model.py)
-- Measured inputs: [T9](test-9-performance.md) (carriage overhead, relay CPU, memory),
-  [T8](test-8-srt-vs-moq.md) (ingest CPU, SRT comparison)
+- Measured inputs: [T9](test-9-performance.md) (carriage overhead, relay CPU, memory), [T8](test-8-srt-vs-moq.md) (ingest CPU, SRT comparison)
 - Promoted to: [`docs/economics.md`](../docs/economics.md) §4
 - AWS price list bulk API: `pricing.us-east-1.amazonaws.com/offers/v1.0/aws/{AmazonEC2,AWSDataTransfer,AWSMediaConnect}/current/`
 - Azure bandwidth pricing; Google Cloud VPC network pricing
-- Cloudflare, *MoQ: Refactoring the Internet's real-time media stack* (announced GA rate)
-- moq.pro, *the Media over QUIC CDN*, public first-tier prices (October 2026)
-- CDN list pricing: bunny.net pricing page (standard and volume networks); AWS CloudFront,
-  Fastly, Google Cloud CDN and Azure Front Door pricing pages
+- Cloudflare, _MoQ: Refactoring the Internet's real-time media stack_ (announced GA rate)
+- moq.pro, _the Media over QUIC CDN_, public first-tier prices (October 2026)
+- CDN list pricing: bunny.net pricing page (standard and volume networks); AWS CloudFront, Fastly, Google Cloud CDN and Azure Front Door pricing pages
 - AWS Marketplace listings: Zixi Broadcaster, Zixi ZEN Master
-- EBU Technical Review 300, Morello & Mignone, *DVB-S2 — ready for lift-off*
-- TeleGeography, *State of the Network 2026* / IP transit price erosion analyses
+- EBU Technical Review 300, Morello & Mignone, _DVB-S2 — ready for lift-off_
+- TeleGeography, _State of the Network 2026_ / IP transit price erosion analyses

@@ -1,80 +1,34 @@
 # T20 — the segmented lane over HTTP/3, and what that does to the reordering result
 
-> **State:** the HTTP/3 acquisition path is built, proven and reproducible, and the substrate-matched
-> impairment cells are measured. This closes [P0-2](planned-experiments.md) and answers open question
-> 18 in [`evidence.md`](evidence.md) §5.
+> **State:** the HTTP/3 acquisition path is built, proven and reproducible, and the substrate-matched impairment cells are measured. This closes [P0-2](planned-experiments.md) and answers open question 18 in [`evidence.md`](evidence.md) §5.
 >
-> **An HTTP/3 HLS client exists now.** FFmpeg master built `--enable-libcurl` against a libcurl with
-> ngtcp2/nghttp3 and OpenSSL 3.5 native QUIC fetches an HLS presentation entirely over HTTP/3. The
-> origin for the H3 arm has **no TCP listener at all**, so the arm cannot silently complete over
-> HTTP/1.1 — it would fail instead — and every request in every H3 run is logged by the origin as
-> `HTTP/3.0 alpn=h3`. The route the campaign had written off as blocked is open.
+> **An HTTP/3 HLS client exists now.** FFmpeg master built `--enable-libcurl` against a libcurl with ngtcp2/nghttp3 and OpenSSL 3.5 native QUIC fetches an HLS presentation entirely over HTTP/3. The origin for the H3 arm has **no TCP listener at all**, so the arm cannot silently complete over HTTP/1.1 — it would fail instead — and every request in every H3 run is logged by the origin as `HTTP/3.0 alpn=h3`. The route the campaign had written off as blocked is open.
 >
-> **Getting there found a defect that is itself the point of this experiment.** FFmpeg propagates only
-> a fixed whitelist of I/O options from a parent demuxer to its child connections, and `http_version`
-> is not on it. Ask for `-http_version 3only` on an HLS URL and the *playlist* is fetched over HTTP/3
-> while **every media segment silently opens at HTTP/1.1** — the ALPN on the segment connection reads
-> `http/1.1`, and nothing warns. A one-line whitelist addition fixes it (measurement 1). Without that
-> patch an "HLS over HTTP/3" experiment carries 100 % of its media bytes over TCP.
+> **Getting there found a defect that is itself the point of this experiment.** FFmpeg propagates only a fixed whitelist of I/O options from a parent demuxer to its child connections, and `http_version` is not on it. Ask for `-http_version 3only` on an HLS URL and the _playlist_ is fetched over HTTP/3 while **every media segment silently opens at HTTP/1.1** — the ALPN on the segment connection reads `http/1.1`, and nothing warns. A one-line whitelist addition fixes it (measurement 1). Without that patch an "HLS over HTTP/3" experiment carries 100 % of its media bytes over TCP.
 >
-> **The headline: the segmented lane's reordering advantage does not survive the substrate change, and
-> was never a lane property to begin with.** [T5](test-5-network-impairment.md) measured segmented HTTP
-> at **0.98** delivered rate under 25 % reordering against MoQ's **0.19**, and that separation is the
-> single impairment result on which the paper's reliability verdict turns. Re-run with the packet sizes
-> equalised, segmented HTTP over TCP reads **0.44**, segmented HTTP over HTTP/3 reads **0.18**, and MoQ
-> reads **0.13**. The lane that was said to be immune to reordering is not: on QUIC it keeps about a
-> quarter of the stream (0.259–0.263 in three replicates, measurement 4a). MoQ's
-> figure turned out to be its congestion controller's (below), so the two are not "within noise" of
-> each other either; what survives is that reordering hurts both lanes badly.
+> **The headline: the segmented lane's reordering advantage does not survive the substrate change, and was never a lane property to begin with.** [T5](test-5-network-impairment.md) measured segmented HTTP at **0.98** delivered rate under 25 % reordering against MoQ's **0.19**, and that separation is the single impairment result on which the paper's reliability verdict turns. Re-run with the packet sizes equalised, segmented HTTP over TCP reads **0.44**, segmented HTTP over HTTP/3 reads **0.18**, and MoQ reads **0.13**. The lane that was said to be immune to reordering is not: on QUIC it keeps about a quarter of the stream (0.259–0.263 in three replicates, measurement 4a). MoQ's figure turned out to be its congestion controller's (below), so the two are not "within noise" of each other either; what survives is that reordering hurts both lanes badly.
 >
-> **The mechanism is packet size, and it is measured, not inferred.** T5's rig left loopback at its
-> default 65536-byte MTU while correctly disabling GSO on the MoQ arm only. The segmented lane
-> therefore moved its media in **1,209 packets averaging 34,380 bytes** where MoQ moved the same media
-> in **29,062 packets averaging 931 bytes**. `netem reorder 25 %` reorders a *fraction of packets*, so
-> the segmented lane received roughly 24× fewer reordering events. Reproduce T5's conditions here and
-> T5's numbers come back exactly — 0.995 segmented against 0.125 MoQ. Equalise the packet sizes and the
-> separation collapses. **This was a rig asymmetry wearing a protocol result's name.**
+> **The mechanism is packet size, and it is measured, not inferred.** T5's rig left loopback at its default 65536-byte MTU while correctly disabling GSO on the MoQ arm only. The segmented lane therefore moved its media in **1,209 packets averaging 34,380 bytes** where MoQ moved the same media in **29,062 packets averaging 931 bytes**. `netem reorder 25 %` reorders a _fraction of packets_, so the segmented lane received roughly 24× fewer reordering events. Reproduce T5's conditions here and T5's numbers come back exactly — 0.995 segmented against 0.125 MoQ. Equalise the packet sizes and the separation collapses. **This was a rig asymmetry wearing a protocol result's name.**
 >
-> **A later correction, in the segmented lane's favour: its wire is PCR-conformant.** The max 80 ms
-> and ~95 %-above-gate this experiment first reported for the HLS arms were the FFmpeg mpegts
-> muxer's, not the wire's. Re-measured through the byte-faithful receiver built in
-> [T42](test-42-h3-receiver-fidelity.md), the same clean baseline reads **max 24.95 ms and 0.00 %
-> above the 40 ms gate** on both HLS arms, against MoQ's 25.00 ms. Both lanes carry the PCR grid of
-> the same source, and a lane that moves bytes without rewriting them preserves it.
+> **A later correction, in the segmented lane's favour: its wire is PCR-conformant.** The max 80 ms and ~95 %-above-gate this experiment first reported for the HLS arms were the FFmpeg mpegts muxer's, not the wire's. Re-measured through the byte-faithful receiver built in [T42](test-42-h3-receiver-fidelity.md), the same clean baseline reads **max 24.95 ms and 0.00 % above the 40 ms gate** on both HLS arms, against MoQ's 25.00 ms. Both lanes carry the PCR grid of the same source, and a lane that moves bytes without rewriting them preserves it.
 >
-> **The impairment cells have since been re-measured too, and two of them moved materially**
-> (measurement 4a). At 20 % commanded loss the segmented lane over HTTP/3 loses **nothing** where
-> 0.703 was published, and under a 30 s outage the two substrates are **byte-identical at 0.853**
-> where a 0.764-against-0.507 split was published — recovery is governed by what the origin retains,
-> not by the transport. Both corrections are the re-mux, and both run in the segmented lane's favour.
+> **The impairment cells have since been re-measured too, and two of them moved materially** (measurement 4a). At 20 % commanded loss the segmented lane over HTTP/3 loses **nothing** where 0.703 was published, and under a 30 s outage the two substrates are **byte-identical at 0.853** where a 0.764-against-0.507 split was published — recovery is governed by what the origin retains, not by the transport. Both corrections are the re-mux, and both run in the segmented lane's favour.
 >
-> **The substrate change is bad for the segmented lane only in the reordering cell.** Under loss
-> the same change runs strongly the other way — at 20 % commanded, 0.131 on TCP against **1.111** on
-> HTTP/3 — and under a 30 s outage the substrate makes no difference at all. Moving segmented HTTP
-> onto QUIC costs it the reordering cell and buys it the loss cell outright. No single-sentence
-> verdict survives that, which is the finding.
+> **The substrate change is bad for the segmented lane only in the reordering cell.** Under loss the same change runs strongly the other way — at 20 % commanded, 0.131 on TCP against **1.111** on HTTP/3 — and under a 30 s outage the substrate makes no difference at all. Moving segmented HTTP onto QUIC costs it the reordering cell and buys it the loss cell outright. No single-sentence verdict survives that, which is the finding.
 >
-> **On the MoQ arm the reordering figure turns out to be the congestion controller's.** Pinned to the
-> shipped BBRv3 default it delivers **zero** in 60 s, on the current build and the original one
-> alike; pinned to CUBIC on the same rig it delivers. The published 0.13 was taken with the
-> controller unpinned, so this cell — like the loss cell before it — is a controller comparison
-> wearing a lane comparison's name (measurement 4a).
+> **On the MoQ arm the reordering figure turns out to be the congestion controller's.** Pinned to the shipped BBRv3 default it delivers **zero** in 60 s, on the current build and the original one alike; pinned to CUBIC on the same rig it delivers. The published 0.13 was taken with the controller unpinned, so this cell — like the loss cell before it — is a controller comparison wearing a lane comparison's name (measurement 4a).
 
 ## Environment
 
-- **One host, all arms.** The EC2 secondary (`<EC2_SECONDARY>`), `c6in.2xlarge`, 8 vCPU / 15 GB,
-  Ubuntu 26.04, `eu-west-1b`. Publisher, origin, impairment lane and receiver are all on loopback, so
-  the arms share a clock and a shaper and differ only where the experiment intends.
+- **One host, all arms.** The EC2 secondary (`<EC2_SECONDARY>`), `c6in.2xlarge`, 8 vCPU / 15 GB, Ubuntu 26.04, `eu-west-1b`. Publisher, origin, impairment lane and receiver are all on loopback, so the arms share a clock and a shaper and differ only where the experiment intends.
 - **Source:** `~/contrib-10m.ts`, 9,945,951 bps CBR, 1080i25 H.264 + MP2 + AC-3 + teletext + 3× SCTE-35.
-- **Packager (identical for both HLS arms):**
-  `tsp --realtime -I file <src> --infinite -P regulate --pcr-synchronous -O hls --live 6
-  --live-extra-segments 3 --duration 2 --intra-close --align-first-segment`.
+- **Packager (identical for both HLS arms):** `tsp --realtime -I file <src> --infinite -P regulate --pcr-synchronous -O hls --live 6 --live-extra-segments 3 --duration 2 --intra-close --align-first-segment`.
 - **TSDuck** 3.44-4676; **moq** 0.9.15 / **moq-relay** 0.14.14 (`~/bin-3006`).
 
 ### The HTTP/3 client, pinned
 
 | Component | Version | Build |
-|---|---|---|
+| --- | --- | --- |
 | libcurl | 8.18.0 | `--with-openssl --with-ngtcp2 --with-nghttp3 --enable-alt-svc`, prefix `~/h3` |
 | QUIC transport | ngtcp2 1.16.0 | Ubuntu 26.04 `libngtcp2-dev` |
 | HTTP/3 framing | nghttp3 1.12.0 | Ubuntu 26.04 `libnghttp3-dev` |
@@ -82,15 +36,9 @@
 | FFmpeg | master `git-2026-09-03-818e5d9` | `--enable-openssl --enable-libcurl --enable-protocol=libcurl`, `-Wl,-rpath,~/h3/lib`, **plus the patch in measurement 1** |
 | Origin | nginx 1.28.3 (Ubuntu, `--with-http_v3_module`) | TLS 1.3, self-signed, two vhosts |
 
-`curl --version` on this build reports
-`Features: alt-svc AsynchDNS HSTS HTTP3 HTTPS-proxy IPv6 Largefile libz NTLM PSL SSL threadsafe
-TLS-SRP UnixSockets`. **`nghttp2` is deliberately absent**, so the client cannot speak HTTP/2 at all
-and "fell back to H2" is not among the ways this experiment can be wrong.
+`curl --version` on this build reports `Features: alt-svc AsynchDNS HSTS HTTP3 HTTPS-proxy IPv6 Largefile libz NTLM PSL SSL threadsafe TLS-SRP UnixSockets`. **`nghttp2` is deliberately absent**, so the client cannot speak HTTP/2 at all and "fell back to H2" is not among the ways this experiment can be wrong.
 
-**Route (4) was not needed and is not available.** FFmpeg's native HTTP/3 protocol over
-ngtcp2/nghttp3 is proposed in FFmpeg PR #23478 and is **not** in master: `configure` carries no
-`--enable-libngtcp2` or `--enable-libnghttp3`, and there is no `libavformat/http3.c`. What master does
-carry is `libavformat/libcurl.c` and `--enable-libcurl`, which is route (1), the preferred one.
+**Route (4) was not needed and is not available.** FFmpeg's native HTTP/3 protocol over ngtcp2/nghttp3 is proposed in FFmpeg PR #23478 and is **not** in master: `configure` carries no `--enable-libngtcp2` or `--enable-libnghttp3`, and there is no `libavformat/http3.c`. What master does carry is `libavformat/libcurl.c` and `--enable-libcurl`, which is route (1), the preferred one.
 
 ### The two origins
 
@@ -99,14 +47,11 @@ One nginx, one config, one document root, one set of segment files, two `server`
 - **`:8443`** — `listen 8443 ssl` only, `http2 off`. TCP and TLS 1.3. No QUIC listener.
 - **`:8444`** — `listen 8444 quic` only. **No TCP listener of any kind.**
 
-`ss -lntup` shows `tcp 0.0.0.0:8443` and `udp 0.0.0.0:8444` and nothing else, and a deliberate
-HTTP/1.1 connection to `:8444` exits 7 (connection refused). The transport is therefore enforced by
-the origin, not requested by the client.
+`ss -lntup` shows `tcp 0.0.0.0:8443` and `udp 0.0.0.0:8444` and nothing else, and a deliberate HTTP/1.1 connection to `:8444` exits 7 (connection refused). The transport is therefore enforced by the origin, not requested by the client.
 
 ## Procedure
 
-`lab/scripts/t20-h3-arm.sh <label> <h1|h3|moq> [window_s]` runs one arm end to end — publisher,
-origin, shaped lane, receiver, teardown and grading — inside a single invocation.
+`lab/scripts/t20-h3-arm.sh <label> <h1|h3|moq> [window_s]` runs one arm end to end — publisher, origin, shaped lane, receiver, teardown and grading — inside a single invocation.
 
 ```bash
 # clean baseline, with a capture
@@ -132,29 +77,21 @@ ffmpeg -prefer_libcurl 1 -http_version {1.1|3only} -tls_verify 0 \
        -i https://127.0.0.1:{8443|8444}/index.m3u8 -c copy -f mpegts out.ts
 ```
 
-**Metric.** `delivered_ratio` = output bytes × 8 ÷ (9,945,951 × window), i.e. T5's "delivered rate
-against the fixture's rate, where 1.00 is *kept up*", so the numbers are directly comparable with
-T5's table. Ratios slightly above 1.00 at baseline are the HLS client fetching the origin's live
-window at join, which every HLS arm does equally.
+**Metric.** `delivered_ratio` = output bytes × 8 ÷ (9,945,951 × window), i.e. T5's "delivered rate against the fixture's rate, where 1.00 is _kept up_", so the numbers are directly comparable with T5's table. Ratios slightly above 1.00 at baseline are the HLS client fetching the origin's live window at join, which every HLS arm does equally.
 
-**Loopback normalisation.** The rig sets `lo` to MTU 1500 and turns TSO/GSO/GRO off before every run,
-and restores 65536 afterwards. `NORM_LO=0` reproduces the un-normalised shape T5 measured in, and is
-retained only as a control. Why this is not optional is measurement 4.
+**Loopback normalisation.** The rig sets `lo` to MTU 1500 and turns TSO/GSO/GRO off before every run, and restores 65536 afterwards. `NORM_LO=0` reproduces the un-normalised shape T5 measured in, and is retained only as a control. Why this is not optional is measurement 4.
 
 ## Measurements
 
 ### 1. FFmpeg asks for HTTP/3 on the playlist and takes HTTP/1.1 for the media
 
-`libavformat/hls.c` populates its child-connection options with `ffio_copy_url_options()`, which
-copies a fixed list of option names from the parent:
+`libavformat/hls.c` populates its child-connection options with `ffio_copy_url_options()`, which copies a fixed list of option names from the parent:
 
 ```text
 "headers", "user_agent", "cookies", "http_proxy", "referer", "rw_timeout", "icy", "prefer_libcurl"
 ```
 
-`prefer_libcurl` is on the list, so segments *are* fetched by libcurl. `http_version` is not, so they
-are fetched at libcurl's default version. Observed directly: with `-http_version 3only` set, the
-origin logs the playlist as
+`prefer_libcurl` is on the list, so segments _are_ fetched by libcurl. `http_version` is not, so they are fetched at libcurl's default version. Observed directly: with `-http_version 3only` set, the origin logs the playlist as
 
 ```text
 proto=HTTP/3.0 http3=h3 alpn=h3 status=206 uri=/index.m3u8
@@ -167,10 +104,7 @@ while FFmpeg's own debug output for the very next segment reads
 [libcurl] * ALPN: server accepted http/1.1
 ```
 
-`tls_verify` and `ca_file` are also absent from the list, which is what made the defect visible at
-all: against a self-signed origin the segment connection fails certificate verification and the run
-dies with `Error when loading first segment`. Against a *publicly trusted* origin it would not fail —
-it would succeed, over TCP, silently, and be reported as an HTTP/3 measurement.
+`tls_verify` and `ca_file` are also absent from the list, which is what made the defect visible at all: against a self-signed origin the segment connection fails certificate verification and the run dies with `Error when loading first segment`. Against a _publicly trusted_ origin it would not fail — it would succeed, over TCP, silently, and be reported as an HTTP/3 measurement.
 
 The fix used here is a three-name addition to that whitelist:
 
@@ -179,403 +113,208 @@ The fix used here is a three-name addition to that whitelist:
 "http_version", "tls_verify", "ca_file", NULL };
 ```
 
-**This is the paper's own thesis reproduced inside a tool:** a lane that reports one substrate and
-carries another, with no diagnostic anywhere in the path saying so. It is offered upstream — see
-[`upstream-contributions.md`](upstream-contributions.md).
+**This is the paper's own thesis reproduced inside a tool:** a lane that reports one substrate and carries another, with no diagnostic anywhere in the path saying so. It is offered upstream — see [`upstream-contributions.md`](upstream-contributions.md).
 
 ### 2. Transport proof
 
 Three independent instruments, none of them the client's own configuration:
 
 | Instrument | H1 arm | H3 arm |
-|---|---|---|
+| --- | --- | --- |
 | Origin access log, every request | 54/54 `proto=HTTP/1.1 alpn=http/1.1 port=8443` | 54/54 `proto=HTTP/3.0 http3=h3 alpn=h3 port=8444` |
 | Packet capture, whole run | **71,389 TCP / 0 UDP** | **109,657 UDP / 0 TCP** |
 | Origin listener | `tcp 0.0.0.0:8443` | `udp 0.0.0.0:8444`, **no TCP listener** |
 
-Across every H3 run in this experiment the origin logged **zero** non-HTTP/3 requests. The client
-option used is `3only` = `CURL_HTTP_VERSION_3ONLY`, which does not fall back; the build cannot speak
-HTTP/2; and the origin would refuse a TCP connection if it tried. Fallback is excluded by the client,
-by the build and by the server independently.
+Across every H3 run in this experiment the origin logged **zero** non-HTTP/3 requests. The client option used is `3only` = `CURL_HTTP_VERSION_3ONLY`, which does not fall back; the build cannot speak HTTP/2; and the origin would refuse a TCP connection if it tried. Fallback is excluded by the client, by the build and by the server independently.
 
 ### 3. Clean baseline — the two transports are indistinguishable
 
 60 s window, no impairment, normalised loopback:
 
 | Arm | Bytes | Delivered ratio | Requests | Media span | md5 |
-|---|---|---|---|---|---|
+| --- | --- | --- | --- | --- | --- |
 | HLS / HTTP/1.1 / TCP | 77,026,984 | 1.033 | 54 | 66.5 s | `7f3402ea…` |
 | HLS / HTTP/3 / QUIC | 77,026,984 | 1.033 | 54 | 66.5 s | `7f3402ea…` |
 | MoQ / QUIC | 55,225,000 (45 s) | 0.987 | — | 46.2 s | — |
 
-**The two HLS arms produce byte-identical output.** Same md5, same length, same request count. Under
-no impairment the substrate change is invisible at the media plane, which is the precondition the rest
-of the experiment needs.
+**The two HLS arms produce byte-identical output.** Same md5, same length, same request count. Under no impairment the substrate change is invisible at the media plane, which is the precondition the rest of the experiment needs.
 
 #### Re-measured through a byte-faithful receiver: the HLS wire is PCR-conformant
 
-The PCR figures this experiment originally reported for the HLS arms — max 80.00 ms, ~95 % above the
-40 ms gate — were **the FFmpeg mpegts muxer's, not the wire's**. Re-run on the same rig at the same
-60 s clean baseline, with the only change being the receiver
-([`hls-verbatim-recv.py`](scripts/hls-verbatim-recv.py), [T42](test-42-h3-receiver-fidelity.md)):
+The PCR figures this experiment originally reported for the HLS arms — max 80.00 ms, ~95 % above the 40 ms gate — were **the FFmpeg mpegts muxer's, not the wire's**. Re-run on the same rig at the same 60 s clean baseline, with the only change being the receiver ([`hls-verbatim-recv.py`](scripts/hls-verbatim-recv.py), [T42](test-42-h3-receiver-fidelity.md)):
 
 | Receiver | Arm | Bytes | Delivered ratio | cc errors | PCR max | PCR > 40 ms |
-|---|---|---|---:|---:|---:|---:|
+| --- | --- | --- | --: | --: | --: | --: |
 | `ffmpeg -c copy -f mpegts` | H1 | 74,233,492 | 0.995 | 0 | 80.00 ms | **95.13 %** |
 | `ffmpeg -c copy -f mpegts` | H3 | 74,233,492 | 0.995 | 0 | 80.00 ms | **95.13 %** |
 | `hls-verbatim-recv.py` | H1 | 82,851,600 | 1.111 | 0 | **24.95 ms** | **0.00 %** |
 | `hls-verbatim-recv.py` | H3 | 82,851,600 | 1.111 | 0 | **24.95 ms** | **0.00 %** |
 
-**The segmented lane's wire meets the 40 ms gate, and always did.** 24.95 ms against MoQ's 25.00 ms
-is not a coincidence: both lanes carry the PCR grid of the same `-P regulate --pcr-synchronous`
-source, and a lane that transports bytes without rewriting them preserves it. The 95 % failure rate
-was manufactured entirely inside the receiver, and it is the one figure in this experiment that
-reversed rather than merely tightened.
+**The segmented lane's wire meets the 40 ms gate, and always did.** 24.95 ms against MoQ's 25.00 ms is not a coincidence: both lanes carry the PCR grid of the same `-P regulate --pcr-synchronous` source, and a lane that transports bytes without rewriting them preserves it. The 95 % failure rate was manufactured entirely inside the receiver, and it is the one figure in this experiment that reversed rather than merely tightened.
 
-The byte counts differ between receivers for a reason that is also the mechanism: the verbatim
-receiver keeps the null packets and the NIT and TDT/TOT that the re-mux discards, so its delivered
-ratio exceeds 1.0 where FFmpeg's sits just under. The two HLS arms remain identical to each other
-under both receivers, which is the property this baseline exists to establish.
+The byte counts differ between receivers for a reason that is also the mechanism: the verbatim receiver keeps the null packets and the NIT and TDT/TOT that the re-mux discards, so its delivered ratio exceeds 1.0 where FFmpeg's sits just under. The two HLS arms remain identical to each other under both receivers, which is the property this baseline exists to establish.
 
-The verbatim runs reported **0 holes and exit 0**, so these cells are graded on a complete capture
-rather than on one that quietly lost segments.
+The verbatim runs reported **0 holes and exit 0**, so these cells are graded on a complete capture rather than on one that quietly lost segments.
 
 ### 4. Reordering (P0) — and the control that reinterprets T5
 
 `netem delay 30ms reorder 25% 50%`, 60 s windows, three replicates:
 
-| Arm | Replicate a | b | c | Mean |
-|---|---|---|---|---|
-| HLS / HTTP/1.1 / TCP | 0.415 | 0.483 | 0.429 | **0.44** |
-| HLS / HTTP/3 / QUIC | 0.172 | 0.177 | 0.178 | **0.18** |
-| MoQ / QUIC | 0.121 | 0.079 | 0.180 | **0.13** |
+| Arm                  | Replicate a | b     | c     | Mean     |
+| -------------------- | ----------- | ----- | ----- | -------- |
+| HLS / HTTP/1.1 / TCP | 0.415       | 0.483 | 0.429 | **0.44** |
+| HLS / HTTP/3 / QUIC  | 0.172       | 0.177 | 0.178 | **0.18** |
+| MoQ / QUIC           | 0.121       | 0.079 | 0.180 | **0.13** |
 
-The H3 arm is the tightest of the three (0.172–0.178). The MoQ arm is the noisiest and its spread
-overlaps the H3 arm's, so **HLS/H3 and MoQ are not separated by this cell**; HLS/TCP is separated
-from both.
+The H3 arm is the tightest of the three (0.172–0.178). The MoQ arm is the noisiest and its spread overlaps the H3 arm's, so **HLS/H3 and MoQ are not separated by this cell**; HLS/TCP is separated from both.
 
-**The control.** The same three cells with loopback left at its default 65536 MTU and offloads on —
-the shape [T5](test-5-network-impairment.md) measured in:
+**The control.** The same three cells with loopback left at its default 65536 MTU and offloads on — the shape [T5](test-5-network-impairment.md) measured in:
 
 | Arm | Normalised (MTU 1500) | Un-normalised (MTU 65536) | T5's published figure |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | HLS / HTTP/1.1 / TCP | 0.44 | **0.995** | 0.981 |
 | HLS / HTTP/3 / QUIC | 0.18 | **0.995** | — |
 | MoQ / QUIC | 0.13 | **0.125** | 0.192 |
 
-T5 reproduces. The segmented lane reads 0.995 against MoQ's 0.125, which is T5's 0.981 against 0.192
-within run-to-run spread. **The result is real; its interpretation was wrong.**
+T5 reproduces. The segmented lane reads 0.995 against MoQ's 0.125, which is T5's 0.981 against 0.192 within run-to-run spread. **The result is real; its interpretation was wrong.**
 
 **Why.** Packet sizes on the wire, measured from captures of those same runs:
 
 | Arm | MTU 65536 (T5's shape) | MTU 1500 (normalised) |
-|---|---|---|
+| --- | --- | --- |
 | HLS / TCP | 1,209 pkts, **avg 34,380 B**, max 65,483, 60.4 % over 1500 B | 71,389 pkts, avg 1,163 B, max 1,448 |
 | HLS / QUIC | 2,682 pkts, avg 15,338 B, max 65,500, 26.9 % over 1500 B | 109,657 pkts, avg 803 B, max 2,400 |
 | MoQ / QUIC | 29,062 pkts, **avg 931 B**, max 1,200, **0 %** over 1500 B | — |
 
-`netem`'s `reorder` is a per-packet probability. In T5's rig the segmented lane carried its media in
-**24× fewer packets** than MoQ, so the same "25 %" was a 24×-weaker impairment on the lane that won.
-MoQ was the only arm with segmentation offload disabled — a correct fix, applied to one arm — and
-that is precisely what created the asymmetry.
+`netem`'s `reorder` is a per-packet probability. In T5's rig the segmented lane carried its media in **24× fewer packets** than MoQ, so the same "25 %" was a 24×-weaker impairment on the lane that won. MoQ was the only arm with segmentation offload disabled — a correct fix, applied to one arm — and that is precisely what created the asymmetry.
 
 ### 4a. The impairment cells re-measured, and the metric that had to change with them
 
-Measurements 5–7 below are the original cells, graded through `ffmpeg -c copy -f mpegts` on
-`bin-3006`. They have been re-run on the build under test (`ffa5b81b`) through the byte-faithful
-receiver. **Two instrument changes forced a change of metric before any cell could be read.**
+Measurements 5–7 below are the original cells, graded through `ffmpeg -c copy -f mpegts` on `bin-3006`. They have been re-run on the build under test (`ffa5b81b`) through the byte-faithful receiver. **Two instrument changes forced a change of metric before any cell could be read.**
 
-**`delivered_ratio` stopped measuring delivered content on the MoQ arm.** `ffa5b81b`'s
-`export ts` pads to the `mpegts.muxRate` the catalog recorded from a constant-rate source, so the
-capture is mostly stuffing — 47.7 % null packets in the loss cell, 55.3 % in the capacity cell and
-**94.1 %** in one reordering arm — and the byte ratio rises *above* 1.0 on cells that lost most of
-the programme. The PCR-timeline grader ([`t28-media-lost.py`](scripts/t28-media-lost.py)) fails the
-same way and for the same reason: padding keeps the clock advancing on schedule, so it reports
-8.3 s lost on an arm that in fact delivered 3.9 % of the video.
+**`delivered_ratio` stopped measuring delivered content on the MoQ arm.** `ffa5b81b`'s `export ts` pads to the `mpegts.muxRate` the catalog recorded from a constant-rate source, so the capture is mostly stuffing — 47.7 % null packets in the loss cell, 55.3 % in the capacity cell and **94.1 %** in one reordering arm — and the byte ratio rises _above_ 1.0 on cells that lost most of the programme. The PCR-timeline grader ([`t28-media-lost.py`](scripts/t28-media-lost.py)) fails the same way and for the same reason: padding keeps the clock advancing on schedule, so it reports 8.3 s lost on an arm that in fact delivered 3.9 % of the video.
 
-**What is used instead is delivered video packets against the source's own video rate** (9,021,203
-b/s on PID 111) over the window. It is unaffected by padding, and on the HLS arms it reproduces the
-byte ratio to three decimal places — 174,442 packets is 0.485 where the byte ratio reads 0.485 —
-which is the check that it is measuring the same thing where nothing distorts it.
+**What is used instead is delivered video packets against the source's own video rate** (9,021,203 b/s on PID 111) over the window. It is unaffected by padding, and on the HLS arms it reproduces the byte ratio to three decimal places — 174,442 packets is 0.485 where the byte ratio reads 0.485 — which is the check that it is measuring the same thing where nothing distorts it.
 
 | Cell | Arm | As published (`ffmpeg`, `bin-3006`) | Re-measured (video packets, `ffa5b81b`) | Nulls |
-|---|---|---:|---:|---:|
+| --- | --- | --: | --: | --: |
 | reorder `delay 30ms reorder 25% 50%` | H1 | 0.44 | **0.485** | 4.6 % |
-| | H3 | 0.18 | 0.166 §, void: a truncated capture | 4.6 % |
-| | MoQ | 0.13 | **0.000** BBRv3 / **0.039** CUBIC | 94.1 % |
+|  | H3 | 0.18 | 0.166 §, void: a truncated capture | 4.6 % |
+|  | MoQ | 0.13 | **0.000** BBRv3 / **0.039** CUBIC | 94.1 % |
 | loss 20 % commanded | H1 | 0.096 | **0.131** ‡ | 4.5 % |
-| | H3 | 0.703 | **1.111** | 4.6 % |
-| | MoQ | 0.984 | **0.704** | 47.7 % |
+|  | H3 | 0.703 | **1.111** | 4.6 % |
+|  | MoQ | 0.984 | **0.704** | 47.7 % |
 | outage 30 s | H1 | 0.507 | **0.853** | 4.6 % |
-| | H3 | 0.764 | **0.853** | 4.6 % |
-| | MoQ | 0.596 | **0.222**; 0.233 at a 120 s idle timeout | 12.9 % |
+|  | H3 | 0.764 | **0.853** | 4.6 % |
+|  | MoQ | 0.596 | **0.222**; 0.233 at a 120 s idle timeout | 12.9 % |
 | capacity 8 Mb/s permanent | H1 | 0.808 | **0.953** | 4.6 % |
-| | H3 | 0.789 | **1.005** | 4.6 % |
-| | MoQ | 0.456 | **0.638** | 55.3 % |
+|  | H3 | 0.789 | **1.005** | 4.6 % |
+|  | MoQ | 0.456 | **0.638** | 55.3 % |
 
-‡ At the receiver's default 15 s per-fetch timeout the H1 arm emits **nothing**: no segment completes,
-and the receiver refuses to concatenate a partial one because a non-188-multiple join grades as a
-wire defect. At a 60 s timeout it delivers 0.131. The zero is the instrument's policy, not the lane's
-capability, and **the per-fetch timeout is a measurement parameter that has to be stated** on any
-severely impaired segmented arm.
+‡ At the receiver's default 15 s per-fetch timeout the H1 arm emits **nothing**: no segment completes, and the receiver refuses to concatenate a partial one because a non-188-multiple join grades as a wire defect. At a 60 s timeout it delivers 0.131. The zero is the instrument's policy, not the lane's capability, and **the per-fetch timeout is a measurement parameter that has to be stated** on any severely impaired segmented arm.
 
-§ Every H3 cell here ran against nginx's default 64k `http3_stream_buffer_size`, which caps a stream at
-~64 KB per round trip ([T42](test-42-h3-receiver-fidelity.md) § *What the receiver costs in time*).
-At this rig's RTT it binds nowhere except, possibly, under reordering. Re-run at 16m, three
-replicates of the reorder cell read **0.259–0.263** by bytes, with 11 holes each (void for carriage),
-which matches [T28](test-28-failure-injection-matrix.md)'s 25.4 % at a 60 s budget on the same rig.
-**The 0.166 is a capture the receiver's timeout ended, not a delivery reading.** At the 64k buffer a
-segment took 12–15 s to fetch under reordering, against a 15 s per-fetch timeout. Segment 19 crossed
-it at 3,451,143 of 3,753,420 bytes, the receiver refused to concatenate the fragment and exited 1,
-and the 12,396,532 bytes captured are exactly the four segments fetched before that. It is the same
-failure as T28's 4.0 % at the same settings, which crossed at segment 1; at a 60 s timeout the 64k
-buffer reads 25.4 %, so once no fetch is truncated the cell reads a quarter of the stream at either
-buffer. The ordering against TCP and MoQ holds at every reading.
+§ Every H3 cell here ran against nginx's default 64k `http3_stream_buffer_size`, which caps a stream at ~64 KB per round trip ([T42](test-42-h3-receiver-fidelity.md) § _What the receiver costs in time_). At this rig's RTT it binds nowhere except, possibly, under reordering. Re-run at 16m, three replicates of the reorder cell read **0.259–0.263** by bytes, with 11 holes each (void for carriage), which matches [T28](test-28-failure-injection-matrix.md)'s 25.4 % at a 60 s budget on the same rig. **The 0.166 is a capture the receiver's timeout ended, not a delivery reading.** At the 64k buffer a segment took 12–15 s to fetch under reordering, against a 15 s per-fetch timeout. Segment 19 crossed it at 3,451,143 of 3,753,420 bytes, the receiver refused to concatenate the fragment and exited 1, and the 12,396,532 bytes captured are exactly the four segments fetched before that. It is the same failure as T28's 4.0 % at the same settings, which crossed at segment 1; at a 60 s timeout the 64k buffer reads 25.4 %, so once no fetch is truncated the cell reads a quarter of the stream at either buffer. The ordering against TCP and MoQ holds at every reading.
 
-**Read the two columns differently.** On the HLS arms the only thing that changed is the receiver, so
-the movement is a correction. On the MoQ arm the build, the QUIC backend and the congestion
-controller all changed at once, so those cells are a **re-run on the current configuration and not a
-correction of the old number**.
+**Read the two columns differently.** On the HLS arms the only thing that changed is the receiver, so the movement is a correction. On the MoQ arm the build, the QUIC backend and the congestion controller all changed at once, so those cells are a **re-run on the current configuration and not a correction of the old number**.
 
 **Three findings come out of the re-run, in descending order of what they change.**
 
-**1. The 30 s outage no longer separates the two substrates — they are byte-identical.** H1 and H3
-both deliver 383,754 video packets, 79,533,400 bytes, 17.134 s of media lost, largest hole 17.134 s.
-The published reading had HTTP/3 recovering *more* than the outage cost (0.764 against a 0.60 floor)
-while TCP delivered *less* (0.507), and that separation was the re-mux. Recovery here is governed by
-what the origin's live window still holds, which is a property of the origin and not of the
-transport, so identity is the result the mechanism predicts.
+**1. The 30 s outage no longer separates the two substrates — they are byte-identical.** H1 and H3 both deliver 383,754 video packets, 79,533,400 bytes, 17.134 s of media lost, largest hole 17.134 s. The published reading had HTTP/3 recovering _more_ than the outage cost (0.764 against a 0.60 floor) while TCP delivered _less_ (0.507), and that separation was the re-mux. Recovery here is governed by what the origin's live window still holds, which is a property of the origin and not of the transport, so identity is the result the mechanism predicts.
 
-**2. At 20 % commanded loss the segmented lane over HTTP/3 loses nothing at all.** 0.000 s of media
-lost, 0 continuity errors, PCR max 24.95 ms, 0.00 % above the gate, and the capture is
-byte-identical to the clean baseline. The published 0.703 was the re-mux discarding content the wire
-had carried. The lane's advantage in this cell is larger than the experiment claimed.
+**2. At 20 % commanded loss the segmented lane over HTTP/3 loses nothing at all.** 0.000 s of media lost, 0 continuity errors, PCR max 24.95 ms, 0.00 % above the gate, and the capture is byte-identical to the clean baseline. The published 0.703 was the re-mux discarding content the wire had carried. The lane's advantage in this cell is larger than the experiment claimed.
 
-**3. The MoQ arm's reordering result is set by the congestion controller, not by the lane.** With the
-controller pinned to BBRv3 — the shipped default — the arm delivers **zero bytes in 60 s**, on
-`ffa5b81b` and on `bin-3006` alike, so it is not the build. Pinned to CUBIC on the same rig it
-delivers 55.2 s of media span and 3.9 % of the video. The published 0.13 was measured with the
-controller unpinned. This makes reordering the second axis on which *both* lanes turn out to be
-reporting their controller rather than their architecture, the first being loss
-(Conclusion 3 below, and [`docs/comparison.md`](../docs/comparison.md) §3.1).
+**3. The MoQ arm's reordering result is set by the congestion controller, not by the lane.** With the controller pinned to BBRv3 — the shipped default — the arm delivers **zero bytes in 60 s**, on `ffa5b81b` and on `bin-3006` alike, so it is not the build. Pinned to CUBIC on the same rig it delivers 55.2 s of media span and 3.9 % of the video. The published 0.13 was measured with the controller unpinned. This makes reordering the second axis on which _both_ lanes turn out to be reporting their controller rather than their architecture, the first being loss (Conclusion 3 below, and [`docs/comparison.md`](../docs/comparison.md) §3.1).
 
-**The MoQ outage cell is bounded by `--quic-idle-timeout` and cannot be read as a delivery result.**
-A 30 s outage against the 30 s default kills the session with `Error: json: dropped`, which is the
-deployment rule [T28](test-28-failure-injection-matrix.md) already records, reproduced here in a
-second rig. Raising the timeout to 120 s keeps the session alive and moves delivery only from 0.222
-to 0.233, so the timeout is not the whole of that cell's cost — but no MoQ outage figure from this
-rig should be quoted without the timeout beside it.
+**The MoQ outage cell is bounded by `--quic-idle-timeout` and cannot be read as a delivery result.** A 30 s outage against the 30 s default kills the session with `Error: json: dropped`, which is the deployment rule [T28](test-28-failure-injection-matrix.md) already records, reproduced here in a second rig. Raising the timeout to 120 s keeps the session alive and moves delivery only from 0.222 to 0.233, so the timeout is not the whole of that cell's cost — but no MoQ outage figure from this rig should be quoted without the timeout beside it.
 
-**Carriage columns are void on every impaired cell except two.** The byte-faithful receiver exits
-non-zero when it leaves a hole, and under impairment it usually does; only `loss20`/H3 and the
-capacity H1 arm returned complete captures. That is the receiver working: the old one returned
-`cc_errors=0` and a clean-looking file on exactly these cells.
+**Carriage columns are void on every impaired cell except two.** The byte-faithful receiver exits non-zero when it leaves a hole, and under impairment it usually does; only `loss20`/H3 and the capacity H1 arm returned complete captures. That is the receiver working: the old one returned `cc_errors=0` and a clean-looking file on exactly these cells.
 
-### 5. Loss ladder — compare at *applied* loss, not commanded
+### 5. Loss ladder — compare at _applied_ loss, not commanded
 
-`netem loss X%`, 60 s. The commanded figure is not the delivered one, and the error is
-transport-dependent, so the shaper's own counters are reported alongside (T5's rule):
+`netem loss X%`, 60 s. The commanded figure is not the delivered one, and the error is transport-dependent, so the shaper's own counters are reported alongside (T5's rule):
 
 | Commanded | Arm | Applied | Delivered ratio |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | 1 % | H1 / H3 / MoQ | 0.16 % / 1.02 % / 0.96 % | 0.995 / 0.995 / 0.984 |
 | 3 % | H1 / H3 / MoQ | 0.46 % / 2.92 % / 3.12 % | 0.995 / 0.995 / 0.984 |
 | 5 % | H1 / H3 / MoQ | 0.97 % / 4.94 % / 4.95 % | 0.995 / 0.995 / 0.984 |
 | 10 % | H1 / H3 / MoQ | 2.75 % / 10.3 % / 10.0 % | 1.020 / 0.995 / 0.984 |
 | 20 % | H1 / H3 / MoQ | 19.0 % / 20.0 % / 20.2 % | **0.096** / **0.703** / **0.984** |
 
-**The TCP arm receives a fraction of the loss it is commanded** — 0.16 % against a commanded 1 %,
-where both QUIC arms receive ~1.0 % from the identical qdisc. GSO is verifiably off on `lo` for every
-run, so this is not the offload artefact of measurement 4; it is a second, independent way in which a
-per-packet shaper does not treat the two transports alike. Every comparison below is read at matched
-*applied* loss.
+**The TCP arm receives a fraction of the loss it is commanded** — 0.16 % against a commanded 1 %, where both QUIC arms receive ~1.0 % from the identical qdisc. GSO is verifiably off on `lo` for every run, so this is not the offload artefact of measurement 4; it is a second, independent way in which a per-packet shaper does not treat the two transports alike. Every comparison below is read at matched _applied_ loss.
 
-Up to ~10 % applied, nothing separates the arms: loopback has roughly a thousand times the headroom
-the 9.95 Mb/s media needs, so retransmission absorbs the loss invisibly. **The cell only discriminates
-at ~20 % applied.** The ranking there is superseded by the re-measurement in 4a: on the byte-faithful
-receiver the segmented lane over HTTP/3 loses **nothing** rather than 30 %, so the cell separates it
-from both the TCP arm (0.131) and MoQ (0.704) in its favour, where the published figures put it
-between them. The rows above are retained for the *applied*-versus-commanded comparison, which is
-what this measurement exists for and which the receiver change does not touch.
+Up to ~10 % applied, nothing separates the arms: loopback has roughly a thousand times the headroom the 9.95 Mb/s media needs, so retransmission absorbs the loss invisibly. **The cell only discriminates at ~20 % applied.** The ranking there is superseded by the re-measurement in 4a: on the byte-faithful receiver the segmented lane over HTTP/3 loses **nothing** rather than 30 %, so the cell separates it from both the TCP arm (0.131) and MoQ (0.704) in its favour, where the published figures put it between them. The rows above are retained for the _applied_-versus-commanded comparison, which is what this measurement exists for and which the receiver change does not touch.
 
 ### 6. Total outage — 500 ms, 5 s, 30 s
 
-The shaped band is taken to `loss 100%` 15 s into a 75 s window and then restored, so the arm must
-re-establish delivery inside the measured window. Ideal recovery from a 30 s outage in a 75 s window
-is 0.60 if nothing is made up, and above 0.60 if backlog is recovered.
+The shaped band is taken to `loss 100%` 15 s into a 75 s window and then restored, so the arm must re-establish delivery inside the measured window. Ideal recovery from a 30 s outage in a 75 s window is 0.60 if nothing is made up, and above 0.60 if backlog is recovered.
 
 | Outage | HLS / TCP | HLS / HTTP/3 | MoQ / QUIC |
-|---|---|---|---|
-| 500 ms | 1.006 | 1.006 | 0.980 |
-| 5 s | 0.995 | 0.974 | 0.928 |
-| 30 s | **0.507** | **0.764** | 0.596 |
+| ------ | --------- | ------------ | ---------- |
+| 500 ms | 1.006     | 1.006        | 0.980      |
+| 5 s    | 0.995     | 0.974        | 0.928      |
+| 30 s   | **0.507** | **0.764**    | 0.596      |
 
-A 500 ms outage is invisible to all three and a 5 s outage nearly so. At 30 s the arms separate from
-MoQ but **not from each other**: re-measured, both segmented arms deliver 0.853 and are byte-identical
-(4a). Each recovers **more than the outage cost it** — against a 0.60 floor — because the origin's
-live window still holds the segments they missed and they fetch them back. The published 0.764 / 0.507
-split between HTTP/3 and TCP was the re-muxing receiver; recovery is governed by the origin's
-retention rather than by the substrate, which is why the two agree to the byte.
+A 500 ms outage is invisible to all three and a 5 s outage nearly so. At 30 s the arms separate from MoQ but **not from each other**: re-measured, both segmented arms deliver 0.853 and are byte-identical (4a). Each recovers **more than the outage cost it** — against a 0.60 floor — because the origin's live window still holds the segments they missed and they fetch them back. The published 0.764 / 0.507 split between HTTP/3 and TCP was the re-muxing receiver; recovery is governed by the origin's retention rather than by the substrate, which is why the two agree to the byte.
 
-**This is the segmented lane's structural advantage showing up where it should:** addressable, retained
-objects let a client recover content after the fact. It is visible here only because the metric is
-content delivered rather than session recovered. The MoQ arm's figure in this cell is bounded by
-`--quic-idle-timeout` rather than by the lane (4a) and should not be read against these two.
+**This is the segmented lane's structural advantage showing up where it should:** addressable, retained objects let a client recover content after the fact. It is visible here only because the metric is content delivered rather than session recovered. The MoQ arm's figure in this cell is bounded by `--quic-idle-timeout` rather than by the lane (4a) and should not be read against these two.
 
 ### 7. Capacity degradation
 
 Lane provisioned at 20 Mb/s, i.e. ~2× the 9.95 Mb/s media rate, then degraded 20 s into the window.
 
-| Scenario | HLS / TCP | HLS / HTTP/3 | MoQ / QUIC |
-|---|---|---|---|
-| 20 Mb/s throughout (control) | 1.006 | 1.006 | 0.980 |
-| 20 → 8 Mb/s for 5 s | 0.997 | 0.989 | 0.969 |
-| 20 → 12 Mb/s for 60 s | 0.977 | 0.977 | 0.975 |
-| 20 → 8 Mb/s **permanently** | **0.808** | **0.789** | **0.456** |
+| Scenario                     | HLS / TCP | HLS / HTTP/3 | MoQ / QUIC |
+| ---------------------------- | --------- | ------------ | ---------- |
+| 20 Mb/s throughout (control) | 1.006     | 1.006        | 0.980      |
+| 20 → 8 Mb/s for 5 s          | 0.997     | 0.989        | 0.969      |
+| 20 → 12 Mb/s for 60 s        | 0.977     | 0.977        | 0.975      |
+| 20 → 8 Mb/s **permanently**  | **0.808** | **0.789**    | **0.456**  |
 
-The two transient degradations are absorbed by every arm: a 5 s dip below the media rate is covered by
-buffer, and 12 Mb/s for 60 s is still above the 9.95 Mb/s the stream needs, so it is not a shortfall at
-all. **The substrate makes no difference in any capacity cell** — the two HLS arms are within 0.02 of
-each other throughout.
+The two transient degradations are absorbed by every arm: a 5 s dip below the media rate is covered by buffer, and 12 Mb/s for 60 s is still above the 9.95 Mb/s the stream needs, so it is not a shortfall at all. **The substrate makes no difference in any capacity cell** — the two HLS arms are within 0.02 of each other throughout.
 
-The architectures separate only under *sustained* insufficiency. With the lane held at 8 Mb/s against a
-9.95 Mb/s stream for the last 70 s of a 90 s window, the arithmetic ceiling is about **0.85** of source.
-Re-measured (4a), both segmented arms **exceed** it — 0.953 on TCP and 1.005 on HTTP/3 — because the
-window's first 20 s run at the full 20 Mb/s and the client spends them fetching ahead, which the
-ceiling arithmetic does not allow for. MoQ delivers **0.638**, still well below either, because it
-discards groups that miss the subscriber's release deadline rather than falling behind: the
-deadline-shedding behaviour characterised in [T8b](test-8b-congestion-control.md) C3. The direction of
-the published result survives the re-measurement; its margin narrows from roughly 1.7× to 1.5×.
+The architectures separate only under _sustained_ insufficiency. With the lane held at 8 Mb/s against a 9.95 Mb/s stream for the last 70 s of a 90 s window, the arithmetic ceiling is about **0.85** of source. Re-measured (4a), both segmented arms **exceed** it — 0.953 on TCP and 1.005 on HTTP/3 — because the window's first 20 s run at the full 20 Mb/s and the client spends them fetching ahead, which the ceiling arithmetic does not allow for. MoQ delivers **0.638**, still well below either, because it discards groups that miss the subscriber's release deadline rather than falling behind: the deadline-shedding behaviour characterised in [T8b](test-8b-congestion-control.md) C3. The direction of the published result survives the re-measurement; its margin narrows from roughly 1.7× to 1.5×.
 
-**For permanent primary distribution this is the sharper of the two behaviours to know about.** Under a
-lasting capacity shortfall the segmented lane loses nothing it can still fetch and degrades into
-lateness; the media-aware lane holds its latency and throws programme away. Which is preferable is a
-policy choice, but it is a choice, and it is not visible in any cell where capacity is adequate.
+**For permanent primary distribution this is the sharper of the two behaviours to know about.** Under a lasting capacity shortfall the segmented lane loses nothing it can still fetch and degrades into lateness; the media-aware lane holds its latency and throws programme away. Which is preferable is a policy choice, but it is a choice, and it is not visible in any cell where capacity is adequate.
 
 ### 8. HTTP/3 connection and stream behaviour
 
 From the baseline captures and origin logs:
 
-- **One QUIC connection for the whole session.** All 54 requests of the 60 s H3 run — 26 playlist
-  reloads and 28 segment fetches — are carried on a single client UDP 4-tuple. libcurl's connection
-  pool holds it open; there is no per-segment connection setup. The H1 arm likewise uses one TCP
-  connection via keep-alive.
-- **Segment fetches are sequential, not concurrent.** The FFmpeg HLS demuxer holds at most one segment
-  request in flight, so the origin sees ~2 requests per second (one playlist reload, one segment) with
-  occasional 3–4 request seconds at the join.
-- **The consequence for primary distribution is the important part.** QUIC's per-stream head-of-line
-  independence can only help a client that has more than one stream outstanding. This client never
-  does, so on the segment path HTTP/3 delivers no multiplexing benefit and inherits QUIC's
-  loss/reordering recovery behaviour without the structural advantage that usually offsets it. That is
-  consistent with the reordering result: a reordered packet stalls the one segment in flight, and the
-  next request has not been issued yet.
+- **One QUIC connection for the whole session.** All 54 requests of the 60 s H3 run — 26 playlist reloads and 28 segment fetches — are carried on a single client UDP 4-tuple. libcurl's connection pool holds it open; there is no per-segment connection setup. The H1 arm likewise uses one TCP connection via keep-alive.
+- **Segment fetches are sequential, not concurrent.** The FFmpeg HLS demuxer holds at most one segment request in flight, so the origin sees ~2 requests per second (one playlist reload, one segment) with occasional 3–4 request seconds at the join.
+- **The consequence for primary distribution is the important part.** QUIC's per-stream head-of-line independence can only help a client that has more than one stream outstanding. This client never does, so on the segment path HTTP/3 delivers no multiplexing benefit and inherits QUIC's loss/reordering recovery behaviour without the structural advantage that usually offsets it. That is consistent with the reordering result: a reordered packet stalls the one segment in flight, and the next request has not been issued yet.
 
 ## Conclusions
 
-1. **HLS over HTTP/3 is now experimentally reachable**, with FFmpeg + libcurl + ngtcp2/nghttp3, and
-   the configuration is pinned above. The campaign's previous "HTTP/3 is not reachable from a client
-   here" limit is retired.
-2. **The reordering advantage of segmented HTTP is not a lane property.** It reproduces only when the
-   segmented lane is given packets ~24× larger than the lane it is compared against. Equalised, it
-   falls from 0.98 to 0.44 on TCP and to 0.18 on HTTP/3, against MoQ's 0.13.
-3. **Reordering does not separate the two architectures; it separates two congestion controllers.**
-   The published overlap (0.18 against 0.13) held with the MoQ controller unpinned. Pinned, the MoQ
-   arm reads **0.000 on BBRv3 and 0.039 on CUBIC** on the same rig, so its value spans the whole
-   range of the cell and is set by a flag rather than by the object model. The segmented arm does not
-   depend on that flag, nor, once no fetch is truncated, on its origin's stream buffer: 0.259–0.263
-   at 16m and 25.4 % at nginx's 64k default with a 60 s timeout, where the 0.166 first re-measured
-   here was a capture the receiver's timeout ended (§ note under the 4a table). What can be said is
-   that the segmented lane over HTTP/3 is *not controller-dependent* under reordering where the
-   media-aware lane is, and sits between TCP and MoQ on every reading — which is a weaker and more
-   useful claim than the one this conclusion originally made (measurement 4a).
-4. **The substrate change is a trade, and a smaller one than published.** Segmented HTTP loses the
-   reordering cell by moving to QUIC (0.485 on TCP against 0.259–0.263 on HTTP/3) and wins the loss cell
-   outright (**0.131 against 1.111** at 20 % commanded). It gains nothing in the 30 s outage cell,
-   where the two substrates are byte-identical: recovery there is the origin's retention, not the
-   transport's (measurement 4a).
-5. **Under no impairment the substrate is invisible** — byte-identical output — so nothing in carriage
-   or timing fidelity turns on it.
-6. **A single-connection, sequential-fetch HLS client gets no multiplexing benefit from HTTP/3.** Any
-   argument for HTTP/3 on the segment path that rests on stream independence needs a client that keeps
-   several segments outstanding, which this one does not.
+1. **HLS over HTTP/3 is now experimentally reachable**, with FFmpeg + libcurl + ngtcp2/nghttp3, and the configuration is pinned above. The campaign's previous "HTTP/3 is not reachable from a client here" limit is retired.
+2. **The reordering advantage of segmented HTTP is not a lane property.** It reproduces only when the segmented lane is given packets ~24× larger than the lane it is compared against. Equalised, it falls from 0.98 to 0.44 on TCP and to 0.18 on HTTP/3, against MoQ's 0.13.
+3. **Reordering does not separate the two architectures; it separates two congestion controllers.** The published overlap (0.18 against 0.13) held with the MoQ controller unpinned. Pinned, the MoQ arm reads **0.000 on BBRv3 and 0.039 on CUBIC** on the same rig, so its value spans the whole range of the cell and is set by a flag rather than by the object model. The segmented arm does not depend on that flag, nor, once no fetch is truncated, on its origin's stream buffer: 0.259–0.263 at 16m and 25.4 % at nginx's 64k default with a 60 s timeout, where the 0.166 first re-measured here was a capture the receiver's timeout ended (§ note under the 4a table). What can be said is that the segmented lane over HTTP/3 is _not controller-dependent_ under reordering where the media-aware lane is, and sits between TCP and MoQ on every reading — which is a weaker and more useful claim than the one this conclusion originally made (measurement 4a).
+4. **The substrate change is a trade, and a smaller one than published.** Segmented HTTP loses the reordering cell by moving to QUIC (0.485 on TCP against 0.259–0.263 on HTTP/3) and wins the loss cell outright (**0.131 against 1.111** at 20 % commanded). It gains nothing in the 30 s outage cell, where the two substrates are byte-identical: recovery there is the origin's retention, not the transport's (measurement 4a).
+5. **Under no impairment the substrate is invisible** — byte-identical output — so nothing in carriage or timing fidelity turns on it.
+6. **A single-connection, sequential-fetch HLS client gets no multiplexing benefit from HTTP/3.** Any argument for HTTP/3 on the segment path that rests on stream independence needs a client that keeps several segments outstanding, which this one does not.
 
 ## Limits
 
-- **The impairment cells have no carriage grade, except two.** Measurements 5–7 were taken through
-  `ffmpeg -c copy -f mpegts`, which re-muxes: it regenerates continuity counters and re-times PCR, so
-  `cc_errors=0` there is true by construction ([T42](test-42-h3-receiver-fidelity.md) measures how
-  strong the effect is — zero continuity events reported on an origin with ten deliberately excised
-  packets). Re-run through the byte-faithful receiver (measurement 4a), the carriage columns are
-  void on every impaired cell except `loss20`/H3 and the capacity H1 arm, because that receiver
-  stopped at the first truncated segment. `--truncated hole` now records a truncation as a hole
-  instead; carriage under impairment on this rig needs the cells re-run with it. The limit is
-  discharged for the clean baseline. **The delivered-ratio columns, which carry this experiment's
-  headline, are unaffected**: they count bytes arriving, which the re-mux does not invent or destroy
-  at the scale the impairment cells separate on.
-- **A per-packet impairment is not a per-byte impairment, even normalised.** At MTU 1500 the QUIC
-  arm still sends ~1.5× the packets of the TCP arm for the same media (109,657 against 71,389), so at
-  a fixed per-packet reorder probability it takes ~1.5× the events. That residual runs against the
-  QUIC arms and is not removed by anything in this rig. It is far smaller than the 24× of T5's shape,
-  but the reordering figures should be read as "same shaper setting", not "same impairment".
-- **Loopback.** No RTT, and ~1000× headroom over the media rate, which is why the loss ladder is flat
-  below 20 %. These are loopback constants, as T5's were.
+- **The impairment cells have no carriage grade, except two.** Measurements 5–7 were taken through `ffmpeg -c copy -f mpegts`, which re-muxes: it regenerates continuity counters and re-times PCR, so `cc_errors=0` there is true by construction ([T42](test-42-h3-receiver-fidelity.md) measures how strong the effect is — zero continuity events reported on an origin with ten deliberately excised packets). Re-run through the byte-faithful receiver (measurement 4a), the carriage columns are void on every impaired cell except `loss20`/H3 and the capacity H1 arm, because that receiver stopped at the first truncated segment. `--truncated hole` now records a truncation as a hole instead; carriage under impairment on this rig needs the cells re-run with it. The limit is discharged for the clean baseline. **The delivered-ratio columns, which carry this experiment's headline, are unaffected**: they count bytes arriving, which the re-mux does not invent or destroy at the scale the impairment cells separate on.
+- **A per-packet impairment is not a per-byte impairment, even normalised.** At MTU 1500 the QUIC arm still sends ~1.5× the packets of the TCP arm for the same media (109,657 against 71,389), so at a fixed per-packet reorder probability it takes ~1.5× the events. That residual runs against the QUIC arms and is not removed by anything in this rig. It is far smaller than the 24× of T5's shape, but the reordering figures should be read as "same shaper setting", not "same impairment".
+- **Loopback.** No RTT, and ~1000× headroom over the media rate, which is why the loss ladder is flat below 20 %. These are loopback constants, as T5's were.
 - **Replicates.** Three on the reordering cell; one on each loss, outage and capacity cell.
 - **The FFmpeg patch is local and unmerged.** Reproducing this needs it (measurement 1).
 
 ## Corrections
 
-**The HLS arms' PCR distribution was the receiver's, and the wire passes the gate.** This experiment
-reported max 80.00 ms and ~95 % of intervals above 40 ms on both HLS arms, correctly labelling it a
-property of FFmpeg's mpegts muxer rather than a transport result — but labelling a figure is not the
-same as knowing the one it displaced. The wire reads max 24.95 ms and 0.00 % above gate. The method
-rule is that **an instrument known to distort a quantity should be recorded as producing no
-measurement of it, not a caveated one**: the caveated 95 % sat in this file and in
-[`evidence.md`](evidence.md) for months, and a caveat is not load-bearing enough to stop
-a reader carrying the number forward.
+**The HLS arms' PCR distribution was the receiver's, and the wire passes the gate.** This experiment reported max 80.00 ms and ~95 % of intervals above 40 ms on both HLS arms, correctly labelling it a property of FFmpeg's mpegts muxer rather than a transport result — but labelling a figure is not the same as knowing the one it displaced. The wire reads max 24.95 ms and 0.00 % above gate. The method rule is that **an instrument known to distort a quantity should be recorded as producing no measurement of it, not a caveated one**: the caveated 95 % sat in this file and in [`evidence.md`](evidence.md) for months, and a caveat is not load-bearing enough to stop a reader carrying the number forward.
 
-**The continuity count in this rig never worked.** `grade()` counted `tsp -P continuity` output lines
-matching `TS:`, which the plugin does not emit; it writes `missing N packets`. The count returned
-zero on any input, so `cc_errors=0` here was doubly unable to fail — the grader could not see a
-defect and the receiver would have repaired it first. Fixed in the rig and gated in
-[`check-rigs.sh`](scripts/check-rigs.sh); the rule is in [`method-notes.md`](method-notes.md).
+**The continuity count in this rig never worked.** `grade()` counted `tsp -P continuity` output lines matching `TS:`, which the plugin does not emit; it writes `missing N packets`. The count returned zero on any input, so `cc_errors=0` here was doubly unable to fail — the grader could not see a defect and the receiver would have repaired it first. Fixed in the rig and gated in [`check-rigs.sh`](scripts/check-rigs.sh); the rule is in [`method-notes.md`](method-notes.md).
 
-**The MoQ arm's GSO flag was hard-coded, and the diagnosis of it was wrong.** The rig passed a
-literal `--quic-gso=false` on the client while defaulting `MOQ` to `~/bin-3006`, whose client flag is
-`--client-quic-gso` — so the arm exited 2 into a pipeline and produced nothing. It was recorded here
-as `ffa5b81b` rejecting the flag; in fact `ffa5b81b` accepts it and the *old* build rejects it, which
-is the opposite way round. The repair is `MOQ_GSO`, detected in
-[`moq-cli-flags.sh`](scripts/moq-cli-flags.sh) alongside `RELAY_GSO`, and the rig now defaults to the
-build under test. **Method rule:** when two sides of a migration converge on the same flag name, the
-name stops looking like a migration hazard and starts looking safe to hard-code — which is precisely
-when it becomes one.
+**The MoQ arm's GSO flag was hard-coded, and the diagnosis of it was wrong.** The rig passed a literal `--quic-gso=false` on the client while defaulting `MOQ` to `~/bin-3006`, whose client flag is `--client-quic-gso` — so the arm exited 2 into a pipeline and produced nothing. It was recorded here as `ffa5b81b` rejecting the flag; in fact `ffa5b81b` accepts it and the _old_ build rejects it, which is the opposite way round. The repair is `MOQ_GSO`, detected in [`moq-cli-flags.sh`](scripts/moq-cli-flags.sh) alongside `RELAY_GSO`, and the rig now defaults to the build under test. **Method rule:** when two sides of a migration converge on the same flag name, the name stops looking like a migration hazard and starts looking safe to hard-code — which is precisely when it becomes one.
 
-**`delivered_ratio` stopped measuring delivered content, and nothing in the rig noticed.** On
-`ffa5b81b` `export ts` pads to the catalog's recorded `mpegts.muxRate`, so MoQ captures run to 94 %
-null packets and the byte ratio exceeds 1.0 on cells that lost most of the programme. The PCR-timeline
-grader fails identically, because padding keeps the clock advancing on schedule. Both metrics were
-reporting the padding. Replaced by delivered video packets against the source's video rate, which
-reproduces the byte ratio exactly on unpadded arms. **Method rule:** *a delivery metric denominated in
-bytes or in clock time assumes the sender does not manufacture either; when a sender gains the ability
-to pad, every such metric silently becomes a measure of the padding.*
+**`delivered_ratio` stopped measuring delivered content, and nothing in the rig noticed.** On `ffa5b81b` `export ts` pads to the catalog's recorded `mpegts.muxRate`, so MoQ captures run to 94 % null packets and the byte ratio exceeds 1.0 on cells that lost most of the programme. The PCR-timeline grader fails identically, because padding keeps the clock advancing on schedule. Both metrics were reporting the padding. Replaced by delivered video packets against the source's video rate, which reproduces the byte ratio exactly on unpadded arms. **Method rule:** _a delivery metric denominated in bytes or in clock time assumes the sender does not manufacture either; when a sender gains the ability to pad, every such metric silently becomes a measure of the padding._
 
-**The reordering cell was comparing congestion controllers.** The published MoQ figure of 0.13 was
-taken with the controller unpinned. Pinned, the same rig gives 0.000 on BBRv3 and 0.039 on CUBIC —
-the cell's whole range — on both the current build and the original one, so it is neither the build
-nor the backend. The conclusion that "segmented HTTP and MoQ are not separated by reordering" rested
-on one draw from a distribution that a flag selects. **Method rule:** already in
-[`moq-cli-flags.sh`](scripts/moq-cli-flags.sh) — *always pass `RELAY_CC_FLAG`* — and this is the cell
-that shows what not passing it costs: a published architectural conclusion.
+**The reordering cell was comparing congestion controllers.** The published MoQ figure of 0.13 was taken with the controller unpinned. Pinned, the same rig gives 0.000 on BBRv3 and 0.039 on CUBIC — the cell's whole range — on both the current build and the original one, so it is neither the build nor the backend. The conclusion that "segmented HTTP and MoQ are not separated by reordering" rested on one draw from a distribution that a flag selects. **Method rule:** already in [`moq-cli-flags.sh`](scripts/moq-cli-flags.sh) — _always pass `RELAY_CC_FLAG`_ — and this is the cell that shows what not passing it costs: a published architectural conclusion.
 
-**Believed:** segmented HTTP's resistance to reordering was a property of the lane — bounded,
-independently addressable objects retried over a fresh request — and would survive a change of
-substrate, so the only open question was whether HTTP/3 would preserve the 0.98.
+**Believed:** segmented HTTP's resistance to reordering was a property of the lane — bounded, independently addressable objects retried over a fresh request — and would survive a change of substrate, so the only open question was whether HTTP/3 would preserve the 0.98.
 
-**True:** it was a property of the *packet size the rig gave it*. T5 disabled segmentation offload on
-the MoQ arm, correctly, and left the segmented arm on 65536-byte loopback packets, so the two arms met
-`reorder 25 %` with a 24× difference in the number of packets exposed to it. Equalise them and the
-advantage largely disappears on TCP and entirely disappears on QUIC.
+**True:** it was a property of the _packet size the rig gave it_. T5 disabled segmentation offload on the MoQ arm, correctly, and left the segmented arm on 65536-byte loopback packets, so the two arms met `reorder 25 %` with a 24× difference in the number of packets exposed to it. Equalise them and the advantage largely disappears on TCP and entirely disappears on QUIC.
 
-**Method rule:** *an impairment specified per packet is only comparable across two lanes if the lanes
-carry the same media in comparable packets — normalise MTU and offloads on every arm, and report the
-measured packet-size distribution alongside any per-packet impairment result.* A fix applied to one
-arm because that arm needed it is itself an asymmetry.
+**Method rule:** _an impairment specified per packet is only comparable across two lanes if the lanes carry the same media in comparable packets — normalise MTU and offloads on every arm, and report the measured packet-size distribution alongside any per-packet impairment result._ A fix applied to one arm because that arm needed it is itself an asymmetry.
