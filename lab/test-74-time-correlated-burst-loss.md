@@ -2,7 +2,8 @@
 
 **State: run; criteria 2–5 hold, criterion 1 but for one probe reading 0.2 ms out of band. The
 segmented lane's burst failure is the lane's: under bursts in time it fails two replicates of three,
-where every continuous lane stays whole.** Rig: [T73](test-73-long-path-budget-burst.md)'s at its
+where every continuous lane stays whole. P1-ap: a failing fetch waits on a retransmission timeout,
+and a 1 s fetch deadline with a retry on a fresh connection does not bound it.** Rig: [T73](test-73-long-path-budget-burst.md)'s at its
 2 s budget, with a loss scheduler that defines bursts in time rather than in datagrams
 ([`t74-time-burst.py`](scripts/t74-time-burst.py), started by `t71-far.sh`; the matrix by
 [`t74-drive.sh`](scripts/t74-drive.sh)).
@@ -155,5 +156,78 @@ against the schedule. None tripped the receiver's 3 s timeout, which bounds each
   behind it, stay whole.
 - **The datagram-counted model made the failure worse but did not create it.** Bursts on one
   direction alone did not fail the lane in either diagnostic.
-- **Open: what turns a 20 ms burst into a 4–8 s fetch**, and whether a receiver that re-requests a
-  fetch past a deadline on a fresh connection bounds it ([Evidence](evidence.md) §5 row 4).
+- **A 20 ms burst turns a fetch into seconds through a retransmission timeout**, after which the
+  response is resent one round trip at a time (2.2–5.6 s, captured).
+- **Re-requesting on a fresh connection does not bound it at this budget.** On the 116 ms path a new
+  connection needs about the second of slack a 2 s cushion leaves, so a 1 s deadline cuts healthy
+  retries and each cut costs 1.5 s. Open: whether a re-request on a connection already open does
+  ([Evidence](evidence.md) §5 row 4).
+
+## The failing fetch, and a deadline on it (P1-ap)
+
+**Procedure.** The rig relaunched as above. Per round r of three, on seed 7400 + r: the segmented
+lane under time bursts, then again with each segment fetch bounded at 1,000 ms by
+[`t74-fetch-deadline.py`](scripts/t74-fetch-deadline.py), which runs the receiver unchanged and
+shuts the socket at the deadline, so that its retry asks again on a new connection. Round 1 adds a
+clean cell with the deadline. Every cell has a header capture of the lane's TCP at the origin.
+
+```bash
+DEADLINE_MS=1000 CAPTURE=<origin-nic> ORIGIN_IP=<EC2_IP> ORIGIN=<origin-host> FAR=<far-host> \
+	bash lab/scripts/t74-drive.sh p1ap 120
+python3 lab/scripts/t74-tcp-recovery.py <cell>/origin.pcap --slow-ms 600
+```
+
+**The deadline, set before running.** In the diagnostics a 1.16 s fetch was absorbed and a 1.56 s
+one stalled the groomer for 536 ms, so a fetch has about 1 s of slack at this budget; past 1,000 ms
+it has already cost programme. A new connection then pays a poll, a handshake and slow start on the
+116 ms path, about 1.5 s for a 1.5 MB segment.
+
+**Pass criteria, fixed before running:**
+
+1. Path and scheduler as criteria 1–2; each cell's capture spans its receive window with no packet
+   dropped by the kernel.
+2. **A failing fetch captured:** at least one fetch of 2 s or more in a cell without the deadline,
+   its recovery read from the capture. None in three rounds is reported as not captured.
+3. **The deadline:** the lane whole (T73's criterion 6) in all three cells with it, and it bounds
+   the failure; programme lost in at least one, and it does not at this budget. Reported beside it,
+   per cell: the deadline's firings, the longest stall and the segments lost, against the same round
+   without it.
+4. **The clean control:** whole, the deadline never firing; otherwise 1,000 ms is too tight for this
+   path and criterion 3 is labelled.
+
+*Predicted.* A failing fetch begins with a retransmission timeout on a response's tail and goes on
+in one-round-trip rounds, as the two captured slow recoveries did. With the deadline the lane is
+still not whole where a burst meets a fetch, the new connection's 1.5 s exceeding the slack, but no
+stall exceeds 2 s and no segment is lost.
+
+**Results**, seven cells:
+
+1. **Path, scheduler and captures hold.** Every switch landed within 0.11 ms of its schedule and
+   0.88–1.17 % of the window was lost each way, in bursts of mean 18.3–20.9 ms; round trip
+   115–117 ms, clock bound at most 1.10 ms. Every capture spans its window with no packet dropped by
+   the kernel.
+2. **Failing fetches captured.** Without the deadline: 2.17 s in round 1, and 5.62, 5.00 and 3.66 s in
+   round 2, each with its first byte in one round trip; none of 2 s in round 3. In the three the
+   capture reads whole, the origin fell silent for 335–447 ms, a retransmission timeout, then resent
+   through the rest of the fetch one round trip apart: 511, 394 and 74 segments.
+3. **The deadline does not bound the failure.** Every cell fetched all 108 segments; what was lost
+   arrived too late.
+
+| Round | Without the deadline | With it: firings | With it: longest wait for a segment | With it: programme |
+|---|---|---|---|---|
+| 1 | whole, 2 groomer stalls, 12 continuity errors | 0 | 1.72 s | whole, no stall |
+| 2 | 11.44 s lost; waits up to 6.73 s | 4 | 5.73 s | 5.84 s lost |
+| 3 | 0.20 s lost; waits up to 3.01 s | 4 | 5.04 s | 4.98 s lost |
+
+   A new connection fetches a segment in 976–983 ms on this path when it loses nothing, which leaves
+   the deadline 17–24 ms. Two retries that had lost nothing were cut as their last bytes arrived, and
+   two segments were cut twice. Each cut cost about 1.5 s before the next attempt finished, so where
+   it fired the deadline replaced one long recovery with a chain of short ones, 3.2–5.7 s end to end.
+   In both rounds where it fired it also cut the joining fetch, and those two cells ran about 1 s
+   below the others' latency (2,387 and 2,517 ms, against 3,144–3,495 ms), with less cushion when
+   their bursts came; not investigated.
+4. **The clean control:** whole, the deadline never firing; its slowest fetch, the joining one on a
+   new connection, took 974 ms. Met, by 26 ms, so criterion 3 is not labelled.
+
+*Prediction*: the failing fetch's shape confirmed. With the deadline, no segment was lost, but waits
+reached 5.7 s and the programme lost 5.8 s: falsified.

@@ -663,7 +663,8 @@ loses under a second in one replicate of three, and segmented HTTP its conforman
 HTTP loses 1–54 s in every replicate under 20-datagram Gilbert bursts, which persist across its
 fetches' idle gaps, and fails two of three under 20 ms bursts covering 1 % of time (11.3 s lost; a
 7.8 s stall): a burst that takes most of a fetch is resent only after a retransmission timeout, then
-in 116 ms rounds, 1.2–1.6 s where captured; the failing 3.9–8.2 s fetches were not. RIST and SRT are
+in 116 ms rounds, 1.2–5.6 s where captured, and re-requesting it on a fresh connection after 1 s does
+not bound it (5.0–5.8 s lost where that fired). RIST and SRT are
 not separated anywhere. On CUBIC neither MoQ lane carries 0.1 %, nor segmented HTTP 1 %.
 
 ### 3.12 Can an operations system tell that the feed has stopped while the transport is healthy? — Yes if it has stopped completely, and only from per-stream instrumentation if it has stopped partly
@@ -920,7 +921,7 @@ rebuild.
 | 1 | **Does groomed output pass TR 101 290 P1/P2 on hardware IRDs, sustained, on its bytes and on its arrival over RTP, including ST 2022-7 under loss?** | A hardware IRD, an ST 2022-7 receiver and an analyser | Everything. Until it passes, the grooming design is software-validated, not broadcast-acceptable |
 | 2 | **Can a live re-multiplexer keep the lane's wire T-STD-conformant across hosts, and for 1+1?** On one host it can; the merged export does across hosts and as a co-started pair (§3.4, §3.16) | A schedule computed from the stream alone; a source of another profile that passes the T-STD | Whether the lane serves TS-out to an IRD at conformance in a deployment |
 | 3 | **Is upstream's merged fixed-delay export itself an acceptable conformant stage?** On arrivals its drift rate exceeds 0.075 Hz/s, the wire's phase moving in 1 ms steps (§3.16) | A hardware IRD and analyser, for whether those steps matter | Whether the subscriber is itself the conformant stage, and at what latency |
-| 4 | **What stalls a segmented fetch for 4–8 s after a 20 ms burst on a long path, and does re-requesting it bound the stall?** (§3.11) | A capture of a failing fetch; T74's cells with a receiver that re-requests past a deadline | Whether the lane's burst failure is its transport's or its receiver's |
+| 4 | **Does re-requesting on a connection already open bound a segmented fetch's burst stall on a long path?** (§3.11) | T74's cells, re-requesting on a second, open connection | Whether a receiver can recover the lane's burst failure |
 | 5 | **Does a commercial ABR-to-TS receiver hand on the segments' packets, and produce P1/P2-conformant output?** | MEG- or TITAN-class hardware | Whether affiliates' own receivers can be the lane's receive stage ([Comparison](../docs/comparison.md) §4.4) |
 | 6 | **Do the groomer's boundaries hold on hardware** — source-clock drift, mid-stream PID change? | The rig in row 1 | Whether software-validated conformance generalises; drift and PID change have fixtures only |
 | 7 | **Can a media-aware failover be brought under a second as a decoder sees it?** Not at any idle timeout tried, nor switched at the receiver (§3.4) | An export that flags the skip, or a delay covering it; an input switch that detects on the video PID | Whether the media-aware lane's switched 1+1 is acceptable where a merge is not ([Architecture](../docs/architecture.md) §5) |

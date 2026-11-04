@@ -24,7 +24,8 @@
 # Env: ORIGIN_IP (required), BIN (~/bin-66af7231), RELAY_PORT (4711), SRT_PORT (9711),
 # RIST_PORT (9712; the main profile's one port), CLOCK_PORT (9710), BUFMS (1000), DELAY (1s),
 # VPID (111), DEV (ens5), IFB (ifb71); the segmented lane: SEG_PORT (18731), PACER
-# (~/pacer-97f3a38/mpegts-pacer), RATE (11438000), its cushion BUFMS
+# (~/pacer-97f3a38/mpegts-pacer), RATE (11438000), its cushion BUFMS, DEADLINE_MS (unset; else
+# each segment fetch is bounded, through t74-fetch-deadline.py)
 set -euo pipefail
 
 ACTION=${1:?action}
@@ -153,11 +154,16 @@ recv() {
 			sleep 0.5
 		done
 		tap_s=$((secs + 8))
+		local recv=$SCRIPTS/b8-hls-recv.py dl=()
+		if [ -n "${DEADLINE_MS:-}" ]; then
+			recv=$SCRIPTS/t74-fetch-deadline.py
+			dl=(--fetch-deadline-ms "$DEADLINE_MS")
+		fi
 		# shellcheck disable=SC2016
-		rx=(bash -c 'python3 "$1" "$2" - --seconds 0 --poll 250 --log "$3/recv.jsonl" 2>"$3/recv.err" |
+		rx=(bash -c 'python3 "$1" "$2" - --seconds 0 --poll 250 --log "$3/recv.jsonl" "${@:7}" 2>"$3/recv.err" |
 			"$4" stdout "$5" --stream-clock --latency-ms "$6" --max-latency-ms 14000 --stall-ms 1000 \
 				--on-stall mute --stats-interval-ms 1000 2>"$3/pacer.log"' _
-			"$SCRIPTS/b8-hls-recv.py" "$url" "$cell" "$PACER" "$RATE" "$BUFMS")
+			"$recv" "$url" "$cell" "$PACER" "$RATE" "$BUFMS" "${dl[@]}")
 		;;
 	*)
 		echo "unknown lane: $lane" >&2
