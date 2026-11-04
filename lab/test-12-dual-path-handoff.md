@@ -1067,8 +1067,9 @@ under 2 s apart into episodes.
 | D3, unfixed filter | offset 0 | not graded | 0; — | — (B carries on alone) |
 
 1. **Criterion 1 holds**: unfiltered legs never align.
-2. **Criterion 2 fails, only at the clock table.** Every D1 episode holds a TDT/TOT packet, which 66
-   of 134,695 datagrams do; between them the late leg is byte-identical to its partner. Inside, the
+2. **Criterion 2 fails, at the clock table and at the join.** Every D1 episode holds a TDT/TOT packet, which 66
+   of 134,695 datagrams do, and the first is also the join's tail (§ *D1 after upstream's clock-table
+   placement*); between them the late leg is byte-identical to its partner. Inside, the
    legs carry the same packets in another order (video against audio, null, teletext and SCTE-35
    packets, the TDT against the PMT), and re-converge within two GOPs.
 3. **Criterion 3 fails**: each resumed leg is misnumbered by one datagram, and B, returning second,
@@ -1090,6 +1091,24 @@ LATE=8 DELAY=2s RATE=10200000`, the clip's first 175 s, the pacer at `97f3a38`, 
    no continuity error. The after build carries every change since `204c97f4f`, not #7779 alone.
 3. **Reported:** any remaining episode and whether it holds a TDT/TOT packet; upstream expects one
    only where a revision arrives after media has passed its stamp.
+
+**Results.** Both runs aligned at offset 0, and each seq-merge lost nothing. "From B" counts from
+leg B's first datagram; the masked count ignores the 4-bit continuity counter.
+
+| Build | Pairs differing, from 2 s after B | Episodes, from B | Pairs differing, 0–3.5 s from B (masked) | After 3.5 s | Seq-merge CC |
+|---|---|---|---|---|---|
+| `204c97f4f` | 4.01 % | 10, each holding a TDT/TOT packet: the join at 0.2 s for 2.5 s, then 16.6 s to 137.6 s, 15.1 s apart, 0.1–2.0 s each | 2,448 (2,214) | 4,587 | 1 |
+| `701b7196a` | 0.63 % | 1: the join at 0.4 s for 2.5 s, holding a TDT/TOT packet in its first 2 s | 2,431 (2,198) | **0** | **0** |
+
+1. **Valid.** The before build reproduces D1, and D1's first episode was the join's tail.
+2. **Criterion 2 fails, at the join alone.** From 2.9 s after it joins, the late leg is byte-identical to its
+   partner over the remaining 131,306 pairs, and the seq-merge has no continuity error: every
+   revision episode is gone. The join's first 2.9 s differ on both builds by the same amount, and
+   masking the counter leaves nine in ten of those pairs differing, so it is content and order, not
+   the filter's numbering. The 2 s grace in the criterion was too short for the join on either build.
+3. **Reported:** one episode, the join's, holding a TDT/TOT packet in its first 2 s and none after;
+   what differs in it, and whether a revision arriving after media has passed its stamp explains it,
+   is open.
 
 ## Corrections
 

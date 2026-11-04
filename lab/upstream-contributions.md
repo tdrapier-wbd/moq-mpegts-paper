@@ -953,10 +953,10 @@ The passthrough export merged as [#5349](https://github.com/moq-dev/moq/pull/534
 ([T48](test-48-passthrough-export.md)); `ts-passthrough-export` stays open under
 [#5327](https://github.com/moq-dev/moq/pull/5327)'s acceptance set.
 
-**Fixed, not yet re-measured:** where TDT/TOT revisions are placed, which decides a late-joining 1+1
-pair ([T12](test-12-dual-path-handoff.md) § *Arm D*), asked as
+**Fixed and verified:** TDT/TOT placement, asked as
 [#7743](https://github.com/moq-dev/moq/issues/7743) and closed by
-[#7779](https://github.com/moq-dev/moq/pull/7779), merged. **Open:** release-clock statistics that count neither a
+[#7779](https://github.com/moq-dev/moq/pull/7779), merged: a late leg that differed at each revision
+is byte-identical from 2.9 s after it joins ([T12](test-12-dual-path-handoff.md) § *Arm D*). **Open:** release-clock statistics that count neither a
 skipped group nor an absent track; and the join-dependent latency at 500 ms
 ([T47](test-47-fixed-delay-export.md) conclusion 20,
 [reported on #4645](https://github.com/moq-dev/moq/pull/4645#issuecomment-6083705934)).
