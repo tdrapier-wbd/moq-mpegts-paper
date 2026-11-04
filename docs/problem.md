@@ -28,7 +28,7 @@ time the transport was the least interesting part of the transition: what change
 operating model the transport made possible.
 
 Claims here are marked *established*, *likely* or *uncertain*. Nothing is measured in this document;
-the measurements, including the two latency figures quoted in §5, are in [Evidence](../lab/evidence.md).
+the measurements are in [Evidence](../lab/evidence.md).
 
 ---
 
@@ -271,10 +271,8 @@ it does not do is change the marginal economics of the thousandth destination, w
 
 **The second attacks R2 from the opposite direction.** Rather than looking for an IP fan-out model
 whose marginal cost approaches zero, the satellite-hybrid architectures keep the medium that already
-has that property and use IP only where the broadcast medium fails: satellite carries the feed to
-the whole footprint, and a receiver that loses data requests just that data over RIST from a
-buffered recovery server, falling back to a full IP copy of the feed only while it is completely
-faded. VSF TR-06-4 Parts 7 and 8 specify two ways of doing it. **So the choice is not "satellite or
+has that property and use IP only where the broadcast medium fails, a receiver requesting over RIST
+only what the satellite lost (VSF TR-06-4 Parts 7 and 8). **So the choice is not "satellite or
 Internet-native" but at least three-way**, and the third option is not a weaker version of either:
 it concedes the footprint argument outright, accepts a latency floor no better than satellite's, and
 answers the fan-out arithmetic better than any fully Internet-native plane currently can
@@ -334,11 +332,9 @@ data plane.
 
 **R3 and R4 are coupled, but not by buffer depth**, which does not buy PCR conformance
 ([Comparison](comparison.md) §5.1). The two requirements are coupled all the same: the only
-configuration measured P1/P2-conformant on the media-aware lane delivers at **2,447 ms**, against
-**141 ms** at a cushion that is not conformant, so a latency figure for it is meaningless without the
-conformance of the same bytes. And
-R3 asks for a conformant transport stream, which P1/P2 does not fully grade: the same configuration
-fails the 13818-1 buffer model. Stages that rebuild the packet schedule pass it — a laboratory
-re-multiplexer, and upstream's own exporter as merged in October 2026 — each at a latency of its own,
-and none sub-second over a whole capture. **R4 at R3 is therefore the open question on this lane, not
-a settled advantage** ([Evidence](../lab/evidence.md) §3.2, §3.11, §3.16).
+configuration measured P1/P2-conformant on the media-aware lane delivers an order of magnitude later
+than one that is not, so a latency figure for it is meaningless without the conformance of the same
+bytes. And R3 asks for a conformant transport stream, which P1/P2 does not fully grade: the same
+configuration fails the 13818-1 buffer model, and the stages that rebuild the packet schedule pass it
+at latencies of their own, none sub-second over a whole capture. **R4 at R3 is therefore the open
+question on this lane, not a settled advantage** ([Evidence](../lab/evidence.md) §3.2, §3.11, §3.16).

@@ -19,7 +19,7 @@ route of seconds, latency does not choose between them.
 maturity, delivery economics and the delivery path's interoperability. Its path back to an IRD-ready
 transport stream is off the shelf at classic segment durations and groomed to P1/P2 in software, but
 no free receiver survives an origin failure, and no receiver on either plane has met hardware
-(§3.2, §4.6, §6.1). Everything that makes either plane *broadcast-grade* sits
+(§3.2, §6.1, §13). Everything that makes either plane *broadcast-grade* sits
 above the transport and is common to both ([Problem](problem.md) §1). **Below about one second no plane
 here is demonstrated conformant over a whole capture**, so MoQ's sub-second case is architecturally
 credible and not yet evidenced (§5.1).
@@ -218,20 +218,6 @@ product meets it, or passes TR 101 290 on hardware, is open
 Gateway *placement* moves fan-out arithmetic: at each client's demarcation the transport serves every
 client; in regional PoPs it serves every PoP ([Economics](economics.md) §4.5,
 [Architecture](architecture.md) §4.4). Open architectural decision; neither data plane is favoured.
-
-### 4.6 The honest verdict on this axis
-
-Three claims are run together under "hand-off". **Receiving** favours segmented HTTP at classic
-segment durations — off the shelf, though no free receiver survives an origin failure (§3.2), with
-HLS-input receivers purchasable (§4.4) — and reverses at low latency, where
-nothing free receives TS-in-HLS (§6.1). **Grooming burden**
-favours MoQ, and **which stage can carry it** favours segmented HTTP (§4.3). **The groomed wire** is
-a tie on P1/P2 and on its latency (§5): both reach 0 PCR intervals above 40 ms in software over one
-internet path, segmented at a cushion its segments' spans set, 1–3 s, and MoQ at a buffer sized by the
-source's peak coded frame, each graded on the bytes its latency was measured on. MoQ's wire held for a
-day on a replayed clip, the segmented one for 72 h on the live feed but at its six breaks
-([Evidence](../lab/evidence.md) §3.11). **The tie is P1/P2's alone**: at the buffer model the segmented
-wire passes and the media-aware one fails (§8).
 
 ---
 
@@ -532,7 +518,7 @@ Read "favours" as *today*, on the evidence in this repository and the current sp
 | Redundancy — 1+1 source failover (R6) | **segmented HTTP, conditionally** | **M** | **the sharpest divergence measured**: hitless for a co-started shared-feed segmented pair, and for interchangeable origins in one CDN origin group, merged downstream by receivers released in phase; one detection interval or more on the media-aware lane, a marked switch on current `main`; conditional because a misconfigured segmented pair is accepted silently (§3.3) |
 | Reassembly to a transport stream | **segmented HTTP at classic segment durations; MoQ at low latency** | M | below the segment period the free receiver is MoQ's (§4.2, §6.1) |
 | Grooming *burden* (R3) | **MoQ** | **M** | segmented egress is ~240× coarser; against the tunnels, MoQ wins on burst size and they on silence (§4.3) |
-| Grooming *outcome* — a P1/P2-conformant wire (R3) | **neither — both reach it, at different costs** | **M** | MoQ at a peak-coded-frame buffer; segmented HTTP at a 1–3 s cushion, its wire passing the T-STD too; neither on hardware, and MoQ's wire fails the T-STD (§4.6, §8) |
+| Grooming *outcome* — a P1/P2-conformant wire (R3) | **neither — both reach it, at different costs** | **M** | MoQ at a peak-coded-frame buffer; segmented HTTP at a 1–3 s cushion, its wire passing the T-STD too; neither on hardware, and MoQ's wire fails the T-STD (§5.1, §8) |
 | Latency (R4) | **MoQ over segmented HTTP only where nothing is conformant; level at P1/P2; MoQ over the tunnels, not at conformance** | **M** | 141 ms where nothing is conformant; **2,447 against 2,604 ms at P1/P2 conformance**, on one clip and a clean path; **nothing conformant below ~1 s over a whole capture** (§5, §5.1) |
 | Interoperability (R1) | **segmented HTTP on the delivery path, and on the receive path at classic durations** | M+S+V | decisive through caches and general clients, for a single programme; free receivers do not survive an origin failure, and commercial ones align on nothing beyond HLS (§4.4, §6.1) |
 | Entitlement and control (R7) | MoQ | M+R | enforcement point, session observability, and revocation speed on the one CDN mechanism measured (§7) |
@@ -562,7 +548,7 @@ under what conditions each is preferable.
 | **Scrambled feed to the IRD** | Where a route requires it, a feed under TS-level conditional access reaches the IRD still scrambled | **Carried on the opaque lane and through the groomer** (once, loopback, no key ladder); excluded on the media-aware lane; a narrow gate (§8) | **Carried** by a packager not cutting on pictures (once, loopback, no key ladder; §8) |
 | **Permanent operation** | Stable operating state over ≥ 7 days, every resource series flat or converged | **Cleared for continuity and resources over a week**: 169 h on the live feed, every role converged, no unit restarted, every media-plane event traced to the contribution, one export end included; PCR accuracy over days ungraded, one run, one subscriber ([Evidence](../lab/evidence.md) §3.6) | **Not cleared**: 72 h on the live feed through one CDN, memory flat; six breaks in the contribution each withdrew both pathways, 54 s in all, and the groomer left PTS hours from PCR after a splice, its fix not soaked; one run ([Evidence](../lab/evidence.md) §3.4, §5) |
 | **Deterministic recovery** | A bounded, known quantity of programme lost per failure class, no manual intervention | **Partial.** Fast but lossy — the exporter resumes at the live edge | **Partial.** Lossless inside the availability window, silently holed past it |
-| **Redundancy to R6** | Receiver-side selection yielding no visible failure during contracted content | **Cleared for single-track**; for a multi-track mux on the opaque lane through a late join, each leg's loss and a killed export (one clip, one host), and on the media-aware lane for a co-started pair only, on one host or two ([Evidence](../lab/evidence.md) §3.4) | **Cleared conditionally** — hitless for a co-started pair configured alike on one host, silent time-travel when not |
+| **Redundancy to R6** | Receiver-side selection yielding no visible failure during contracted content | **Cleared for single-track**; for a multi-track mux on the opaque lane through a late join, each leg's loss and a killed export (one clip, one host), and on the media-aware lane for a co-started pair only, on one host or two ([Evidence](../lab/evidence.md) §3.4) | **Cleared conditionally** — hitless for a co-started pair configured alike, and for two origins in one CDN origin group behind receivers released in phase; silent time-travel when misconfigured (§3.3) |
 | **Fan-out to R2** | Marginal cost per destination approaching zero, with a known scaling model | **Indicated.** Linear to the relay's CPU; through a CDN-hosted relay, on the media-aware lane only (§2) | **Indicated.** One origin fetch per segment per CDN edge, at two edges; no origin knee to 128 edges ([Evidence](../lab/evidence.md) §3.4, §3.6) |
 | **Operable at fleet scale** | A fault in one of hundreds of feeds is localisable from telemetry | **Unassessed** | **Unassessed** |
 | **Delivered-media health at a subscriber** | An origin can tell that what a subscriber *received* was intact | **Not satisfied by any candidate** ([Architecture](architecture.md) §9.4) | **Not satisfied** |
@@ -584,7 +570,8 @@ because nothing about it is measured here, but it is strongest exactly where bot
 
 Besides the limit §5.1 states, no hardware IRD, five more qualify every row above
 ([Evidence](../lab/evidence.md) §4). The data-plane comparison is one clip over two routes. Each
-impairment cell is one run, three on the second, on `netem` models whose loss is Bernoulli or packet-counted. Every 1+1 result comes from a
+impairment cell is one run, three on the second, on `netem`, its loss Bernoulli, packet-counted or,
+on the long path, scheduled in time. Every 1+1 result comes from a
 software receiver, and the ST 2022-7 oracle is self-tested, not reference-compliant. Fan-out is one
 relay in one region or two CDN edges, and the resilience work a two-relay lab. Most media-aware results are on
 September 2026 builds and hold on current upstream only where stated.
