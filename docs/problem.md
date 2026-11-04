@@ -203,13 +203,13 @@ Three notes on how this list is used.
 
 - **Two claims are _likely_ rather than established**: that rights can need global, dynamic delivery (§3.8), and that the open move is from tunnels to a fan-out fabric (§4). They qualify how hard the pressures push and the direction they push in. No attempt yet.
 - **The satellite-hybrid alternative is _reasoned_** (§4): nothing about it is measured here, so the three-way choice rests on its specifications and on [Comparison](comparison.md) §1.2's account of its evidence. No attempt yet.
-- **The cost claims in §3.1 are the economics model's**, at published list prices, and carry its limits ([Economics](economics.md) §9).
+- **The cost claims in §3.1 are the economics model's**, at published list prices, and carry its limits, each with its discharge ([Economics](economics.md) §9).
 
 ---
 
 ## 7. Open questions
 
-**Does a sub-second requirement exist on identifiable routes, or is it a preference?** The answer would decide whether R4's "sub-second is desirable" is a requirement on those routes; the question is [Comparison](comparison.md) §5.2's.
+**Does a sub-second requirement exist on identifiable routes, or is it a preference?** The answer would decide whether R4's "sub-second is desirable" is a requirement on those routes; the question is [Comparison](comparison.md) §5.2's. No experiment answers it: it is commercial.
 
 ---
 

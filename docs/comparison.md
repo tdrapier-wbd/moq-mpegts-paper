@@ -58,7 +58,7 @@ The rows are the requirements of [Problem](problem.md) §5 that a data plane dec
 | **Fan-out fabric as a service** | ◐ Cloudflare, Akamai and moq.pro operate MoQ relays, the two that publish a rate at four to ten times commodity delivery; otherwise self-run (§3) | ◐ the same relays; the one CDN-hosted relay measured stalled single sessions (§3) | ✓ any HTTP CDN, a dozen suppliers (§3) | ✗ no commodity market sells it to the destination (§3) |
 | **Open subscriber** (receive to TS) | ◐ `moq export ts`, one implementation (§9.2) | ◐ `moq export ts`; `moq2ts`'s console receiver, untested here (§9.3) | ◐ `tsp -I hls` and FFmpeg at classic durations, neither surviving an origin restart; nothing free at low latency (§9.2) | ✓ open-source SRT and RIST receivers (§1.1) |
 
-**Latency marks every lane met because R4 asks for a bounded few seconds; no lane is conformant below about one second over a whole capture**, so the sub-second band is a projection on all of them (§5.1). **Only the opaque lane and segmented HTTP merge legs started apart**: the first leaves its importer single, the second rests on one CDN, and the media-aware lane's redundancy is a switch ([Architecture](architecture.md) §5.2).
+**Latency marks every lane met because R4 asks for a bounded few seconds**; the sub-second band is a projection on all of them (§5.1). **Only the opaque lane and segmented HTTP merge legs started apart**: the first leaves its importer single, the second rests on one CDN, and the media-aware lane's redundancy is a switch ([Architecture](architecture.md) §5.2).
 
 ---
 
@@ -197,7 +197,7 @@ Internet-measured for segmented HTTP, media-aware MoQ and SRT ([T4](../lab/test-
 
 **At equal P1/P2 conformance MoQ keeps 6 % over segmented HTTP and nothing over the tunnels.** Byte-faithful SRT carries the source's own PCR grid over the public internet with 0 P2 violations at 481 ns, ungroomed, at a latency the operator sets — **1,623 ms at a 1 s jitter buffer**, and reducible ([Evidence](../lab/evidence.md) §3.1). **So the sub-second band, the one hard technical discriminator MoQ has over the incumbents ([Economics](economics.md) §7.4), is not demonstrated at conformance on MoQ, and no configuration below one second has passed a whole capture on any lane.** Byte-faithful carriage comes closest, at 114–234 ms on loopback with a damaged stretch in each run, which weighs against MoQ, and the ~650 ms defect bounds that in MoQ's favour. **On a 116 ms path at an equal 1 s budget, only SRT stays whole at 1 % loss**, each MoQ lane losing under a second in one run of three and the media-aware lane trailing both by about 0.25 s; at 2 s every lane is, the MoQ lanes at 2.02–2.30 s and segmented HTTP at 3.22 s; under burst loss, counted in packets or in time, segmented HTTP alone fails to stay whole. On CUBIC neither MoQ lane carries 0.1 % ([Evidence](../lab/evidence.md) §3.11). **Neither lane has been graded on a hardware IRD** ([Evidence](../lab/evidence.md) §4).
 
-**A deployment constraint separate from latency.** From moq 0.14.0 a release ends the import at a backward timestamp step, so a source whose timeline steps back is republished at each step behind a supervisor, at 2.8–3.8 s of programme a step and not hitlessly for a 1+1 pair. Upstream's current import republishes itself instead, for 0.16–1.6 s at an encoder switch, in no release measured and untested for a 1+1 ingest pair or a continuous restarting source ([Evidence](../lab/evidence.md) §3.13).
+**A source whose timeline steps back costs MoQ's import programme at each step**, on a release and on upstream's current import alike: a deployment constraint separate from latency ([Architecture](architecture.md) §12, question 3).
 
 ### 5.2 Sub-second need
 
@@ -332,30 +332,28 @@ Transparent carriage is no longer single-vendor, but **transparent is not always
 
 ## 12. Limits
 
-**Six limits qualify every verdict here** ([Evidence](../lab/evidence.md) §4); the first is open question 1.
+**Six limits qualify every verdict here**, each with its conditions in [Evidence](../lab/evidence.md) §4 and, where one exists, the §5 row there that would discharge it.
 
-- **No lane has been graded on a hardware IRD** (§5.1).
-- **The data-plane comparison is one clip over two routes.**
-- **Each impairment cell is one run**, three on the second, on `netem`, its loss Bernoulli, packet-counted or, on the long path, scheduled in time.
-- **Every 1+1 result comes from a software receiver**, and the ST 2022-7 oracle is self-tested, not reference-compliant.
-- **Fan-out is one relay in one region or two CDN edges**, and the resilience work a two-relay lab.
-- **Most media-aware results are on September 2026 builds** and hold on current upstream only where stated.
+- **No lane has been graded on a hardware IRD, and every 1+1 result comes from a software receiver** against a self-tested ST 2022-7 oracle (§5.1); row 1 would discharge both.
+- **The data-plane comparison is one clip over two routes, and each impairment cell one run**; no attempt yet, but for row 9's third source, which tests carriage cost alone.
+- **Fan-out is one relay in one region or two CDN edges**; no attempt yet past one hop.
+- **Most media-aware results are on September 2026 builds** and hold on current upstream only where stated; no attempt yet at a full re-run.
 
 ---
 
 ## 13. Open questions
 
-**Nine questions would change a verdict here, ranked by leverage:**
+**Nine questions would change a verdict here, ranked by leverage**, each with the Evidence §5 row or experiment that answers it:
 
-1. **Hardware TR 101 290 on groomed egresses, sustained?** Both are P1/P2-conformant in software and neither has been near an IRD; on the media-aware lane it would also show how far receivers tolerate a wire that fails the buffer model (§5.1, §2).
-2. **Can a transmux subscriber keep a T-STD-conformant wire live across hosts and for 1+1?** The merged export does across hosts, within the drift limits [Evidence](../lab/evidence.md) §3.16 states; open are a laboratory stage following a remote clock, and 1+1 beyond a co-started pair ([Evidence](../lab/evidence.md) §3.4). It decides whether the lane serves TS-out to an IRD in a deployment.
-3. **A P1/P2-conformant sub-second configuration on any lane?** It decides whether MoQ has any technical discriminator over the incumbents, and turns on the three conditions §11 names.
-4. **A receive stage that survives delivery-path failures and reports them, and HLS-input receivers on hardware, multi-programme segments included?** The condition segmented HTTP's route-level case rests on (§6.2, §4.4).
+1. **Hardware TR 101 290 on groomed egresses, sustained?** (Row 1.) Both are P1/P2-conformant in software and neither has been near an IRD; on the media-aware lane it would also show how far receivers tolerate a wire that fails the buffer model (§5.1, §2).
+2. **Can a transmux subscriber keep a T-STD-conformant wire live across hosts and for 1+1?** (Row 2.) The merged export does across hosts, within the drift limits [Evidence](../lab/evidence.md) §3.16 states; open are a laboratory stage following a remote clock, and 1+1 beyond a co-started pair ([Evidence](../lab/evidence.md) §3.4). It decides whether the lane serves TS-out to an IRD in a deployment.
+3. **A P1/P2-conformant sub-second configuration on any lane?** (No experiment scheduled.) It decides whether MoQ has any technical discriminator over the incumbents, and turns on the three conditions §11 names.
+4. **A receive stage that survives delivery-path failures and reports them, and HLS-input receivers on hardware, multi-programme segments included?** ([T61](../lab/test-61-origin-group-failover.md)'s stock-receiver cells for the first, row 5 for the second.) The condition segmented HTTP's route-level case rests on (§6.2, §4.4).
 5. **Sub-second requirement: routes or preference?** It decides MoQ's addressable share, and is a commercial question (§5.2).
-6. **Edge gateway at the demarcation or at a regional PoP?** It sets the delivery bill (§4.5).
-7. **Genuine segment loss against lateness?** Content Steering is specification-only (§6.2).
-8. **Relay portability against commoditised delivery economics?** ([Evidence](../lab/evidence.md) §3.7).
-9. **A real estate's fade and connectivity profile?** The satellite-hybrid case turns on correlated fades and on whether IP availability is independent of fade at each site (§1.2).
+6. **Edge gateway at the demarcation or at a regional PoP?** It sets the delivery bill (§4.5). No attempt yet.
+7. **Genuine segment loss against lateness?** A redundant origin covers it inside one CDN (§7); a second edge or a Content Steering pathway, specification-only, has no attempt yet (§6.2).
+8. **Relay portability against commoditised delivery economics?** ([Evidence](../lab/evidence.md) §3.7; row 10.)
+9. **A real estate's fade and connectivity profile?** The satellite-hybrid case turns on correlated fades and on whether IP availability is independent of fade at each site (§1.2). Only an estate's own records answer it.
 
 ---
 

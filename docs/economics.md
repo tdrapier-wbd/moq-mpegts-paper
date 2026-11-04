@@ -322,7 +322,7 @@ Same division measured in the data plane: pacing primitive general and upstream;
 
 ## 10. Open questions
 
-**Commercial, and decisive.**
+**Commercial, and decisive.** No experiment answers these; an operator's own cost or a supplier's quote does.
 
 - **What is the real TCO delta against one broadcaster's _actual, depreciated_ route cost?** The decisive question, and **unpublishable rather than unknown** — which is why §4.4 supplies the challenger's half as a parity threshold against a $1M normaliser. The arithmetic is linear, so substituting the incumbent's half is a one-line change an operator can make in private. **Treat the published numbers as an upper bound and a method, not a result awaiting data.**
 - **Why does published cloud egress sit an order of magnitude above commodity CDN delivery, and does anything force that gap to close?** Published commodity CDN delivery and an _illustrative_ self-hosted build-up agree at $0.001–0.005/GB, so most of the spread above them is likely positioning rather than cost. Open: whether competition compresses it, and whether a new entrant without hyperscaler volume can buy transit, ports and facilities near the rates that make §4.3 work.
@@ -331,15 +331,15 @@ Same division measured in the data plane: pacing primitive general and upstream;
 
 **Engineering, with a direct economic payoff.**
 
-- **How much of MoQ's carriage advantage survives a third source?** On two it _is_ the source's stuffing: 5.3 % against SRT on a clip 4.57 % nulls, none on a stuffing-free live feed. A loosely filled carrier would bound the range. The cheapest outstanding measurement on the deciding line ([Evidence](../lab/evidence.md) §5).
-- **What is the overhead on a lossy real path?** Both protocols are measured back-to-back at 1 % random loss and neither moved by more than a point; random loss beyond that stresses a transport rather than models a route, and the sender-side cost is inferred rather than captured.
-- **What does SRT actually cost to fan out?** N origin sessions or a re-origination tier, so a per-datagram framing comparison flatters SRT at exactly the topology broadcast uses.
+- **How much of MoQ's carriage advantage survives a third source?** On two it _is_ the source's stuffing: 5.3 % against SRT on a clip 4.57 % nulls, none on a stuffing-free live feed. A loosely filled carrier would bound the range. The cheapest outstanding measurement on the deciding line ([Evidence](../lab/evidence.md) §5 row 9).
+- **What is the overhead on a lossy real path?** Both protocols are measured back-to-back at 1 % random loss and neither moved by more than a point; random loss beyond that stresses a transport rather than models a route, and the sender-side cost is inferred rather than captured. No attempt yet.
+- **What does SRT actually cost to fan out?** N origin sessions or a re-origination tier, so a per-datagram framing comparison flatters SRT at exactly the topology broadcast uses. No attempt yet.
 
 **Platform maturity, which the model assumes away.**
 
-- **Is relay capacity a market the buyer can shop?** The cost case treats it as a commodity procurable from more than one supplier; relay portability is partial (§4.6).
-- **What does relay memory cost to operate around?** A sizing line rather than a restart cycle, since it plateaus softly rather than climbing indefinitely — **budgeted at about 2–2.5× the slot ceiling per publisher** — and the cost lands on multi-channel relay density, not on audience: growth is flat across 0–4 subscribers ([Evidence](../lab/evidence.md) §3.6). That plateau was measured on the quinn build; on the noq build one 24 h re-soak read the relay flat, so whether the budget is a property of the design or of the QUIC stack is open.
-- **How much of the operational-saving hypothesis survives running an immature platform to a broadcast SLA?** Staffing already outweighs the modelled transport line at single-route scale (§9).
+- **Is relay capacity a market the buyer can shop?** The cost case treats it as a commodity procurable from more than one supplier; relay portability is partial (§4.6; [Evidence](../lab/evidence.md) §5 row 10).
+- **What does relay memory cost to operate around?** A sizing line rather than a restart cycle, since it plateaus softly rather than climbing indefinitely — **budgeted at about 2–2.5× the slot ceiling per publisher** — and the cost lands on multi-channel relay density, not on audience: growth is flat across 0–4 subscribers ([Evidence](../lab/evidence.md) §3.6). That plateau was measured on the quinn build; on the noq build one 24 h re-soak read the relay flat, so whether the budget is a property of the design or of the QUIC stack is open. No experiment is scheduled.
+- **How much of the operational-saving hypothesis survives running an immature platform to a broadcast SLA?** Staffing already outweighs the modelled transport line at single-route scale (§9). Only operation to an SLA would answer it.
 
 ---
 
