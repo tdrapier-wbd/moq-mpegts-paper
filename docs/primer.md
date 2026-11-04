@@ -1,20 +1,36 @@
 # A Primer: MPEG-TS, SRT, Segmented HTTP and MoQ
 
-Status: working draft. Layer: background. How the stream format and the three transports work, for a reader who knows some of them and not others; no verdicts and no measurements. Scope: terms defined in the [Glossary](glossary.md) are linked rather than defined again. Which transport suits primary distribution, and why, is [Comparison](comparison.md); every measurement is in [Evidence](../lab/evidence.md).
+Status: working draft. Layer: background. Scope: how the stream format and the three transports work, for a reader who knows some of them and not others; terms defined in the [Glossary](glossary.md) are linked rather than defined again. Reads with: [Comparison](comparison.md), for which transport suits primary distribution and why, and [Evidence](../lab/evidence.md), for every measurement.
 
 **Contents**
 
-- [1. MPEG-TS in a page](#1-mpeg-ts-in-a-page)
-- [2. SRT: a reliable tunnel with a fixed delay](#2-srt-a-reliable-tunnel-with-a-fixed-delay)
-- [3. Segmented HTTP: files a cache can serve](#3-segmented-http-files-a-cache-can-serve)
-- [4. MoQ: subscriptions carried through relays](#4-moq-subscriptions-carried-through-relays)
+- [In brief](#in-brief)
+- [1. MPEG-TS](#1-mpeg-ts)
+- [2. SRT](#2-srt)
+- [3. Segmented HTTP](#3-segmented-http)
+- [4. MoQ](#4-moq)
 - [5. Side by side](#5-side-by-side)
+- [6. References](#6-references)
+
+## In brief
+
+**An MPEG transport stream is a continuous sequence of 188-byte packets whose conformance covers their clock, rate and order, not only their content** (§1).
+
+**SRT is a reliable tunnel with a fixed delay**: one session per receiver, delivering the source's bytes at the source's timing (§2).
+
+**Segmented HTTP turns a live stream into files a cache can serve**, so fan-out is the delivery network's job and the source's packet timing is gone (§3).
+
+**MoQ carries subscriptions to tracks through relays**, pushing objects as they are produced and dropping old groups rather than drifting from live (§4).
+
+**Only SRT reproduces the source's timing, so the other two need an edge stage in front of an IRD** (§5).
+
+This primer gives no verdicts and no measurements: which transport suits primary distribution is [Comparison](comparison.md), and every measurement is in [Evidence](../lab/evidence.md).
 
 ---
 
-## 1. MPEG-TS in a page
+## 1. MPEG-TS
 
-An MPEG transport stream (ISO/IEC 13818-1) is a continuous sequence of 188-byte packets. Each begins with the sync byte `0x47` and a four-byte header. Its 13-bit **packet identifier (PID)** says which stream the packet belongs to, and its four-bit **continuity counter** counts packets per PID, so a receiver can tell that a packet went missing, though not how many once sixteen or more have gone. An optional adaptation field carries the clock and padding.
+**An MPEG transport stream (ISO/IEC 13818-1) is a continuous sequence of 188-byte packets.** Each begins with the sync byte `0x47` and a four-byte header. Its 13-bit **packet identifier (PID)** says which stream the packet belongs to, and its four-bit **continuity counter** counts packets per PID, so a receiver can tell that a packet went missing, though not how many once sixteen or more have gone. An optional adaptation field carries the clock and padding.
 
 The payloads are of two kinds. _Elementary streams_ (a video, each audio language, subtitles, teletext, SCTE-35 cue messages) are cut into PES packets, each stamped on a 90 kHz clock with when to present it (PTS) and often when to decode it (DTS). _Tables_ describe the multiplex. The PAT, on PID 0, lists the programmes and where each one's PMT is. The PMT lists a programme's elementary streams by PID and type, and names the PID that carries its clock. The CAT, on PID 1, points at conditional-access data. DVB adds service information that receivers and programme guides use: the SDT for service names, the NIT for the network, the EIT for the schedule, and the TDT and TOT for time. A distribution feed is usually a **multiplex** of several programmes (an MPTS); a single-programme stream is an SPTS.
 
@@ -32,9 +48,9 @@ The payloads are of two kinds. _Elementary streams_ (a video, each audio languag
 
 ---
 
-## 2. SRT: a reliable tunnel with a fixed delay
+## 2. SRT
 
-SRT (Secure Reliable Transport) is an open protocol with an open-source library, `libsrt`, built to move a live stream between two points over the public internet. It runs over UDP, and each SRT session joins **exactly two endpoints**.
+**SRT (Secure Reliable Transport) is a reliable tunnel with a fixed delay**: an open protocol with an open-source library, `libsrt`, built to move a live stream between two points over the public internet. It runs over UDP, and each SRT session joins **exactly two endpoints**.
 
 **Connecting.** One end is the _listener_, waiting on a port; the other is the _caller_, which dials it. In _rendezvous_ mode both dial each other at once, which helps through firewalls. Which end calls is independent of which way the media flows, so a receiver behind NAT can call out to a sender that listens. A listener can take many callers on one port, told apart by a stream ID that the caller sends, and that ID is also where access is usually decided.
 
@@ -52,9 +68,9 @@ SRT neither reads nor changes the transport stream. It delivers the source's byt
 
 ---
 
-## 3. Segmented HTTP: files a cache can serve
+## 3. Segmented HTTP
 
-Segmented HTTP turns a live stream into a series of files and lets ordinary web infrastructure deliver them. This paper assesses HLS, whose original container is MPEG-TS. DASH works the same way with a different manifest ([Comparison](comparison.md) §1).
+**Segmented HTTP turns a live stream into a series of files a cache can serve**, and lets ordinary web infrastructure deliver them. This paper assesses HLS, whose original container is MPEG-TS. DASH works the same way with a different manifest ([Comparison](comparison.md) §1).
 
 **Packaging.** A packager cuts the live stream into [media segments](glossary.md) a few seconds long, at points a decoder can start from, so that each is a standalone file. It writes them to an origin web server and maintains a **media playlist** listing the most recent. Older segments drop off the list but stay fetchable for an availability window. A multivariant playlist lists alternative renditions.
 
@@ -72,9 +88,9 @@ Segmented HTTP turns a live stream into a series of files and lets ordinary web 
 
 ---
 
-## 4. MoQ: subscriptions carried through relays
+## 4. MoQ
 
-Media over QUIC is a publish/subscribe transport for live media. The IETF's MOQ working group is standardising it as MOQT, and it is implemented by, among others, the open-source `moq-dev` project, whose simpler wire protocol, [moq-lite](glossary.md), is the one measured here. It runs on [QUIC](glossary.md), directly or inside WebTransport, so every hop is encrypted with TLS 1.3 and has its own congestion controller.
+**Media over QUIC is a publish/subscribe transport for live media, its subscriptions carried through relays.** The IETF's MOQ working group is standardising it as MOQT, and it is implemented by, among others, the open-source `moq-dev` project, whose simpler wire protocol, [moq-lite](glossary.md), is the one measured here. It runs on [QUIC](glossary.md), directly or inside WebTransport, so every hop is encrypted with TLS 1.3 and has its own congestion controller.
 
 **The model.** A publisher announces a **broadcast** under a name, and a broadcast holds **tracks**: one per elementary stream, or one for a whole multiplex. A track is a sequence of **groups**, each beginning at a point a decoder can start from, and a group is a sequence of **objects**, roughly a frame each. A **catalog** track says what the other tracks are. (Each term is defined in the [Glossary](glossary.md)'s MoQ table.) Subscribers subscribe to tracks by name; nothing is fetched by URL, and nothing is polled.
 
@@ -92,6 +108,8 @@ Media over QUIC is a publish/subscribe transport for live media. The IETF's MOQ 
 
 ## 5. Side by side
 
+**The three differ in the shape of a session, in who moves the media, and in what arrives in front of an IRD.**
+
 |  | SRT | Segmented HTTP | MoQ |
 | --- | --- | --- | --- |
 | **Shape** | one session per receiver | stateless requests for named files | subscriptions to named tracks, each a live session |
@@ -104,4 +122,18 @@ Media over QUIC is a publish/subscribe transport for live media. The IETF's MOQ 
 | **Before an IRD** | an SRT input or gateway; the timing is reproduced | reassembly and grooming | grooming, plus a multiplexer on the media-aware lane |
 | **Encryption** | AES from a pre-shared passphrase | HTTPS, with optional segment encryption | TLS 1.3 on every hop |
 
-Which of these differences decide primary distribution, and by how much, is the subject of [Comparison](comparison.md), whose verdicts are in §13; the requirement set they are scored against is [Problem](problem.md) §5.
+Which of these differences decide primary distribution, and by how much, is the subject of [Comparison](comparison.md), whose verdicts are in §11; the requirement set they are scored against is [Problem](problem.md) §5.
+
+---
+
+## 6. References
+
+The specifications this primer describes. TR 101 290, SMPTE ST 2022-1 and ST 2022-7 are listed in [Architecture](architecture.md) §13.
+
+- ISO/IEC 13818-1 | ITU-T H.222.0, MPEG-2 systems, the transport stream and its T-STD (§1): [https://www.itu.int/rec/T-REC-H.222.0](https://www.itu.int/rec/T-REC-H.222.0)
+- RFC 2250, RTP payload format for MPEG-2 transport streams, and SMPTE ST 2022-2, its constraints for professional video (§1): [https://www.rfc-editor.org/rfc/rfc2250](https://www.rfc-editor.org/rfc/rfc2250), [https://doi.org/10.5594/SMPTE.ST2022-2.2007](https://doi.org/10.5594/SMPTE.ST2022-2.2007)
+- RFC 4445, the media delivery index and its delay factor (§1): [https://www.rfc-editor.org/rfc/rfc4445](https://www.rfc-editor.org/rfc/rfc4445)
+- Secure Reliable Transport (SRT), the Internet-Draft (§2): [https://datatracker.ietf.org/doc/draft-sharabayko-srt/](https://datatracker.ietf.org/doc/draft-sharabayko-srt/)
+- HTTP Live Streaming 2nd Edition, which obsoletes RFC 8216 and includes Low-Latency HLS (§3): [https://datatracker.ietf.org/doc/draft-pantos-hls-rfc8216bis/](https://datatracker.ietf.org/doc/draft-pantos-hls-rfc8216bis/)
+- RFC 9000, QUIC (§4): [https://www.rfc-editor.org/rfc/rfc9000](https://www.rfc-editor.org/rfc/rfc9000)
+- Media over QUIC Transport (MOQT), the IETF draft series, and moq-lite, `moq-dev`'s own wire protocol (§4): [https://datatracker.ietf.org/doc/draft-ietf-moq-transport/](https://datatracker.ietf.org/doc/draft-ietf-moq-transport/), [https://datatracker.ietf.org/doc/draft-lcurley-moq-lite/](https://datatracker.ietf.org/doc/draft-lcurley-moq-lite/)
