@@ -1,6 +1,6 @@
 # Candidate Data Planes Compared
 
-Status: working draft. Layer: **the data-plane choice** — this document _is_ the layer where the candidates differ. Scope: [Problem](problem.md) §5 states the requirement set; this document evaluates the candidates against R1–R7, and against the point-to-point incumbents, on the axes an operator decides on. R6 and R7 appear only as far as the _data plane_ decides them; the broadcast-grade engineering above the transport, common to both candidates and where nearly all the measured work sits, is [Architecture](architecture.md) and [Control plane](control-plane.md). R8 is not a data-plane axis. Every measurement cited here is stated with its measurement point, domain and build in [Evidence](../lab/evidence.md); this document carries the argument.
+Status: working draft. Layer: **the data-plane choice.** Scope: the candidates evaluated against R1–R7 of [Problem](problem.md) §5, and against the point-to-point incumbents, on the axes an operator decides on; R6 and R7 only as far as the _data plane_ decides them. Reads with: [Architecture](architecture.md) and [Control plane](control-plane.md), for the engineering above the transport, common to both candidates, and [Evidence](../lab/evidence.md), for every measurement cited here with its measurement point, domain and build.
 
 **Contents**
 

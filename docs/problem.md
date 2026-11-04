@@ -43,7 +43,7 @@ Status: working draft. Layer: **the requirement.** Scope: what primary distribut
 
 **R1–R3 decide whether a candidate is usable at all, and R3 and R6–R8 sit above the transport, required whichever data plane is chosen** (§5).
 
-Nothing is measured in this document: its claims are marked _established_, _likely_ or _reasoned_, and the measurements are in [Evidence](../lab/evidence.md) (§6).
+Nothing is measured in this document: its claims are marked _established_, _likely_ or _reasoned_ (§6), and the measurements are in [Evidence](../lab/evidence.md).
 
 ---
 
