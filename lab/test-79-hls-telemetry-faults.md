@@ -1,6 +1,6 @@
 # Test 79 — What a NOC's sources say about the segmented lane's faults
 
-**State: run, each fault twice and a control; P1-ak's telemetry half.** Its CloudFront half waits on B-7. On this segmenter a dead video stops the segmented lane outright: no segment for 61 s, so every source sees only an absence. CMCD v2 carries an origin outage within 0.2 s and nothing inside the stream; TR 101 290 catches dead audio in 7 s, and per-PID liveness catches every fault.
+**State: run, each fault twice and a control; P1-ak's telemetry half.** Its CloudFront half waits on T76's end, which holds the distribution. On this segmenter a dead video stops the segmented lane outright: no segment for 61 s, so every source sees only an absence. CMCD v2 carries an origin outage within 0.2 s and nothing inside the stream; TR 101 290 catches dead audio in 7 s, and per-PID liveness catches every fault.
 
 ## Objective
 
@@ -67,7 +67,7 @@ _Prediction:_ held for the stall and the outage. It failed for both partial stal
 
 ## Limits, stated in advance
 
-- One clip, a local origin and no CDN: the CloudFront half (which CMCD keys reach the real-time logs) waits on B-7.
+- One clip, a local origin and no CDN: the CloudFront half (which CMCD keys reach the real-time logs) waits on T76's end.
 - TSDuck reports TR 101 290 counters, not a vendor probe's alarms; P2-a's survey asks the vendors.
 - The receiver reports no TS-level counters in CMCD (B-8's custom keys are not built), so CMCD's reach is that of the keys CTA-5004-B defines.
 - One segmenter, the campaign's own, and no groomer after the receiver: the deployed lane grooms before the IRD, which smooths what TR 101 290 and liveness see.
