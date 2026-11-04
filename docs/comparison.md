@@ -30,13 +30,17 @@ Point-to-point incumbents set a low bar on fan-out (§10).
 
 ---
 
+
+
 ## 1. The candidates
 
-| Candidate | What it is here | Class |
-|---|---|---|
-| **MoQ** | `moq import ts` → relay fabric → `moq export ts`, on QUIC/WebTransport | live publish/subscribe with native relay |
-| **Segmented HTTP** | HLS carrying MPEG-TS segments, its original container (DVB-DASH profiles ISOBMFF only), at classic segment durations over HTTP/1.1 | cacheable-object pull over commodity delivery |
-| **SRT / Zixi / RIST** | a reliable UDP tunnel per destination, optionally through a gateway tier | point-to-point session transport |
+
+| Candidate             | What it is here                                                                                                                    | Class                                         |
+| --------------------- | ---------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------- |
+| **MoQ**               | `moq import ts` → relay fabric → `moq export ts`, on QUIC/WebTransport                                                             | live publish/subscribe with native relay      |
+| **Segmented HTTP**    | HLS carrying MPEG-TS segments, its original container (DVB-DASH profiles ISOBMFF only), at classic segment durations over HTTP/1.1 | cacheable-object pull over commodity delivery |
+| **SRT / Zixi / RIST** | a reliable UDP tunnel per destination, optionally through a gateway tier                                                           | point-to-point session transport              |
+
 
 They are grouped by *scaling shape*, not by quality, which flatters two of them: RIST is openly
 specified and multi-vendor where the others are not (§10.1). **Segmented HTTP is scoped to a 5–10 s
@@ -54,6 +58,8 @@ from the normative text because practitioner convention diverges from it in both
 
 ---
 
+
+
 ## 2. Scaling the distribution (R2)
 
 **Fan-out separates both Internet-native candidates from the point-to-point incumbents; between the two
@@ -63,14 +69,16 @@ MoQ relay share one topology — fetch once, serve N unicast connections — so 
 last-mile linearity ([Economics](economics.md) §4.4), and what remains is who operates the replication
 point (§10).
 
-| | Segmented HTTP | MoQ | SRT / Zixi / RIST |
-|---|---|---|---|
-| Unit of fan-out | a cacheable object, fetched by idempotent GET | a subscription the relay holds state for | a session per destination |
-| Replication state | none — any edge can serve any object | per-subscriber, per-track, live | per-destination, live |
-| Who operates it | the commodity delivery market, a dozen suppliers, today | two CDNs today, at four to ten times commodity delivery; otherwise you | you, or a managed media service |
-| Known hard ceiling | none at this scale | **relay CPU**, linear up to it and a collapse past it: about 100 subscribers on a 2-vCPU `moq-relay` 0.15.1 (noq) with GSO off; cross-host, in one region. Through a CDN-hosted relay of another implementation, about 0.82 Gb/s on the one thread its operator configures: 32 subscribers of a 25 Mb/s feed on the media-aware lane; on the opaque lane no reproducible knee, single sessions stalling at 2 to 24 ([Evidence](../lab/evidence.md) §3.6) | AWS MediaConnect: 50 outputs per flow |
-| Marginal cost of a destination | a cache fill: shared upstream, one egress copy | **1.258 % of a relay core, 2.62 MB and one full stream copy** on `moq-relay` 0.15.1 with GSO on, linear | a session's worth of gateway CPU and one egress copy |
-| Specified point-to-multipoint | DVB-MABR (ETSI TS 103 769), inside a managed access network — consumer, not affiliate, distribution | none | none |
+
+|                                | Segmented HTTP                                                                                      | MoQ                                                                                                                                                                                                                                                                                                                                                                                                                                                      | SRT / Zixi / RIST                                    |
+| ------------------------------ | --------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------- |
+| Unit of fan-out                | a cacheable object, fetched by idempotent GET                                                       | a subscription the relay holds state for                                                                                                                                                                                                                                                                                                                                                                                                                 | a session per destination                            |
+| Replication state              | none — any edge can serve any object                                                                | per-subscriber, per-track, live                                                                                                                                                                                                                                                                                                                                                                                                                          | per-destination, live                                |
+| Who operates it                | the commodity delivery market, a dozen suppliers, today                                             | two CDNs today, at four to ten times commodity delivery; otherwise you                                                                                                                                                                                                                                                                                                                                                                                   | you, or a managed media service                      |
+| Known hard ceiling             | none at this scale                                                                                  | **relay CPU**, linear up to it and a collapse past it: about 100 subscribers on a 2-vCPU `moq-relay` 0.15.1 (noq) with GSO off; cross-host, in one region. Through a CDN-hosted relay of another implementation, about 0.82 Gb/s on the one thread its operator configures: 32 subscribers of a 25 Mb/s feed on the media-aware lane; on the opaque lane no reproducible knee, single sessions stalling at 2 to 24 ([Evidence](../lab/evidence.md) §3.6) | AWS MediaConnect: 50 outputs per flow                |
+| Marginal cost of a destination | a cache fill: shared upstream, one egress copy                                                      | **1.258 % of a relay core, 2.62 MB and one full stream copy** on `moq-relay` 0.15.1 with GSO on, linear                                                                                                                                                                                                                                                                                                                                                  | a session's worth of gateway CPU and one egress copy |
+| Specified point-to-multipoint  | DVB-MABR (ETSI TS 103 769), inside a managed access network — consumer, not affiliate, distribution | none                                                                                                                                                                                                                                                                                                                                                                                                                                                     | none                                                 |
+
 
 **Statelessness is the only differentiator between the two, and a reliability advantage in
 disguise** (§3): a destination can move between edges or suppliers of one namespace mid-stream,
@@ -79,6 +87,8 @@ segmented origin does not pay ([Evidence](../lab/evidence.md) §3.14) — a stru
 the latency of §5, that an origin terminating sessions or personalising responses would give up.
 
 ---
+
+
 
 ## 3. Reliability (R5)
 
@@ -92,26 +102,26 @@ isolation and RFC 9218 priorities; MoQ differs in the object and subscription mo
 head-to-head under one shaper ([Evidence](../lab/evidence.md) §3.3):
 
 - **Loss is a controller result, not a lane result.** At 10 % loss both lanes hold full rate on BBR
-  and both collapse on CUBIC, so "segment fetching degrades under loss" compares TCP's default
-  controller with QUIC's tuned one. On HTTP/3,
-  through a byte-faithful receiver, the segmented lane loses nothing up to ~20 % applied loss.
+and both collapse on CUBIC, so "segment fetching degrades under loss" compares TCP's default
+controller with QUIC's tuned one. On HTTP/3,
+through a byte-faithful receiver, the segmented lane loses nothing up to ~20 % applied loss.
 - **Reordering ranks controllers, not lanes**: equalised for packet size, the segmented lane on
-  HTTP/3 keeps a quarter of the stream whatever the controller, and the media-aware figure moves
-  across the whole range on one controller flag ([T20](../lab/test-20-segmented-http3.md)).
+HTTP/3 keeps a quarter of the stream whatever the controller, and the media-aware figure moves
+across the whole range on one controller flag ([T20](../lab/test-20-segmented-http3.md)).
 - **Outage recovery is the origin's retention**, not the transport: under a 30 s outage the two
-  substrates are byte-identical.
+substrates are byte-identical.
 - **Trunking contended feeds is a latency decision**: media-aware feeds at a 2 s budget deliver less
-  in total than one, because each subscriber discards groups past its own deadline, and SRT converts
-  the same shortfall into continuity errors. The media-aware lane's shortfall shows only as absent
-  content, since its exporter writes its own counters.
+in total than one, because each subscriber discards groups past its own deadline, and SRT converts
+the same shortfall into continuity errors. The media-aware lane's shortfall shows only as absent
+content, since its exporter writes its own counters.
 - **Under sustained under-capacity the segmented lane takes lateness** at 0 continuity errors,
-  invisible to an integrity monitor, until the origin evicts the segment it asks for — a cliff where
-  the media-aware lane has a slope.
+invisible to an integrity monitor, until the origin evicts the segment it asks for — a cliff where
+the media-aware lane has a slope.
 - **Burst loss on a long path stalls the segmented lane over TCP** (HTTP/3 untested there): on a
-  116 ms path, a burst that takes most of a fetch is resent only after a retransmission timeout, then
-  one round trip at a time. Under 20 ms bursts covering 1 % of time it fails two replicates of three,
-  and re-requesting the segment on a fresh connection after 1 s does not bound the stall (5.0–5.8 s
-  lost where that fired; [Evidence](../lab/evidence.md) §3.11).
+116 ms path, a burst that takes most of a fetch is resent only after a retransmission timeout, then
+one round trip at a time. Under 20 ms bursts covering 1 % of time it fails two replicates of three,
+and re-requesting the segment on a fresh connection after 1 s does not bound the stall (5.0–5.8 s
+lost where that fired; [Evidence](../lab/evidence.md) §3.11).
 
 **Against SRT, matched on
 measured latency and graded on content, the media-aware lane loses more programme in every
@@ -155,7 +165,11 @@ continuity and PCR checks and fails no request, where the media-aware relay refu
 
 ---
 
+
+
 ## 4. The hand-off (R3)
+
+
 
 ### 4.1 What the obligation actually is
 
@@ -179,12 +193,14 @@ an operator already written usually wins.
 **Segmented HTTP inherits the grooming problem in full, and worse, by two orders of magnitude**
 ([Evidence](../lab/evidence.md) §3.8):
 
-| Ungroomed egress | MoQ | Segmented HTTP (2 s segments) | RIST / SRT |
-|---|---|---|---|
-| Median burst | 12.4 kB | **2.95 MB** | 30.6 kB — the source's, not the protocol's |
-| Gaps above 1 s in 60 s | **none** | **24** | **none** |
-| Largest gap | 149 ms | **4.01 s** | **~35 ms** |
-| 10 ms peak/mean | 24× | **231×** | 3.4× |
+
+| Ungroomed egress       | MoQ      | Segmented HTTP (2 s segments) | RIST / SRT                                 |
+| ---------------------- | -------- | ----------------------------- | ------------------------------------------ |
+| Median burst           | 12.4 kB  | **2.95 MB**                   | 30.6 kB — the source's, not the protocol's |
+| Gaps above 1 s in 60 s | **none** | **24**                        | **none**                                   |
+| Largest gap            | 149 ms   | **4.01 s**                    | **~35 ms**                                 |
+| 10 ms peak/mean        | 24×      | **231×**                      | 3.4×                                       |
+
 
 **MoQ hands the smallest bursts and the tunnels the shortest silences**; a groomer's buffer is sized by
 the first and its start gate by the second. **One groomer covers both lanes**: the same binary, no flags
@@ -225,6 +241,8 @@ client; in regional PoPs it serves every PoP ([Economics](economics.md) §4.5,
 [Architecture](architecture.md) §4.4). Open architectural decision; neither data plane is favoured.
 
 ---
+
+
 
 ## 5. Latency (R4)
 
@@ -295,6 +313,8 @@ to be answered per route by the destination.
 
 ---
 
+
+
 ## 6. Interoperability (R1)
 
 **Segmented HTTP wins the delivery path decisively, and "interoperable" has to say which layer it
@@ -311,18 +331,22 @@ that what a subscriber received was intact**
 
 ### 6.1 Five layers, and they do not resolve the same way
 
-| Layer | Segmented HTTP | MoQ |
-|---|---|---|
-| **Cache and CDN carriage** | clears, through a dozen suppliers (§2) | two CDNs operate relays; other implementations' relays carry it in part (§6) |
-| **General-purpose client reception** | clears, and is why the format is ubiquitous | within one implementation |
-| **Low-latency TS-in-HLS reception** | **no free implementation** — both free TS-capable clients fetched zero parts ([Evidence](../lab/evidence.md) §3.9); not asked of the lane (§1) | not applicable; no segment period |
-| **A receive stage yielding a transport stream the groomer can take** | classic HLS: off the shelf (§4.2), not surviving an origin failure (§3.2); low latency: commercial ABR-to-TS only, **conformance unmeasured** (§4.4) | `moq export ts`, free and single-implementation |
-| **Hardware-verified conformance of that hand-off** | **not run** | **not run** |
+
+| Layer                                                                | Segmented HTTP                                                                                                                                       | MoQ                                                                          |
+| -------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| **Cache and CDN carriage**                                           | clears, through a dozen suppliers (§2)                                                                                                               | two CDNs operate relays; other implementations' relays carry it in part (§6) |
+| **General-purpose client reception**                                 | clears, and is why the format is ubiquitous                                                                                                          | within one implementation                                                    |
+| **Low-latency TS-in-HLS reception**                                  | **no free implementation** — both free TS-capable clients fetched zero parts ([Evidence](../lab/evidence.md) §3.9); not asked of the lane (§1)       | not applicable; no segment period                                            |
+| **A receive stage yielding a transport stream the groomer can take** | classic HLS: off the shelf (§4.2), not surviving an origin failure (§3.2); low latency: commercial ABR-to-TS only, **conformance unmeasured** (§4.4) | `moq export ts`, free and single-implementation                              |
+| **Hardware-verified conformance of that hand-off**                   | **not run**                                                                                                                                          | **not run**                                                                  |
+
 
 **Segmented HTTP's interoperability advantage is real and large**, decisive on the first two layers,
 and at classic durations it reaches the receiver.
 
 ---
+
+
 
 ## 7. Entitlement and access control (R7)
 
@@ -342,19 +366,23 @@ per-supplier machinery inferred from logs. Enforcement is exact on both.
 
 ---
 
+
+
 ## 8. Carriage fidelity (R1)
 
-| | Segmented HTTP | MoQ media-aware lane | MoQ opaque lane | SRT — the incumbent |
-|---|---|---|---|---|
-| Multi-programme mux | **normatively excluded** (§6) | **flattened** by builds up to moq 0.12.8; **split** into one intact broadcast per programme on upstream `main` from late September 2026, each SDT still listing every service | **verbatim by construction**; measured on one programme | verbatim by construction; measured on one programme |
-| PIDs, PSI, service identity, SDT/NIT, EIT schedule | **preserved**, non-default PIDs included; the 8-day EPG byte-identical | preserved; a joining receiver has the whole EPG in ~1 ms | preserved | **preserved** — measured over the wire; EIT not exercised |
-| TDT/TOT, CAT | **preserved** | TDT/TOT **~14 s late** on moq 0.9.11, a merged fix unmeasured; CAT not carried | preserved | **preserved**; CAT not exercised |
-| Continuity counters, stuffing, mux rate | preserved, except a forced re-stamp on the injected PAT/PMT | counters regenerated; stuffing not the source's, padded to the declared source rate (+0.36 %, file domain) | **preserved** — the source's bytes, released on its PCR | **preserved; the source mux rate exactly** |
-| PSI cadence, packets added | source cadence plus **one PAT/PMT pair per segment** | **regenerated thinner** — 8.04 → 2.51 PAT/s against P1's 500 ms gap | unchanged; nothing added | **identical; nothing added** |
-| PCR repetition and accuracy (TR 101 290 P2) | repetition unchanged; accuracy **37–74 ns → 109–302 µs** from the injected pair, **0 violations once groomed** | repetition produced by the lane and conformant only behind a groomer that reserves the slot (§5.1); accuracy **fails on every PCR** ungroomed | the source's PCRs, values and positions intact; each released within 2 ms of schedule, arrival jitter not graded | **0 violations at 481 ns**, ungroomed — the source's own, read from a capture over the internet |
-| Packet schedule (T-STD), wire | source order carried; **passes** groomed, at four configurations over one internet path ([Evidence](../lab/evidence.md) §3.11) | **discarded**: the P1/P2-conformant groomed wire fails the transport and audio decoder buffers on every build graded, moq 0.10.0 to 0.13.0; rebuilt by a re-multiplexer, and by upstream's fixed-delay export as merged in October 2026 ([Evidence](../lab/evidence.md) §3.16) | **preserved**: the T-STD verdict is the source's, file domain, on two clips and one live feed | **preserved** through the same groomer in every 2 s window, and over a whole capture through its stream-clocked mode |
-| TS-level scrambling | **carried byte for byte**, its CA PIDs with it, by a packager not cutting on pictures; `--intra-close` publishes nothing | **cannot be carried** — the importer refuses every scrambled unit and announces no broadcast | **carried byte for byte**, its CA PIDs with it, and through the groomer | carried by construction |
-| Byte-identical to source | **in payload, yes; as a mux, no** | no | **yes**, from the first released group | every field, count and cadence measured identical, not diffed byte-for-byte |
+
+|                                                    | Segmented HTTP                                                                                                                 | MoQ media-aware lane                                                                                                                                                                                                                                                           | MoQ opaque lane                                                                                                  | SRT — the incumbent                                                                                                  |
+| -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| Multi-programme mux                                | **normatively excluded** (§6)                                                                                                  | **flattened** by builds up to moq 0.12.8; **split** into one intact broadcast per programme on upstream `main` from late September 2026, each SDT still listing every service                                                                                                  | **verbatim by construction**; measured on one programme                                                          | verbatim by construction; measured on one programme                                                                  |
+| PIDs, PSI, service identity, SDT/NIT, EIT schedule | **preserved**, non-default PIDs included; the 8-day EPG byte-identical                                                         | preserved; a joining receiver has the whole EPG in ~1 ms                                                                                                                                                                                                                       | preserved                                                                                                        | **preserved** — measured over the wire; EIT not exercised                                                            |
+| TDT/TOT, CAT                                       | **preserved**                                                                                                                  | TDT/TOT **~14 s late** on moq 0.9.11, a merged fix unmeasured; CAT not carried                                                                                                                                                                                                 | preserved                                                                                                        | **preserved**; CAT not exercised                                                                                     |
+| Continuity counters, stuffing, mux rate            | preserved, except a forced re-stamp on the injected PAT/PMT                                                                    | counters regenerated; stuffing not the source's, padded to the declared source rate (+0.36 %, file domain)                                                                                                                                                                     | **preserved** — the source's bytes, released on its PCR                                                          | **preserved; the source mux rate exactly**                                                                           |
+| PSI cadence, packets added                         | source cadence plus **one PAT/PMT pair per segment**                                                                           | **regenerated thinner** — 8.04 → 2.51 PAT/s against P1's 500 ms gap                                                                                                                                                                                                            | unchanged; nothing added                                                                                         | **identical; nothing added**                                                                                         |
+| PCR repetition and accuracy (TR 101 290 P2)        | repetition unchanged; accuracy **37–74 ns → 109–302 µs** from the injected pair, **0 violations once groomed**                 | repetition produced by the lane and conformant only behind a groomer that reserves the slot (§5.1); accuracy **fails on every PCR** ungroomed                                                                                                                                  | the source's PCRs, values and positions intact; each released within 2 ms of schedule, arrival jitter not graded | **0 violations at 481 ns**, ungroomed — the source's own, read from a capture over the internet                      |
+| Packet schedule (T-STD), wire                      | source order carried; **passes** groomed, at four configurations over one internet path ([Evidence](../lab/evidence.md) §3.11) | **discarded**: the P1/P2-conformant groomed wire fails the transport and audio decoder buffers on every build graded, moq 0.10.0 to 0.13.0; rebuilt by a re-multiplexer, and by upstream's fixed-delay export as merged in October 2026 ([Evidence](../lab/evidence.md) §3.16) | **preserved**: the T-STD verdict is the source's, file domain, on two clips and one live feed                    | **preserved** through the same groomer in every 2 s window, and over a whole capture through its stream-clocked mode |
+| TS-level scrambling                                | **carried byte for byte**, its CA PIDs with it, by a packager not cutting on pictures; `--intra-close` publishes nothing       | **cannot be carried** — the importer refuses every scrambled unit and announces no broadcast                                                                                                                                                                                   | **carried byte for byte**, its CA PIDs with it, and through the groomer                                          | carried by construction                                                                                              |
+| Byte-identical to source                           | **in payload, yes; as a mux, no**                                                                                              | no                                                                                                                                                                                                                                                                             | **yes**, from the first released group                                                                           | every field, count and cadence measured identical, not diffed byte-for-byte                                          |
+
 
 Internet-measured for segmented HTTP, media-aware MoQ and SRT ([T4](../lab/test-4-remote-e2e-srt.md));
 the opaque lane on loopback, five clips on `moq-dev` ([T48](../lab/test-48-passthrough-export.md),
@@ -387,6 +415,8 @@ and wall clock.
 
 ---
 
+
+
 ## 9. Economics
 
 Fully modelled in [Economics](economics.md).
@@ -401,6 +431,8 @@ delivery market decides the level:** commodity CDN at $0.005–0.010/GB against 
 $0.040–0.050/GB ([Economics](economics.md) §4.6).
 
 ---
+
+
 
 ## 10. SRT and RIST: scaling is possible, and that is not the differentiator
 
@@ -429,12 +461,14 @@ block and the uplink needs an inserter; Part 8 leaves the stream unmodified and 
 duration, but leaves detection to the implementer, so two conformant receivers may disagree about
 what was lost.
 
-| Model | What the IP path carries | Marginal cost of destination N |
-|---|---|---|
-| C-band satellite primary | nothing | ~0 inside the footprint |
-| **Ku-band satellite + RIST repair** | only the blocks a site lost, while it is losing them | ~0 inside the footprint, plus that site's repair traffic |
-| Internet-native (MoQ, segmented HTTP) | the whole feed, to every destination, always | one unicast copy (§2) |
-| Point-to-point tunnels | the whole feed, to every destination, always | one session and one copy |
+
+| Model                                 | What the IP path carries                             | Marginal cost of destination N                           |
+| ------------------------------------- | ---------------------------------------------------- | -------------------------------------------------------- |
+| C-band satellite primary              | nothing                                              | ~0 inside the footprint                                  |
+| **Ku-band satellite + RIST repair**   | only the blocks a site lost, while it is losing them | ~0 inside the footprint, plus that site's repair traffic |
+| Internet-native (MoQ, segmented HTTP) | the whole feed, to every destination, always         | one unicast copy (§2)                                    |
+| Point-to-point tunnels                | the whole feed, to every destination, always         | one session and one copy                                 |
+
 
 The hybrid keeps satellite's near-zero marginal cost and spends fade margin to do so: rain
 attenuation rises with frequency (ITU-R P.838, P.618), so Ku fades more than C band (*specified*),
@@ -461,6 +495,8 @@ demonstration.
 
 ---
 
+
+
 ## 11. The toolchain: what is free, and the one stage that is not
 
 Ingest (TSDuck `tsp`), egress FEC and ST 2022-7, analysis and the control plane are identical on both
@@ -468,32 +504,38 @@ planes and the distributor's ([Architecture](architecture.md)). **Where the two 
 incomplete in opposite places, and every stage has a free implementation except receiving low-latency
 HLS back into a transport stream** ([Evidence](../lab/evidence.md) §3.9):
 
-| Stage | MoQ | Segmented HTTP | Commercial option |
-|---|---|---|---|
-| **Publish / package** | `moq import ts` (media-aware), or an opaque lane under MSFTS | classic `tsp -O hls`; low-latency TS through Apple `mediastreamsegmenter` | — |
-| **Fan-out** | `moq-relay`; Cloudflare's implementation | any HTTP origin and cache, or a commodity CDN | — |
-| **Receive → TS** | `moq export ts` | classic: `tsp -I hls`, FFmpeg, neither surviving an origin restart; low latency: **nothing free** | HLS: the receivers of §4.4; MoQ: **none** |
-| **Groom → CBR, PCR re-stamped, mux preserved** | for a CBR source, `moq export ts --delay` itself: it lays the mux back at the rate the importer recorded, conformant to P1/P2 and the buffer model across hosts ([Evidence](../lab/evidence.md) §3.16); for a VBR source, [`mpegts-pacer`](https://github.com/tdrapier-wbd/mpegts-pacer), conformant on the wire (§5.1) | the same binary, no flags changed; or TSDuck `pcradjust` + `regulate` | Synamedia, Ateme, Harmonic gateways |
-| **CBR TS → paced wire** | [`rawsendmpeg2ts`](https://github.com/EDIS-mx/rawsendmpeg2ts), `mpegts-pacer` | identical | the same gateways |
+
+| Stage                                          | MoQ                                                                                                                                                                                                                                                                                                                     | Segmented HTTP                                                                                    | Commercial option                         |
+| ---------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- | ----------------------------------------- |
+| **Publish / package**                          | `moq import ts` (media-aware), or an opaque lane under MSFTS                                                                                                                                                                                                                                                            | classic `tsp -O hls`; low-latency TS through Apple `mediastreamsegmenter`                         | —                                         |
+| **Fan-out**                                    | `moq-relay`; Cloudflare's implementation                                                                                                                                                                                                                                                                                | any HTTP origin and cache, or a commodity CDN                                                     | —                                         |
+| **Receive → TS**                               | `moq export ts`                                                                                                                                                                                                                                                                                                         | classic: `tsp -I hls`, FFmpeg, neither surviving an origin restart; low latency: **nothing free** | HLS: the receivers of §4.4; MoQ: **none** |
+| **Groom → CBR, PCR re-stamped, mux preserved** | for a CBR source, `moq export ts --delay` itself: it lays the mux back at the rate the importer recorded, conformant to P1/P2 and the buffer model across hosts ([Evidence](../lab/evidence.md) §3.16); for a VBR source, `[mpegts-pacer](https://github.com/tdrapier-wbd/mpegts-pacer)`, conformant on the wire (§5.1) | the same binary, no flags changed; or TSDuck `pcradjust` + `regulate`                             | Synamedia, Ateme, Harmonic gateways       |
+| **CBR TS → paced wire**                        | `[rawsendmpeg2ts](https://github.com/EDIS-mx/rawsendmpeg2ts)`, `mpegts-pacer`                                                                                                                                                                                                                                           | identical                                                                                         | the same gateways                         |
+
 
 ---
+
+
 
 ## 12. The MoQ implementation landscape
 
 *Assessed from repositories and public documentation; the measured cross-implementation result is in
 [Evidence](../lab/evidence.md) §3.7.*
 
-| | `moq-dev` | `moq2ts` / `moqxr` | Cloudflare `moq-rs` | This work |
-|---|---|---|---|---|
-| Lane | media-aware, and whole-multiplex passthrough | **transparent TS** | none — transport only | **transparent TS** + grooming |
-| Scope | publisher, relay, subscriber | **publisher**, console receiver | protocol library, **relay**, sample clients | publisher + egress + pacer |
-| Media format | `hang` catalog/container | MSF + MSFTS (`packaging: "m2ts"`) | **deliberately none** | verbatim TS |
-| Format standing | individual draft for its `mpegts` catalog section (demultiplexed carriage only) | **adopted WG format** + individual draft | N/A | internal |
-| Wire versions | moq-lite 01–06, 07 opt-in and in progress; **MOQT 18 and 22** on upstream `main` from late October 2026, 14–22 before | MOQT 14, 16–18, 21, 22 | MOQT 14, 16 and 18 | inherits `moq-dev` |
-| Source failover | route reselection; between importers, a marked switch to the newest (`export ts --stitch`) | N/A (publisher) | **none — publisher loss is terminal** | relies on `moq-dev` |
-| Deployment | self-hosted | self-hosted | **managed, provisioned by API** | self-hosted |
 
-**Only `moq-dev` does any of the broadcast-specific layer**: its export grooms a CBR source to a
+|                 | `moq-dev`                                                                                                             | `moq2ts` / `moqxr`                       | Cloudflare `moq-rs`                         |
+| --------------- | --------------------------------------------------------------------------------------------------------------------- | ---------------------------------------- | ------------------------------------------- |
+| Lane            | media-aware, and whole-multiplex passthrough                                                                          | **transparent TS**                       | none — transport only                       |
+| Scope           | publisher, relay, subscriber                                                                                          | **publisher**, console receiver          | protocol library, **relay**, sample clients |
+| Media format    | `hang` catalog/container                                                                                              | MSF + MSFTS (`packaging: "m2ts"`)        | **deliberately none**                       |
+| Format standing | individual draft for its `mpegts` catalog section (demultiplexed carriage only)                                       | **adopted WG format** + individual draft | N/A                                         |
+| Wire versions   | moq-lite 01–06, 07 opt-in and in progress; **MOQT 18 and 22** on upstream `main` from late October 2026, 14–22 before | MOQT 14, 16–18, 21, 22                   | MOQT 14, 16 and 18                          |
+| Source failover | route reselection; between importers, a marked switch to the newest (`export ts --stitch`)                            | N/A (publisher)                          | **none — publisher loss is terminal**       |
+| Deployment      | self-hosted                                                                                                           | self-hosted                              | **managed, provisioned by API**             |
+
+
+**Only** `moq-dev` **does any of the broadcast-specific layer**: its export grooms a CBR source to a
 conformant wire (§11), and its importer counts TR 101 290 errors. Transparent carriage is no longer single-vendor, but **transparent is not always verbatim**
 (`moq2ts`'s per-program mode drops nulls). Cloudflare's format-blind relay cannot corrupt opaque TS, but thins less intelligently under
 pressure ([Architecture](architecture.md) §5).
@@ -509,28 +551,32 @@ track ([Evidence](../lab/evidence.md) §3.7).
 
 ---
 
+
+
 ## 13. Verdict, axis by axis
 
 Read "favours" as *today*, on the evidence in this repository and the current specifications. **Basis**:
 **M** measured here, **S** specification, **V** vendor datasheet, **R** reasoning, **—** none.
 
-| Axis | Favours | Basis | Margin |
-|---|---|---|---|
-| Scaling the distribution (R2) | segmented HTTP | R+S | narrow *between these two*; statelessness and supplier count are the difference (§2) |
-| Reliability under impairment (R5) | **neither, once substrate-matched** | **M** | a controller result, not a lane result; **against SRT** the media-aware lane loses more programme in the stress cells (§3.1) |
-| Reliability of recovery (R5) | segmented HTTP, in the protocol | M+S | resilience of *content* inside the availability window, not of *rate*; past it, silent holes; against SRT, the media-aware lane loses more programme to every failure but a relay that keeps its key or a killed exporter (§3.2) |
-| Redundancy — serving node (R6) | **segmented HTTP** | **M** | **decisive in the protocol, unmet by off-the-shelf tooling** (§3.2) |
-| Redundancy — 1+1 source failover (R6) | **segmented HTTP, conditionally** | **M** | **the sharpest divergence measured**: hitless for a co-started shared-feed segmented pair, and for interchangeable origins in one CDN origin group, merged downstream by receivers released in phase; one detection interval or more on the media-aware lane, a marked switch on current `main`; conditional because a misconfigured segmented pair is accepted silently (§3.3) |
-| Reassembly to a transport stream | **segmented HTTP at classic segment durations; MoQ at low latency** | M | below the segment period the free receiver is MoQ's (§4.2, §6.1) |
-| Grooming *burden* (R3) | **MoQ** | **M** | segmented egress is ~240× coarser; against the tunnels, MoQ wins on burst size and they on silence (§4.3) |
-| Grooming *outcome* — a P1/P2-conformant wire (R3) | **neither — both reach it, at different costs** | **M** | MoQ at a peak-coded-frame buffer; segmented HTTP at a 1–3 s cushion, its wire passing the T-STD too; neither on hardware, and MoQ's wire fails the T-STD (§5.1, §8) |
-| Latency (R4) | **MoQ over segmented HTTP only where nothing is conformant; level at P1/P2; MoQ over the tunnels, not at conformance** | **M** | 141 ms where nothing is conformant; **2,447 against 2,604 ms at P1/P2 conformance**, on one clip and a clean path; **nothing conformant below ~1 s over a whole capture** (§5, §5.1) |
-| Interoperability (R1) | **segmented HTTP on the delivery path, and on the receive path at classic durations** | M+S+V | decisive through caches and general clients, for a single programme; free receivers do not survive an origin failure, and commercial ones align on nothing beyond HLS (§4.4, §6.1) |
-| Entitlement and control (R7) | MoQ | M+R | enforcement point, session observability, and revocation speed on the one CDN mechanism measured (§7) |
-| Carriage fidelity, one programme (R1) | neither on mux content; **SRT on the clock, the only one measured over a real path** | M | a wash on content; the media-aware lane is a transmux whose conformant wire fails the T-STD (M) and which cannot carry a scrambled feed (M) (§8) |
-| Wire volume | **MoQ**, by the source's stuffing | M+derived | ~7.0 % on a stuffed clip; level with SRT on a stuffing-free feed (§9) |
-| Delivery economics | segmented HTTP | S (published rates) | decisive, and it swamps the row above (§9) |
-| Operational maturity | segmented HTTP | R+M | decisive — mature multi-vendor tooling and staff skills against a pre-1.0 ecosystem, whose cost is in following upstream: a breaking change reached a rig about weekly, two of nine silently, so each upgrade needs a rig audit ([T54](../lab/test-54-dependency-risk.md)) |
+
+| Axis                                              | Favours                                                                                                                | Basis               | Margin                                                                                                                                                                                                                                                                                                                                                                          |
+| ------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Scaling the distribution (R2)                     | segmented HTTP                                                                                                         | R+S                 | narrow *between these two*; statelessness and supplier count are the difference (§2)                                                                                                                                                                                                                                                                                            |
+| Reliability under impairment (R5)                 | **neither, once substrate-matched**                                                                                    | **M**               | a controller result, not a lane result; **against SRT** the media-aware lane loses more programme in the stress cells (§3.1)                                                                                                                                                                                                                                                    |
+| Reliability of recovery (R5)                      | segmented HTTP, in the protocol                                                                                        | M+S                 | resilience of *content* inside the availability window, not of *rate*; past it, silent holes; against SRT, the media-aware lane loses more programme to every failure but a relay that keeps its key or a killed exporter (§3.2)                                                                                                                                                |
+| Redundancy — serving node (R6)                    | **segmented HTTP**                                                                                                     | **M**               | **decisive in the protocol, unmet by off-the-shelf tooling** (§3.2)                                                                                                                                                                                                                                                                                                             |
+| Redundancy — 1+1 source failover (R6)             | **segmented HTTP, conditionally**                                                                                      | **M**               | **the sharpest divergence measured**: hitless for a co-started shared-feed segmented pair, and for interchangeable origins in one CDN origin group, merged downstream by receivers released in phase; one detection interval or more on the media-aware lane, a marked switch on current `main`; conditional because a misconfigured segmented pair is accepted silently (§3.3) |
+| Reassembly to a transport stream                  | **segmented HTTP at classic segment durations; MoQ at low latency**                                                    | M                   | below the segment period the free receiver is MoQ's (§4.2, §6.1)                                                                                                                                                                                                                                                                                                                |
+| Grooming *burden* (R3)                            | **MoQ**                                                                                                                | **M**               | segmented egress is ~240× coarser; against the tunnels, MoQ wins on burst size and they on silence (§4.3)                                                                                                                                                                                                                                                                       |
+| Grooming *outcome* — a P1/P2-conformant wire (R3) | **neither — both reach it, at different costs**                                                                        | **M**               | MoQ at a peak-coded-frame buffer; segmented HTTP at a 1–3 s cushion, its wire passing the T-STD too; neither on hardware, and MoQ's wire fails the T-STD (§5.1, §8)                                                                                                                                                                                                             |
+| Latency (R4)                                      | **MoQ over segmented HTTP only where nothing is conformant; level at P1/P2; MoQ over the tunnels, not at conformance** | **M**               | 141 ms where nothing is conformant; **2,447 against 2,604 ms at P1/P2 conformance**, on one clip and a clean path; **nothing conformant below ~1 s over a whole capture** (§5, §5.1)                                                                                                                                                                                            |
+| Interoperability (R1)                             | **segmented HTTP on the delivery path, and on the receive path at classic durations**                                  | M+S+V               | decisive through caches and general clients, for a single programme; free receivers do not survive an origin failure, and commercial ones align on nothing beyond HLS (§4.4, §6.1)                                                                                                                                                                                              |
+| Entitlement and control (R7)                      | MoQ                                                                                                                    | M+R                 | enforcement point, session observability, and revocation speed on the one CDN mechanism measured (§7)                                                                                                                                                                                                                                                                           |
+| Carriage fidelity, one programme (R1)             | neither on mux content; **SRT on the clock, the only one measured over a real path**                                   | M                   | a wash on content; the media-aware lane is a transmux whose conformant wire fails the T-STD (M) and which cannot carry a scrambled feed (M) (§8)                                                                                                                                                                                                                                |
+| Wire volume                                       | **MoQ**, by the source's stuffing                                                                                      | M+derived           | ~7.0 % on a stuffed clip; level with SRT on a stuffing-free feed (§9)                                                                                                                                                                                                                                                                                                           |
+| Delivery economics                                | segmented HTTP                                                                                                         | S (published rates) | decisive, and it swamps the row above (§9)                                                                                                                                                                                                                                                                                                                                      |
+| Operational maturity                              | segmented HTTP                                                                                                         | R+M                 | decisive — mature multi-vendor tooling and staff skills against a pre-1.0 ecosystem, whose cost is in following upstream: a breaking change reached a rig about weekly, two of nine silently, so each upgrade needs a rig audit ([T54](../lab/test-54-dependency-risk.md))                                                                                                      |
+
 
 **Neither column adds up to a winner.** For routes whose destinations absorb a few seconds, that carry a
 single programme, **and whose receive stage survives an origin failure**, which no free TS client does
@@ -547,17 +593,19 @@ export, presenting about 140 ms past a 1 s delay, holds a shorter delay over a w
 **Viability is a gate, not a score** — whether each plane can serve permanent primary distribution, and
 under what conditions each is preferable.
 
-| Gate | Cleared when | MoQ today | Segmented HTTP today |
-|---|---|---|---|
-| **Conformant egress** | Groomed output is a conformant transport stream on hardware, sustained — TR 101 290 P1/P2 and the 13818-1 buffer model | **Not cleared on the media-aware lane.** P1/P2 holds in software, its continuity and PCR repetition for a day, and the same wire fails the T-STD, which only a re-multiplexing stage repairs (§5.1, §8); no build is measured to carry every timeline case. Not on hardware | **P1/P2 and the buffer model cleared in software** over one internet path, and continuity and PCR repetition for 72 h on the live feed but at the feed's six breaks; PTS once hours from PCR (below); not on hardware ([Evidence](../lab/evidence.md) §3.4, §3.11) |
-| **Scrambled feed to the IRD** | Where a route requires it, a feed under TS-level conditional access reaches the IRD still scrambled | **Carried on the opaque lane and through the groomer** (once, loopback, no key ladder); excluded on the media-aware lane; a narrow gate (§8) | **Carried** by a packager not cutting on pictures (once, loopback, no key ladder; §8) |
-| **Permanent operation** | Stable operating state over ≥ 7 days, every resource series flat or converged | **Cleared for continuity and resources over a week**: 169 h on the live feed, every role converged, no unit restarted, every media-plane event traced to the contribution, one export end included; PCR accuracy over days ungraded, one run, one subscriber ([Evidence](../lab/evidence.md) §3.6) | **Not cleared**: 72 h on the live feed through one CDN, memory flat; six breaks in the contribution each withdrew both pathways, 54 s in all, and the groomer left PTS hours from PCR after a splice, its fix not soaked; one run ([Evidence](../lab/evidence.md) §3.4, §5) |
-| **Deterministic recovery** | A bounded, known quantity of programme lost per failure class, no manual intervention | **Partial.** Fast but lossy — the exporter resumes at the live edge | **Partial.** Lossless inside the availability window, silently holed past it |
-| **Redundancy to R6** | Receiver-side selection yielding no visible failure during contracted content | **Cleared for single-track**; for a multi-track mux on the opaque lane through a late join, each leg's loss and a killed export (one clip, one host), and on the media-aware lane for a co-started pair only, on one host or two ([Evidence](../lab/evidence.md) §3.4) | **Cleared conditionally** — hitless for a co-started pair configured alike, and for two origins in one CDN origin group behind receivers released in phase; silent time-travel when misconfigured (§3.3) |
-| **Fan-out to R2** | Marginal cost per destination approaching zero, with a known scaling model | **Indicated.** Linear to the relay's CPU; through a CDN-hosted relay, on the media-aware lane only (§2) | **Indicated.** One origin fetch per segment per CDN edge, at two edges; no origin knee to 128 edges ([Evidence](../lab/evidence.md) §3.4, §3.6) |
-| **Operable at fleet scale** | A fault in one of hundreds of feeds is localisable from telemetry | **Unassessed** | **Unassessed** |
-| **Delivered-media health at a subscriber** | An origin can tell that what a subscriber *received* was intact | **Not satisfied by any candidate** ([Architecture](architecture.md) §9.4) | **Not satisfied** |
-| **A receive stage at the route's latency budget** | A stage turns the delivered feed back into a transport stream at the latency the route allows | **Cleared, single-implementation** (§11) | **Cleared at classic segment durations, open below them** (§6.1) |
+
+| Gate                                              | Cleared when                                                                                                           | MoQ today                                                                                                                                                                                                                                                                                          | Segmented HTTP today                                                                                                                                                                                                                                                        |
+| ------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Conformant egress**                             | Groomed output is a conformant transport stream on hardware, sustained — TR 101 290 P1/P2 and the 13818-1 buffer model | **Not cleared on the media-aware lane.** P1/P2 holds in software, its continuity and PCR repetition for a day, and the same wire fails the T-STD, which only a re-multiplexing stage repairs (§5.1, §8); no build is measured to carry every timeline case. Not on hardware                        | **P1/P2 and the buffer model cleared in software** over one internet path, and continuity and PCR repetition for 72 h on the live feed but at the feed's six breaks; PTS once hours from PCR (below); not on hardware ([Evidence](../lab/evidence.md) §3.4, §3.11)          |
+| **Scrambled feed to the IRD**                     | Where a route requires it, a feed under TS-level conditional access reaches the IRD still scrambled                    | **Carried on the opaque lane and through the groomer** (once, loopback, no key ladder); excluded on the media-aware lane; a narrow gate (§8)                                                                                                                                                       | **Carried** by a packager not cutting on pictures (once, loopback, no key ladder; §8)                                                                                                                                                                                       |
+| **Permanent operation**                           | Stable operating state over ≥ 7 days, every resource series flat or converged                                          | **Cleared for continuity and resources over a week**: 169 h on the live feed, every role converged, no unit restarted, every media-plane event traced to the contribution, one export end included; PCR accuracy over days ungraded, one run, one subscriber ([Evidence](../lab/evidence.md) §3.6) | **Not cleared**: 72 h on the live feed through one CDN, memory flat; six breaks in the contribution each withdrew both pathways, 54 s in all, and the groomer left PTS hours from PCR after a splice, its fix not soaked; one run ([Evidence](../lab/evidence.md) §3.4, §5) |
+| **Deterministic recovery**                        | A bounded, known quantity of programme lost per failure class, no manual intervention                                  | **Partial.** Fast but lossy — the exporter resumes at the live edge                                                                                                                                                                                                                                | **Partial.** Lossless inside the availability window, silently holed past it                                                                                                                                                                                                |
+| **Redundancy to R6**                              | Receiver-side selection yielding no visible failure during contracted content                                          | **Cleared for single-track**; for a multi-track mux on the opaque lane through a late join, each leg's loss and a killed export (one clip, one host), and on the media-aware lane for a co-started pair only, on one host or two ([Evidence](../lab/evidence.md) §3.4)                             | **Cleared conditionally** — hitless for a co-started pair configured alike, and for two origins in one CDN origin group behind receivers released in phase; silent time-travel when misconfigured (§3.3)                                                                    |
+| **Fan-out to R2**                                 | Marginal cost per destination approaching zero, with a known scaling model                                             | **Indicated.** Linear to the relay's CPU; through a CDN-hosted relay, on the media-aware lane only (§2)                                                                                                                                                                                            | **Indicated.** One origin fetch per segment per CDN edge, at two edges; no origin knee to 128 edges ([Evidence](../lab/evidence.md) §3.4, §3.6)                                                                                                                             |
+| **Operable at fleet scale**                       | A fault in one of hundreds of feeds is localisable from telemetry                                                      | **Unassessed**                                                                                                                                                                                                                                                                                     | **Unassessed**                                                                                                                                                                                                                                                              |
+| **Delivered-media health at a subscriber**        | An origin can tell that what a subscriber *received* was intact                                                        | **Not satisfied by any candidate** ([Architecture](architecture.md) §9.4)                                                                                                                                                                                                                          | **Not satisfied**                                                                                                                                                                                                                                                           |
+| **A receive stage at the route's latency budget** | A stage turns the delivered feed back into a transport stream at the latency the route allows                          | **Cleared, single-implementation** (§11)                                                                                                                                                                                                                                                           | **Cleared at classic segment durations, open below them** (§6.1)                                                                                                                                                                                                            |
+
 
 **Preference is conditional on the route** — its latency budget, whether it must deliver a feed still
 scrambled, its programmes per feed, its destination estate, the delivery price, its impairment profile,
@@ -583,31 +631,35 @@ September 2026 builds and hold on current upstream only where stated.
 
 ---
 
+
+
 ## 14. Open questions
 
 Ranked by leverage:
 
 1. **Hardware TR 101 290 on groomed egresses, sustained?** Both are P1/P2-conformant in software and
-   neither has been near an IRD; on the media-aware lane it would also show how far receivers
+  neither has been near an IRD; on the media-aware lane it would also show how far receivers
    tolerate a wire that fails the buffer model (§5.1, §8).
 2. **Can a transmux subscriber keep a T-STD-conformant wire live across hosts and for 1+1?** The
-   merged export does across hosts, within the drift limits [Evidence](../lab/evidence.md) §3.16 states;
+  merged export does across hosts, within the drift limits [Evidence](../lab/evidence.md) §3.16 states;
    open are a laboratory stage following a remote clock, and 1+1 beyond a co-started pair
    ([Evidence](../lab/evidence.md) §3.4). It decides whether the lane serves TS-out
    to an IRD in a deployment.
 3. **A P1/P2-conformant sub-second configuration on any lane?** It decides whether MoQ has any
-   technical discriminator over the incumbents, and turns on the three conditions §13 names.
+  technical discriminator over the incumbents, and turns on the three conditions §13 names.
 4. **A receive stage that survives delivery-path failures and reports them, and HLS-input receivers
-   on hardware, multi-programme segments included?** The condition segmented HTTP's route-level case rests on (§3.2, §4.4).
+  on hardware, multi-programme segments included?** The condition segmented HTTP's route-level case rests on (§3.2, §4.4).
 5. **Sub-second requirement: routes or preference?** It decides MoQ's addressable share, and is a
-   commercial question (§5.2).
+  commercial question (§5.2).
 6. **Edge gateway at the demarcation or at a regional PoP?** It sets the delivery bill (§4.5).
 7. **Genuine segment loss against lateness?** Content Steering is specification-only (§3.2).
 8. **Relay portability against commoditised delivery economics?** ([Evidence](../lab/evidence.md) §3.7).
 9. **A real estate's fade and connectivity profile?** The satellite-hybrid case turns on correlated
-   fades and on whether IP availability is independent of fade at each site (§10.2).
+  fades and on whether IP availability is independent of fade at each site (§10.2).
 
 ---
+
+
 
 ## 15. References
 
@@ -616,50 +668,51 @@ described, the grading is in [Evidence](../lab/evidence.md) §3.7 (interop) and 
 
 **Implementations**
 
-- `moq-dev` — media-aware lane; publisher, relay, subscriber: https://github.com/moq-dev/moq
+- `moq-dev` — media-aware lane; publisher, relay, subscriber: [https://github.com/moq-dev/moq](https://github.com/moq-dev/moq)
 - Cloudflare `moq-rs` — IETF-aligned transport library and production relay, media-agnostic:
-  https://github.com/cloudflare/moq-rs
-- Cloudflare MoQ relay service and provisioning API: https://developers.cloudflare.com/moq/
-- `moq2ts` — transparent MPEG-TS publisher and receiver: https://github.com/openmoq/moq2ts
-- `moqxr` / OpenMOQ Publisher: https://github.com/mondain/moqxr
-- [`mpegts-pacer`](https://github.com/tdrapier-wbd/mpegts-pacer) — MPEG-TS VBR-to-CBR grooming stage
-  (§11)
-- `rawsendmpeg2ts` — datagram sender: https://github.com/EDIS-mx/rawsendmpeg2ts
+[https://github.com/cloudflare/moq-rs](https://github.com/cloudflare/moq-rs)
+- Cloudflare MoQ relay service and provisioning API: [https://developers.cloudflare.com/moq/](https://developers.cloudflare.com/moq/)
+- `moq2ts` — transparent MPEG-TS publisher and receiver: [https://github.com/openmoq/moq2ts](https://github.com/openmoq/moq2ts)
+- `moqxr` / OpenMOQ Publisher: [https://github.com/mondain/moqxr](https://github.com/mondain/moqxr)
+- `[mpegts-pacer](https://github.com/tdrapier-wbd/mpegts-pacer)` — MPEG-TS VBR-to-CBR grooming stage
+(§11)
+- `rawsendmpeg2ts` — datagram sender: [https://github.com/EDIS-mx/rawsendmpeg2ts](https://github.com/EDIS-mx/rawsendmpeg2ts)
 
 **Standards and formats**
 
-- IETF MOQ working group: https://datatracker.ietf.org/group/moq/about/
+- IETF MOQ working group: [https://datatracker.ietf.org/group/moq/about/](https://datatracker.ietf.org/group/moq/about/)
 - MOQT Streaming Format (MSF), adopted WG draft:
-  https://datatracker.ietf.org/doc/draft-ietf-moq-msf/
-- CMSF (CMAF profile of MSF): https://datatracker.ietf.org/doc/draft-ietf-moq-cmsf/
-- MSFTS (MPEG-TS profile): https://github.com/mondain/msfts
+[https://datatracker.ietf.org/doc/draft-ietf-moq-msf/](https://datatracker.ietf.org/doc/draft-ietf-moq-msf/)
+- CMSF (CMAF profile of MSF): [https://datatracker.ietf.org/doc/draft-ietf-moq-cmsf/](https://datatracker.ietf.org/doc/draft-ietf-moq-cmsf/)
+- MSFTS (MPEG-TS profile): [https://github.com/mondain/msfts](https://github.com/mondain/msfts)
 - HTTP Live Streaming 2nd Edition — obsoletes RFC 8216, includes Low-Latency HLS and MPEG-TS segment
-  carriage: https://datatracker.ietf.org/doc/draft-pantos-hls-rfc8216bis/
+carriage: [https://datatracker.ietf.org/doc/draft-pantos-hls-rfc8216bis/](https://datatracker.ietf.org/doc/draft-pantos-hls-rfc8216bis/)
 - DVB-MABR, adaptive media streaming over IP multicast (ETSI TS 103 769):
-  https://dvb.org/?standard=adaptive-media-streaming-over-ip-multicast
+[https://dvb.org/?standard=adaptive-media-streaming-over-ip-multicast](https://dvb.org/?standard=adaptive-media-streaming-over-ip-multicast)
 
 **Satellite-hybrid (§10.2)**
 
 - VSF TR-06-4 Part 7, RIST Satellite-Hybrid: In-Band Method — approved July 2025, revised December
-  2025: https://static.vsf.tv/download/technical_recommendations/VSF_TR-06-4-Part-7_2025-12-10.pdf
+2025: [https://static.vsf.tv/download/technical_recommendations/VSF_TR-06-4-Part-7_2025-12-10.pdf](https://static.vsf.tv/download/technical_recommendations/VSF_TR-06-4-Part-7_2025-12-10.pdf)
 - VSF TR-06-4 Part 8, RIST Satellite-Hybrid: Out-of-Band Method — approved June 2026:
-  https://static.vsf.tv/download/technical_recommendations/VSF_TR-06-4-Part-8_2026-06-04.pdf
+[https://static.vsf.tv/download/technical_recommendations/VSF_TR-06-4-Part-8_2026-06-04.pdf](https://static.vsf.tv/download/technical_recommendations/VSF_TR-06-4-Part-8_2026-06-04.pdf)
 - VSF Technical Recommendations index, for the TR-06 family and current revisions:
-  https://vsf.tv/technical-recommendations/
-- RIST Forum, the activity group's own material: https://www.rist.tv/
+[https://vsf.tv/technical-recommendations/](https://vsf.tv/technical-recommendations/)
+- RIST Forum, the activity group's own material: [https://www.rist.tv/](https://www.rist.tv/)
 - ITU-R P.838, specific attenuation model for rain — the frequency dependence behind the C-to-Ku
-  fade argument: https://www.itu.int/rec/R-REC-P.838/
+fade argument: [https://www.itu.int/rec/R-REC-P.838/](https://www.itu.int/rec/R-REC-P.838/)
 - ITU-R P.618, propagation data and prediction methods for Earth–space telecommunication systems:
-  https://www.itu.int/rec/R-REC-P.618/
+[https://www.itu.int/rec/R-REC-P.618/](https://www.itu.int/rec/R-REC-P.618/)
 - ITU-R P.837, characteristics of precipitation for propagation modelling — the rainfall statistics
-  a per-site fade estimate needs ([Economics](economics.md) §6.1):
-  https://www.itu.int/rec/R-REC-P.837/
+a per-site fade estimate needs ([Economics](economics.md) §6.1):
+[https://www.itu.int/rec/R-REC-P.837/](https://www.itu.int/rec/R-REC-P.837/)
 - FCC 20-22, *Expanding Flexible Use of the 3.7 to 4.2 GHz Band*, GN Docket 18-122 — the C-band
-  clearing and fixed-satellite repack: https://docs.fcc.gov/public/attachments/FCC-20-22A1.pdf
+clearing and fixed-satellite repack: [https://docs.fcc.gov/public/attachments/FCC-20-22A1.pdf](https://docs.fcc.gov/public/attachments/FCC-20-22A1.pdf)
 
 **Background**
 
-- MPEG-TS over MOQ: https://edis.mx/insights/mpeg-ts-over-moq.html
-- MPEG-TS over MOQ — PCR: https://edis.mx/insights/mpeg-ts-over-moq-pcr.html
-- MPEG-TS over MOQ — pacing: https://edis.mx/insights/mpeg-ts-over-moq-pacing.html
-- MOQ Interop Runner: https://github.com/englishm/moq-interop-runner
+- MPEG-TS over MOQ: [https://edis.mx/insights/mpeg-ts-over-moq.html](https://edis.mx/insights/mpeg-ts-over-moq.html)
+- MPEG-TS over MOQ — PCR: [https://edis.mx/insights/mpeg-ts-over-moq-pcr.html](https://edis.mx/insights/mpeg-ts-over-moq-pcr.html)
+- MPEG-TS over MOQ — pacing: [https://edis.mx/insights/mpeg-ts-over-moq-pacing.html](https://edis.mx/insights/mpeg-ts-over-moq-pacing.html)
+- MOQ Interop Runner: [https://github.com/englishm/moq-interop-runner](https://github.com/englishm/moq-interop-runner)
+
