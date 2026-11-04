@@ -57,7 +57,8 @@ distribution. A row leaves when a pull request takes it; ours are in the
 Set aside: the QoS line's lag histogram (R8 only), the E2EE line beyond P1-ae's gate (a contract option, not a requirement:
 [Control](../docs/control-plane.md) §7.3), `broadcast-fairness` (tenants sharing a cluster link; one
 operator's channels until P1-j's second hop), `perf/shard-default` (our relay's knee, which P1-j's
-supersedes), `auth-token-fetch` (a gate for P1-ac's moqx arm only if moqx asks a token of FETCH).
+supersedes), `auth-token-fetch` (a gate for P1-ac's moqx arm only if moqx asks a token of FETCH),
+`ts-reliability/clock-revision-burst` (bears on T12's late-leg re-test only if it finds a revision lost).
 
 ## Blocked on apparatus
 

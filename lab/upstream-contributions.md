@@ -2,8 +2,7 @@
 
 What this campaign found, reported and verified in other people's projects. It is kept separate from
 the experiment record because the argument is different from "does MoQ suit broadcast primary
-distribution", and because much of the campaign's effort lives here in a way the per-experiment results
-alone do not show.
+distribution".
 
 **Why it belongs in the repository at all.** [Comparison](../docs/comparison.md) §13 scores
 operational maturity against a pre-1.0 ecosystem. This file is the concrete form: what a broadcaster
@@ -412,8 +411,9 @@ by the later of detection and the standby's group lag.
   [#6183](https://github.com/moq-dev/moq/pull/6183): a resumed copy keeps what its max age (half the
   delay) holds; re-measured ([T56](test-56-media-aware-failover.md)), the rest of the detection
   interval still skips unflagged, 6.9–8.1 s at 2 s, 2.7 s at 10 s. That the skip reach the wire
-  flagged, as a `--stitch` switch is, is asked afresh as
-  [#7741](https://github.com/moq-dev/moq/issues/7741), open.
+  flagged, as a `--stitch` switch is, was asked afresh as
+  [#7741](https://github.com/moq-dev/moq/issues/7741): accepted for the demultiplexed export, in
+  [#7785](https://github.com/moq-dev/moq/pull/7785), open.
 
 ### A multi-programme TS through `import ts` — reported, and answered by programme selection
 
@@ -492,7 +492,7 @@ in force; each drop counts in a stream-wide `crc_error` in the importer's stats.
 on the branch. At P1, the `test/ts` default, real-capture and open-GOP arms matched on both builds; one
 bit flipped in the 20th PAT's CRC made the publisher on `main` exit after 0.5 s with *CRC32 mismatch*,
 while the branch dropped one section and passed every check; a PMT padded to two packets imported on the
-branch but `export ts` then failed on write length. Local `just check` and upstream CI passed. These
+branch but `export ts` then failed on write length. These
 figures were measured on the PR before merge and have not been repeated on the merged build (including
 the maintainer's change to `--program all`, which seeds each programme's importer with the assembled PAT
 rather than replaying bytes).
@@ -953,9 +953,10 @@ The passthrough export merged as [#5349](https://github.com/moq-dev/moq/pull/534
 ([T48](test-48-passthrough-export.md)); `ts-passthrough-export` stays open under
 [#5327](https://github.com/moq-dev/moq/pull/5327)'s acceptance set.
 
-**Open:** where TDT/TOT revisions are placed, which decides a late-joining 1+1 pair
-([T12](test-12-dual-path-handoff.md) § *Arm D*), asked as
-[#7743](https://github.com/moq-dev/moq/issues/7743); release-clock statistics that count neither a
+**Fixed, not yet re-measured:** where TDT/TOT revisions are placed, which decides a late-joining 1+1
+pair ([T12](test-12-dual-path-handoff.md) § *Arm D*), asked as
+[#7743](https://github.com/moq-dev/moq/issues/7743) and closed by
+[#7779](https://github.com/moq-dev/moq/pull/7779), merged. **Open:** release-clock statistics that count neither a
 skipped group nor an absent track; and the join-dependent latency at 500 ms
 ([T47](test-47-fixed-delay-export.md) conclusion 20,
 [reported on #4645](https://github.com/moq-dev/moq/pull/4645#issuecomment-6083705934)).
@@ -1091,8 +1092,9 @@ reproducer [T64](test-64-synthetic-encoder-switch.md)), upstream made the import
 under a fresh epoch ([#7144](https://github.com/moq-dev/moq/pull/7144)) and the export re-acquire
 the clock ([#7165](https://github.com/moq-dev/moq/pull/7165)), both merged; what a switch costs on
 `main` is [T67](test-67-import-step-restart.md)'s. A GOP of it on a short-GOP feed, the new
-instance announced only once its catalog resolves, is asked as
-[#7744](https://github.com/moq-dev/moq/issues/7744).
+instance announced only once its catalog resolves, was asked as
+[#7744](https://github.com/moq-dev/moq/issues/7744): accepted with another fix, an announcement once
+every stream's config is known ([#7780](https://github.com/moq-dev/moq/pull/7780), a draft).
 
 ### One malformed packet ends a TS ingest — reported as [#4581](https://github.com/moq-dev/moq/issues/4581), fixed by [#4733](https://github.com/moq-dev/moq/pull/4733), merged
 
@@ -1189,8 +1191,7 @@ Dial-side flags renamed on the development branch warned and then did not take e
 parsed and was never propagated ([#2913](https://github.com/moq-dev/moq/issues/2913), found by a
 merge-base control, [method-notes](method-notes.md) §1). **Fixed, verified here, and closed:** client
 and relay reject renamed settings outright and print the mapping, as the report argued, since the
-silent failure left GSO on with nothing logged. Operationally, relay `--server-quic-gso` became
-`--quic-gso` in the same rename; detect the surface from `moq --connect … --help` rather than assuming.
+silent failure left GSO on with nothing logged.
 
 ### Corroboration from an independent stack
 
