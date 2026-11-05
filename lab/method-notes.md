@@ -100,6 +100,8 @@ A rule belongs here only if it would change how a future experiment is designed,
 
 **A detector reading an aggregate has a sensitivity floor set by the share it watches; report it.** _(T24.)_ The stuffing ratio catches dead video (13.7 % to 95.2 %) and misses dead audio (27.0 % against the control's 27.1 %), because audio is 4 % of the mux.
 
+**A detector's latency counts from the later of the fault and its arming.** _(T39.)_ `ts-liveness.py` arms after `--warmup` plus `--learn`, 25 s of media by default, even with explicit `--gap` thresholds: a fault at 20 s alarmed at arming, 8.4 s after onset, against 2.7–3.5 s armed at 2 s. Check that the `armed` event precedes the onset before quoting a latency.
+
 **An instrument that blocks on its input cannot observe the absence of input, and elapsed media time is accumulated from bounded steps, never measured from an origin.** _(T27.)_ A liveness check in `read()` never ran during a total stall; current-minus-first PCR turned one bad byte into a 23,861 s outage on four PIDs. Drive stall detection from a clock the subject does not control, reject backward or implausible steps, and fault-inject the instrument.
 
 **A quantity meant to be stationary needs a time series; a high-water mark is not one.** _(T21.)_ A cushion's collapse from 1.4 s to zero was invisible in `buffer_high_water` until occupancy was sampled on a timer.
