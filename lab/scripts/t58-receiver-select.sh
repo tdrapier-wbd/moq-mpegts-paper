@@ -13,9 +13,11 @@
 #
 # Cells (CELL=): kill | term (the importer), relay (SIGKILL the leg's relay), egress (SIGKILL its
 # export), outage (drop the importer's QUIC flow both ways on loopback for OUTAGE_S s, and any
-# socket it opens meanwhile; nothing restarted; Linux, root, as T56's outage cell).
+# socket it opens meanwhile; nothing restarted; Linux, root, as T56's outage cell), none (no fault).
 # MODE=nonrevertive (--receive-timeout RT) | revertive (and --primary-input 0).
 # SRC2 set: importer B reads SRC2, a separate encode of the programme, started with SRC.
+# SWITCHER=vswitch puts t80-vswitch.py (T80) where tsswitch was, non-revertive only: SILENCE (200:
+# ms of video-PID silence that cuts), LOOKBACK (0: ms each packet is held; 0 is T80's rap mode).
 #
 #   CELL=kill MODE=nonrevertive RT=500 BIN=<moq dir> SRC=<ts> t58-receiver-select.sh <label>
 #
@@ -48,12 +50,15 @@ UDP=${UDP:-5610}
 OUT=${OUT:-/tmp/t58}/$LABEL
 RETRY=${RETRY:-}
 OUTAGE_S=${OUTAGE_S:-$IDLE}
+SWITCHER=${SWITCHER:-tsswitch}
+SILENCE=${SILENCE:-200}
+LOOKBACK=${LOOKBACK:-0}
 IMP=()
 [ -n "$RETRY" ] && IMP=(--connect-backoff-timeout "$RETRY")
 BC=t58.$CELL.$$
 
 case $CELL in
-kill | term | relay | egress) ;;
+kill | term | relay | egress | none) ;;
 outage)
 	[ "$(uname)" = Linux ] && [ "$(id -u)" -eq 0 ] || {
 		echo "outage needs Linux and root (iptables)" >&2
@@ -61,7 +66,7 @@ outage)
 	}
 	;;
 *)
-	echo "CELL must be kill, term, relay, egress or outage" >&2
+	echo "CELL must be kill, term, relay, egress, outage or none" >&2
 	exit 1
 	;;
 esac
@@ -74,14 +79,29 @@ revertive) SWITCH+=(--primary-input 0) ;;
 	exit 1
 	;;
 esac
+case $SWITCHER in
+tsswitch)
+	command -v tsswitch >/dev/null || {
+		echo "tsswitch (TSDuck) not found" >&2
+		exit 1
+	}
+	;;
+vswitch)
+	[ "$MODE" = nonrevertive ] || {
+		echo "SWITCHER=vswitch is non-revertive only" >&2
+		exit 1
+	}
+	SWITCH=(--silence-ms "$SILENCE" --lookback-ms "$LOOKBACK")
+	;;
+*)
+	echo "SWITCHER must be tsswitch or vswitch" >&2
+	exit 1
+	;;
+esac
 for f in "$BIN/moq" "$BIN/moq-relay" "$SRC" ${SRC2:+"$SRC2"}; do [ -e "$f" ] || {
 	echo "missing $f" >&2
 	exit 1
 }; done
-command -v tsswitch >/dev/null || {
-	echo "tsswitch (TSDuck) not found" >&2
-	exit 1
-}
 moq_cli_detect "$BIN/moq" "$BIN/moq-relay"
 KEEP=$(python3 -c "print(f'{$IDLE / 3:g}s')")
 QUIC=(--quic-idle-timeout "${IDLE}s" --quic-keep-alive "$KEEP")
@@ -118,12 +138,16 @@ cleanup() {
 trap cleanup EXIT
 
 {
-	echo "=== $(date -u +%FT%TZ) t58-receiver-select $LABEL: cell $CELL, mode $MODE, receive timeout ${RT} ms"
+	echo "=== $(date -u +%FT%TZ) t58-receiver-select $LABEL: cell $CELL, mode $MODE, $SWITCHER ${SWITCH[*]}"
 	moq_record_build "$BIN/moq" "$BIN/moq-relay"
 	head -2 "$BIN.sha" 2>/dev/null || echo "sha: no sidecar for $BIN"
-	tsswitch --version 2>&1 | head -1
+	if [ "$SWITCHER" = tsswitch ]; then
+		tsswitch --version 2>&1 | head -1
+	else
+		echo "t80-vswitch.py sha256 $(python3 -c 'import hashlib, sys; print(hashlib.sha256(open(sys.argv[1], "rb").read()).hexdigest()[:12])' "$H/t80-vswitch.py")"
+	fi
 	echo "src $SRC${SRC2:+; importer B reads $SRC2}; idle ${IDLE}s keep-alive $KEEP"
-	echo "fault at ${KILL_AT}s, back ${BACK}s later; ${SECS}s; export: ${EXP[*]}; tsswitch ${SWITCH[*]}"
+	echo "fault at ${KILL_AT}s, back ${BACK}s later; ${SECS}s; export: ${EXP[*]}; $SWITCHER ${SWITCH[*]}"
 	echo "importer retry: ${RETRY:-CLI default}"
 	[ "$CELL" = outage ] && echo "outage ${OUTAGE_S}s"
 } | tee "$OUT/build.txt"
@@ -165,9 +189,14 @@ importer() { # <A|B> <live file>
 # neither side blocks on the other's start.
 mkfifo "$OUT/legA.fifo" "$OUT/legB.fifo"
 exec 7<>"$OUT/legA.fifo" 8<>"$OUT/legB.fifo"
-tsswitch "${SWITCH[@]}" --event-command "sh $H/t58-event.sh $OUT/events.txt" \
-	-I file "$OUT/legA.fifo" -I file "$OUT/legB.fifo" -O file 2>>"$OUT/tsswitch.log" |
-	python3 "$H/t56-stamp.py" "$OUT/sub1" &
+if [ "$SWITCHER" = tsswitch ]; then
+	tsswitch "${SWITCH[@]}" --event-command "sh $H/t58-event.sh $OUT/events.txt" \
+		-I file "$OUT/legA.fifo" -I file "$OUT/legB.fifo" -O file 2>>"$OUT/tsswitch.log" |
+		python3 "$H/t56-stamp.py" "$OUT/sub1" &
+else
+	python3 "$H/t80-vswitch.py" "$OUT/legA.fifo" "$OUT/legB.fifo" --events "$OUT/events.txt" "${SWITCH[@]}" \
+		2>>"$OUT/vswitch.log" | python3 "$H/t56-stamp.py" "$OUT/sub1" &
+fi
 PIDS+=("$!")
 
 export_leg() { # <A|B> <capture>
@@ -208,6 +237,7 @@ for ((t = 3; t <= SECS; t++)); do
 		term) kill -TERM "${IMPPID[$V]}" && stamp "termimport$V" ;;
 		relay) kill -KILL "${RELAYPID[$V]}" && stamp "killrelay$V" ;;
 		egress) pkill -KILL -f -- "--broadcast $BC.$V export" && stamp "killexport$V" ;;
+		none) ;;
 		outage)
 			VP=${IMPPID[$V]}
 			for p in $(ports_of "$VP"); do dark "$p"; done

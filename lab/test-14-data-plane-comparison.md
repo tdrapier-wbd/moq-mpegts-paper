@@ -254,7 +254,7 @@ The honest division of labour is the one taken: measure exactly the part that wa
 
 **A groomer for arm B1 needs seconds of cushion depth, not milliseconds.** With 24 silences over 2 s in a 60 s window, a groomer holding the output byte clock across a silence must hold at least one segment period, plus margin for the observed two-period stalls. [T16](test-16-grooming-segmented-http.md) shows the operative parameter is cushion depth (200 ms–8 s), with stall timeout following from it — not raising `--stall-ms` alone, which fails with 231 continuity errors behind a flawless PCR record.
 
-**The carriage result inverts a claim this paper leaned on.** MoQ's clearest carriage advantage was verbatim fidelity via the opaque lane. For a _single programme_ an MPEG-TS segment achieves the same thing on the alternative, with no special lane, and it keeps the DVB service layer the HLS specification never mentions. What survives of the advantage is confined to the multi-programme case, where HLS's normative "Transport Stream Segments MUST contain a single MPEG-2 Program" bites — still unrun, and now carrying the whole of that row.
+**The carriage result inverts a claim this paper leaned on.** MoQ's clearest carriage advantage was verbatim fidelity via the opaque lane. For a _single programme_ an MPEG-TS segment achieves the same thing on the alternative, with no special lane, and it keeps the DVB service layer the HLS specification never mentions. What survives of the advantage is confined to the multi-programme case, where HLS's normative "Transport Stream Segments MUST contain a single MPEG-2 Program" binds players, not the distribution: CloudFront carried a three-programme segment byte for byte ([T77](test-77-mpts-through-cloudfront.md)).
 
 **Interop status remains inverted from interop outcome.** Worth recording alongside the numbers: HLS has no normative reference implementation — it is an Apple-authored informational document — yet it interoperates everywhere, and its authoritative implementation is closed-source and macOS-only. MoQ is standards-track with open implementations and no cross-implementation media interop ([evidence](evidence.md) §3.7). Open source and interoperability are not the same axis.
 
@@ -272,14 +272,13 @@ The honest division of labour is the one taken: measure exactly the part that wa
 
 ### Still open
 
-Protocols for these are in [planned-experiments.md](planned-experiments.md).
+None is planned: the campaign evaluates open components only ([planned-experiments.md](planned-experiments.md)), and the other two cells need equipment it does not vary or would move no result.
 
 | Cell | Needs |
 | --- | --- |
 | Commercial ABR-to-TS gateway on P1/P2 — moves the paper most, and measurement 2b raised its value | MEG- or TITAN-class hardware on the Gate 2 rig. It is now the _only_ candidate receiver that could realise the low-latency arm at all |
 | Glass-to-glass (encoder + decoder delay) | equipment this campaign does not vary; delivery latency at equal conformance is in [T18](test-18-delivery-latency.md) |
 | Wire cost with framing measured rather than derived | arm B1 on the EC2 path under [`t9-overhead-wan.sh`](scripts/t9-overhead-wan.sh)'s accounting. Low value: it would confirm a multiplier, not move a result |
-| Multi-programme carriage through a real CDN | a CDN account and the MPTS fixture |
 
 ---
 
