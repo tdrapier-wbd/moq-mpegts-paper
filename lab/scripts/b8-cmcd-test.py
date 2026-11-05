@@ -11,11 +11,18 @@ msd once; with --cmcd query, the same keys in the CMCD query argument and no CMC
 --cmcd, neither. The collector must receive application/cmcd records each carrying e, sid, sn, ts
 and v=2, numbered in order, play states starting, playing, rebuffering, playing, quit, a response
 record per segment fetch including the refused one, an error naming the lost segment and an
-interval report. Exits 1 otherwise.
+interval report. With --ts-counters, where the test posts two TSDuck reports (TR 101 290 counters
+in InfluxDB line protocol, one counter already raised in the first, three rising in the second,
+and a severity-4 and a per-PID line in each that must not count): no request before the first
+report carries the counters' keys, every request after it carries each priority's total in
+CMCD-Request (1, 0, 0, then 4, 1, 0), an error record names each risen counter and no other, an
+interval report carries the totals, and both reports are forwarded unchanged. Exits 1 otherwise.
 """
 import argparse
+import http.client
 import http.server
 import os
+import socket
 import subprocess
 import sys
 import tempfile
@@ -28,6 +35,50 @@ SEG_S, WINDOW, LOST, FLAKY = 1.0, 4, 3, 5
 T0 = time.time()
 REQUESTS, POSTS, FLAKY_SEEN = [], [], set()
 NULLS = (b"\x47\x1f\xff\x10" + b"\xff" * 184) * 50
+REPORT_AT = (1.5, 3.5)  # seconds after the receiver starts
+
+
+def report(pat, pid, cc, pts):
+	"""One TSDuck influx post: four TR 101 290 counters, an untracked total and a per-PID line."""
+	lines = [f"counter,name=pat_error,severity=1,scope=ts,tsid=0 value={pat} 1",
+			 f"counter,name=pid_error,severity=1,scope=ts,tsid=0 value={pid} 1",
+			 f"counter,name=continuity_count_error,severity=1,scope=ts,tsid=0 value={cc} 1",
+			 f"counter,name=pts_error,severity=2,scope=ts,tsid=0 value={pts} 1",
+			 "counter,name=nit_error,severity=3,scope=ts,tsid=0 value=0 1",
+			 f"counter,name=packet_count,severity=4,scope=ts,tsid=0 value={1000 + pid} 1",
+			 f"counter,name=pid_error,severity=1,scope=pid,pid=256 value={9 * pid} 1"]
+	return "\n".join(lines) + "\n"
+
+
+REPORTS = (report(1, 0, 0, 0), report(1, 2, 1, 1))
+
+
+def free_port():
+	s = socket.socket()
+	s.bind(("127.0.0.1", 0))
+	port = s.getsockname()[1]
+	s.close()
+	return port
+
+
+def post_reports(port, t_start, sent):
+	"""Post REPORTS to the receiver's listener at REPORT_AT, as tsp -P influx would."""
+	for at, body in zip(REPORT_AT, REPORTS):
+		time.sleep(max(0.0, t_start + at - time.time()))
+		for _ in range(20):
+			try:
+				conn = http.client.HTTPConnection("127.0.0.1", port, timeout=2)
+				conn.request("POST", "/api/v2/write?org=lab&bucket=t&precision=ms", body=body.encode(),
+							 headers={"Content-Type": "text/plain; charset=utf-8"})
+				status = conn.getresponse().status
+				conn.close()
+				if status == 204:
+					sent.append(time.time())
+				break
+			except ConnectionRefusedError:  # not listening yet; a listener that fails a report is a failure
+				time.sleep(0.05)
+			except OSError:
+				break
 
 
 def split_top(s):
@@ -71,7 +122,7 @@ class Origin(http.server.BaseHTTPRequestHandler):
 
 	def do_GET(self):
 		u = urllib.parse.urlsplit(self.path)
-		REQUESTS.append(dict(path=u.path, query=urllib.parse.parse_qs(u.query),
+		REQUESTS.append(dict(t=time.time(), path=u.path, query=urllib.parse.parse_qs(u.query),
 							 headers={k: v for k, v in self.headers.items() if k.lower().startswith("cmcd-")}))
 		latest = int((time.time() - T0) / SEG_S) - 1
 		if u.path == "/live/index.m3u8":
@@ -117,10 +168,48 @@ def run(recv, port, workdir, mode):
 		   "--seconds", "7", "--edge", "3", "--poll", "100", "--give-up-ms", "500",
 		   "--log", os.path.join(workdir, f"log-{mode}.jsonl")]
 	if mode != "none":
-		cmd += ["--cmcd", mode, "--cmcd-collector", f"http://127.0.0.1:{port}/cmcd", "--cmcd-interval", "2"]
+		cmd += ["--cmcd", "headers" if mode == "counters" else mode,
+				"--cmcd-collector", f"http://127.0.0.1:{port}/cmcd", "--cmcd-interval", "2"]
+	sent, poster = [], None
+	if mode == "counters":
+		cport = free_port()
+		cmd += ["--ts-counters", str(cport), "--ts-counters-forward", f"http://127.0.0.1:{port}/fwd"]
+		poster = threading.Thread(target=post_reports, args=(cport, time.time(), sent), daemon=True)
+		poster.start()
 	rc = subprocess.run(cmd, stderr=subprocess.PIPE, text=True, timeout=30)
+	if poster:
+		poster.join(timeout=5)
 	time.sleep(0.3)
-	return rc, list(REQUESTS), list(POSTS)
+	return rc, list(REQUESTS), list(POSTS), sent
+
+
+def check_counters(reqs, posts, sent):
+	"""--ts-counters: the totals on each request after a report, an error per risen counter."""
+	fails = []
+	if len(sent) != len(REPORTS):
+		return [f"counters: {len(sent)} of {len(REPORTS)} reports reached the receiver"]
+	want = ({}, {"tr101290-p1": "1", "tr101290-p2": "0", "tr101290-p3": "0"},
+			{"tr101290-p1": "4", "tr101290-p2": "1", "tr101290-p3": "0"})
+	settle = 0.3  # a request in flight as a report lands may carry either total
+	for r in reqs:
+		shard = dict(parse(r["headers"].get("CMCD-Request", "")))
+		got = {k: v for k, v in shard.items() if k.startswith("tr101290-")}
+		stage = sum(r["t"] >= s for s in sent)
+		if any(abs(r["t"] - s) < settle for s in sent):
+			continue
+		if got != want[stage]:
+			fails.append(f"counters: {r['path']} {stage} report(s) in carried {got}, not {want[stage]}")
+			break
+	recs = [dict(parse(line)) for p in posts if p["path"] == "/cmcd" for line in p["body"].split("\n")]
+	ecs = sorted(r["ec"] for r in recs if r.get("e") == "e" and "tr101290" in r.get("ec", ""))
+	if ecs != sorted(f'("tr101290-{n}")' for n in ("pid_error", "continuity_count_error", "pts_error")):
+		fails.append(f"counters: error records {ecs}")
+	if not any(r.get("e") == "t" and r.get("tr101290-p1") for r in recs):
+		fails.append("counters: no interval report carried the totals")
+	fwd = [p for p in posts if p["path"].startswith("/fwd/api/v2/write")]
+	if [p["body"] for p in fwd] != list(REPORTS):
+		fails.append(f"counters: {len(fwd)} reports forwarded, not both unchanged")
+	return fails
 
 
 def check(mode, rc, reqs, posts):
@@ -230,9 +319,12 @@ def main():
 	port = srv.server_address[1]
 	fails = []
 	with tempfile.TemporaryDirectory() as w:
-		for mode in ("headers", "query", "none"):
-			rc, reqs, posts = run(args.recv, port, w, mode)
-			f = check(mode, rc, reqs, posts)
+		for mode in ("headers", "query", "none", "counters"):
+			rc, reqs, posts, sent = run(args.recv, port, w, mode)
+			f = check("headers" if mode == "counters" else mode, rc, reqs,
+					  [p for p in posts if p["path"] == "/cmcd"])
+			if mode == "counters":
+				f += check_counters(reqs, posts, sent)
 			n_seg = sum(r["path"].startswith("/live/seg-") for r in reqs)
 			print(f"{mode}: {len(reqs)} requests, {n_seg} segment fetches, {len(posts)} posts, "
 				  f"{'ok' if not f else f'{len(f)} failures'}")

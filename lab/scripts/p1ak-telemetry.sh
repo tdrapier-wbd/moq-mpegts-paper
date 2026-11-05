@@ -16,7 +16,9 @@
 #
 # Env: CLIP (~/contrib-10m.ts), SECS (170), AT (50), DUR (60), STALL (30), JOIN (10, the receiver's
 #      start after the source's), PCR_TIMEOUT (6, ts-liveness.py's), ORIGIN_PORT (18501), COL_PORT (18502),
-#      SEG (the segmenter, t61-epochseg.py; t79-epochseg.py adds the time-bound cut)
+#      SEG (the segmenter, t61-epochseg.py; t79-epochseg.py adds the time-bound cut), CMCD (headers;
+#      query puts request mode in the origin's log), TS_PORT (unset; set, TSDuck posts its counters
+#      to the receiver there, which carries them as CMCD custom keys and forwards each post)
 set -uo pipefail
 
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
@@ -33,6 +35,14 @@ PCR_TIMEOUT=${PCR_TIMEOUT:-6}
 ORIGIN_PORT=${ORIGIN_PORT:-18501}
 COL_PORT=${COL_PORT:-18502}
 SEG=${SEG:-$HERE/t61-epochseg.py}
+CMCD=${CMCD:-headers}
+TS_PORT=${TS_PORT:-}
+TSC=()
+INFLUX=$COL_PORT
+if [ -n "$TS_PORT" ]; then
+	TSC=(--ts-counters "$TS_PORT" --ts-counters-forward "http://127.0.0.1:$COL_PORT")
+	INFLUX=$TS_PORT
+fi
 
 # Passes the source through and records the wall time of its first byte: the fault's clock.
 TAP='import sys, time
@@ -59,7 +69,7 @@ control | video | audio | stall | origin) ;;
 	exit 2
 	;;
 esac
-for p in "$ORIGIN_PORT" "$COL_PORT"; do
+for p in "$ORIGIN_PORT" "$COL_PORT" $TS_PORT; do
 	if lsof -nP -iTCP:"$p" -sTCP:LISTEN >/dev/null 2>&1; then
 		echo "port $p is taken" >&2
 		exit 1
@@ -86,7 +96,7 @@ origin() {
 }
 
 {
-	echo "arm=$ARM secs=$SECS at=$AT dur=$DUR stall=$STALL join=$JOIN"
+	echo "arm=$ARM secs=$SECS at=$AT dur=$DUR stall=$STALL join=$JOIN cmcd=$CMCD ts_counters=${TS_PORT:-off}"
 	echo "clip=$(basename "$CLIP") size=$(stat -f %z "$CLIP" 2>/dev/null || stat -c %s "$CLIP")"
 	echo "seg=$(basename "$SEG") sha1=$(shasum "$SEG" | cut -c1-12)"
 	echo "tsp=$(tsp --version 2>&1 | head -1)"
@@ -120,12 +130,12 @@ ev "source-start"
 
 until_t "$(echo "$T0 + $JOIN" | bc)"
 python3 "$HERE/b8-hls-recv.py" "http://127.0.0.1:$ORIGIN_PORT/index.m3u8" - --seconds $((SECS - JOIN)) \
-	--cmcd headers --cmcd-collector "http://127.0.0.1:$COL_PORT/cmcd" --cmcd-interval 5 \
+	--cmcd "$CMCD" --cmcd-collector "http://127.0.0.1:$COL_PORT/cmcd" --cmcd-interval 5 ${TSC[@]+"${TSC[@]}"} \
 	--log "$OUT/b8.jsonl" 2>"$OUT/b8.err" |
 	tee >(python3 -u "$HERE/ts-liveness.py" - --jsonl --quiet --pcr-timeout "$PCR_TIMEOUT" \
 		2>"$OUT/liveness.err" | python3 -u -c "$STAMP" >"$OUT/liveness.jsonl") |
 	tsp -r --buffer-size-mb 1 --max-input-packets 70 -I file - -P influx --tr-101-290 \
-		--host-url "http://127.0.0.1:$COL_PORT" --org lab --bucket p1ak --token none --interval 1 \
+		--host-url "http://127.0.0.1:$INFLUX" --org lab --bucket p1ak --token none --interval 1 \
 		-O drop 2>"$OUT/tsp.log" &
 PIDS+=($!)
 ev "receiver-start"

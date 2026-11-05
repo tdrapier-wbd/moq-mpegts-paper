@@ -1,6 +1,6 @@
 # Test 52 — Fan-out and permanence through a CDN-hosted relay
 
-**State: ramps and the demultiplexed soak done; the opener's refused join reproduced on loopback and fixed in moqx v0.3.7.** The demultiplexed lane's knee is the relay's event loop, on the one thread the operator gives it: 32 subscribers of the 25 Mb/s feed at full rate, about 0.82 Gb/s, degraded at 40, where the loop is 99 % busy, with groups skipped in common from 24. The passthrough lane has none: through this node single sessions fall silent until QUIC's idle timeout at 2, 4 and 24 subscribers, on loss or a silent path between the node and the subscriber host, and joins fail in clusters (the node refuses the joining FETCH). At 16 subscribers the demultiplexed lane held for 72 h by its criteria, its one break the source's, while each subscriber lost video about twice an hour, which the criteria cannot see, and the node's memory grew without bound.
+**State: ramps and the demultiplexed soak done; the opener's refused join reproduced on loopback, fixed in moqx v0.3.7, and gone from both nodes on it.** The demultiplexed lane's knee is the relay's event loop, on the one thread the operator gives it: 32 subscribers of the 25 Mb/s feed at full rate, about 0.82 Gb/s, degraded at 40, where the loop is 99 % busy, with groups skipped in common from 24. The passthrough lane has none: through this node single sessions fall silent until QUIC's idle timeout at 2, 4 and 24 subscribers, on loss or a silent path between the node and the subscriber host, and joins fail in clusters (the node refuses the joining FETCH). At 16 subscribers the demultiplexed lane held for 72 h by its criteria, its one break the source's, while each subscriber lost video about twice an hour, which the criteria cannot see, and the node's memory grew without bound.
 
 ## Objective
 
@@ -126,6 +126,22 @@ moqx v0.3.7 carries [#899](https://github.com/openmoq/moqx/pull/899): with `use_
 | D | 0 of 10 | 0 of 10 | 0 of 10 | 0 of 10 |
 
 Each v0.3.6 refusal is the client's "joining FETCH failed … not found" beside moqx's "Session not found". With local forwarders off, v0.3.6 refused nothing, so the refusal is #883's path. Every v0.3.7 opener exported 1.75–2.00 MB in its 8 s, and every joiner 1.37–1.38 MB in its 6 s. Two results differ from the node's: here the joiner is refused too, where the node's received the catalog; and Q refused every subscriber, where #883 refused one in five on Linux. Neither difference is explained. **v0.3.7 fixes the opener's refusal wherever v0.3.6 reproduced it; the node's own case closes when it upgrades.**
+
+### The node's joins on v0.3.7 (criteria fixed before the first run)
+
+Both nodes now run v0.3.7: the one measured above, on one thread, and a second in the same region on three. The trials above, unchanged, against each node across the internet from the laptop: raw QUIC draft 18, the client at `419b799c7`, the synthetic fixture under the operator's test prefix, ten trials per node. In the same session, as the grader's controls, v0.3.6 and v0.3.7 on loopback in configuration N, three trials each.
+
+**Void** unless v0.3.6 refuses all three openers on loopback and v0.3.7 none. **Pass** if neither node refuses an opener or a joiner in its ten trials: each exports payload in its window and logs no refused joining FETCH. **Reported:** each role's payload beside loopback's. Ten fresh broadcasts cannot show the mid-group failure, which came in clusters against one long-lived publisher; the ramp tests that.
+
+**Results: pass on both nodes; the mid-group case awaits the ramp.** Controls valid: v0.3.6 refused 3 openers of 3, v0.3.7 none.
+
+| Relay | Openers refused | Joiners refused | Opener payload | Joiner payload |
+| --- | --- | --- | --- | --- |
+| Loopback, v0.3.7, N | 0 of 3 | 0 of 3 | 1.75–2.00 MB | 1.37–1.39 MB |
+| One-thread node | 0 of 10 | 0 of 10 | 0.97–1.75 MB | 1.12–1.37 MB |
+| Three-thread node | 0 of 10 | 0 of 10 | 0.52–1.75 MB | 0.62–1.37 MB |
+
+Every subscriber received the catalog and media. Payloads run below loopback's because each window starts a round trip later across the internet; the two lowest, an opener and a joiner, are one broadcast's, so their common cause sits at the publisher's side of the node.
 
 ## Corrections
 

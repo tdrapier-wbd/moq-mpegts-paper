@@ -30,6 +30,13 @@ ttfb, ttlb) for each segment and each failed playlist fetch, an error (ec) per a
 interval report every --cmcd-interval seconds. A buffer the receiver does not hold (bl, tbl) is
 not sent.
 
+With --ts-counters PORT it also listens on loopback for TR 101 290 counters from the TSDuck that
+reads its output (`tsp -P influx --tr-101-290 --host-url http://127.0.0.1:PORT`), passing each post
+on unchanged to --ts-counters-forward if given. Once the first report is in, every request and
+interval report carries each priority's running total as a custom key (PREFIX-p1, -p2, -p3, PREFIX
+from --cmcd-ts-prefix), and a counter that rises between two reports is an error record naming it
+(ec PREFIX-<counter>). Counters already raised in the first report are totals, not errors.
+
 With --release-ms, a segment the playlist dates (EXT-X-PROGRAM-DATE-TIME, its first PCR's wall-clock
 time, as t61-epochseg.py --pdt writes it) is held until its last PCR's time plus the hold, so every
 receiver of the stream hands it on at the same instant, whatever path delivered it and however long
@@ -48,13 +55,16 @@ Usage:
   b8-hls-recv.py URL OUT [--seconds N, 0 for no end] [--poll MS] [--edge N] [--timeout S]
                  [--give-up-ms MS] [--release-ms MS] [--header 'Name: value']... [--log FILE.jsonl]
                  [--cmcd headers|query] [--cmcd-cid ID] [--cmcd-collector URL] [--cmcd-interval S]
+                 [--ts-counters PORT] [--ts-counters-forward URL] [--cmcd-ts-prefix PREFIX]
 """
 import argparse
 import datetime
 import http.client
+import http.server
 import json
 import posixpath
 import queue
+import re
 import sys
 import threading
 import time
@@ -62,6 +72,8 @@ import urllib.parse
 import uuid
 
 PCR_WRAP = (1 << 33) * 300
+# One TR 101 290 counter of TSDuck's influx plugin, the transport stream's total (scope=ts).
+COUNTER = re.compile(r"^counter,name=([a-z0-9_]+),severity=([1-3]),scope=ts\S* value=(\d+)", re.M)
 
 
 class Tok(str):
@@ -96,6 +108,7 @@ class Cmcd:
 		self.mode, self.collector, self.log = mode, collector, log
 		self.session = dict(cid=cid, sf=Tok("h"), sid=str(uuid.uuid4()), st=Tok("l"), v=2)
 		self.sn = {"request": 0, "event": 0}
+		self.lock = threading.Lock()
 		self.events = queue.Queue()
 		self.poster = None
 		if collector:
@@ -121,10 +134,11 @@ class Cmcd:
 		"""Queue one event-mode record; `ts` defaults to now."""
 		if not self.collector:
 			return
-		rec = dict(self.session, e=Tok(e), sn=self.sn["event"], ts=round((ts or time.time()) * 1000),
-				   **{k: v for k, v in keys.items() if v is not None})
-		self.sn["event"] += 1
-		self.events.put(cmcd_payload(rec))
+		with self.lock:  # the counters' listener reports from its own thread
+			rec = dict(self.session, e=Tok(e), sn=self.sn["event"], ts=round((ts or time.time()) * 1000),
+					   **{k: v for k, v in keys.items() if v is not None})
+			self.sn["event"] += 1
+			self.events.put(cmcd_payload(rec))
 
 	def close(self):
 		if self.poster:
@@ -159,6 +173,64 @@ class Cmcd:
 					self.log("cmcd-post-fail", status=r.status, records=len(batch))
 			except Exception as e:  # noqa: BLE001 - a lost report never stops the receiver
 				self.log("cmcd-post-fail", error=str(e)[:120], records=len(batch))
+
+
+class TsCounters:
+	"""TR 101 290 counters posted by a downstream `tsp -P influx`, kept as running totals."""
+
+	def __init__(self, port, forward, on_rise, log):
+		self.totals, self.lock, self.on_rise, self.log = {}, threading.Lock(), on_rise, log
+		fwd = urllib.parse.urlsplit(forward) if forward else None
+		owner = self
+
+		class Handler(http.server.BaseHTTPRequestHandler):
+			def log_message(self, *_):
+				pass
+
+			def do_POST(self):  # noqa: N802 - the stdlib's name
+				body = self.rfile.read(int(self.headers.get("Content-Length", 0)))
+				owner.ingest(body.decode("utf-8", "replace"))
+				self.send_response(204)
+				self.end_headers()
+				if fwd:
+					owner.forward(fwd, self.path, body, self.headers.get("Content-Type", "text/plain"))
+
+		self.srv = http.server.ThreadingHTTPServer(("127.0.0.1", port), Handler)
+		threading.Thread(target=self.srv.serve_forever, daemon=True).start()
+
+	def ingest(self, body):
+		rises = []
+		with self.lock:
+			for name, sev, value in COUNTER.findall(body):
+				was = self.totals.get(name)
+				self.totals[name] = (int(sev), int(value))
+				if was is not None and int(value) > was[1]:
+					rises.append((name, int(sev), int(value) - was[1], int(value)))
+		for r in rises:
+			self.on_rise(*r)
+
+	def forward(self, u, path, body, ctype):
+		cls = http.client.HTTPSConnection if u.scheme == "https" else http.client.HTTPConnection
+		try:
+			conn = cls(u.netloc, timeout=5)
+			conn.request("POST", u.path.rstrip("/") + path, body=body, headers={"Content-Type": ctype})
+			conn.getresponse().read()
+			conn.close()
+		except Exception as e:  # noqa: BLE001 - a lost copy never stops the receiver
+			self.log("ts-forward-fail", error=str(e)[:120])
+
+	def keys(self, prefix):
+		"""Each priority's total, once a report is in."""
+		with self.lock:
+			if not self.totals:
+				return {}
+			sums = {1: 0, 2: 0, 3: 0}
+			for sev, value in self.totals.values():
+				sums[sev] += value
+		return {f"{prefix}-p{s}": n for s, n in sums.items()}
+
+	def close(self):
+		self.srv.shutdown()
 
 
 class Client:
@@ -303,6 +375,10 @@ def main():
 	ap.add_argument("--cmcd-collector", default=None, help="POST event-mode CMCD v2 to this URL")
 	ap.add_argument("--cmcd-interval", type=float, default=30.0,
 					help="seconds between event-mode interval reports; 0 sends none")
+	ap.add_argument("--ts-counters", type=int, default=None,
+					help="listen on this loopback port for tsp -P influx --tr-101-290's posts")
+	ap.add_argument("--ts-counters-forward", default=None, help="pass each counter post on to this URL")
+	ap.add_argument("--cmcd-ts-prefix", default="tr101290", help="the counters' custom-key prefix")
 	args = ap.parse_args()
 
 	headers = dict(h.split(":", 1) for h in args.header)
@@ -322,6 +398,17 @@ def main():
 	state, once, mtp, ltc = "s", {}, None, None  # play state; keys for the next request only
 	next_report = t_start + args.cmcd_interval if args.cmcd_interval > 0 else float("inf")
 	cmcd.event("ps", ts=t_start, sta=Tok("s"))
+	pre = args.cmcd_ts_prefix
+
+	def counter_rose(name, sev, rise, total):
+		log("ts-counter", name=name, severity=sev, rise=rise, total=total)
+		cmcd.event("e", ec=[f"{pre}-{name}"])
+
+	counters = TsCounters(args.ts_counters, args.ts_counters_forward, counter_rose, log) \
+		if args.ts_counters else None
+
+	def tsk():
+		return counters.keys(pre) if counters else {}
 
 	def play_state(sta, **kw):
 		nonlocal state
@@ -343,6 +430,8 @@ def main():
 	def quit_session():
 		play_state("q")
 		cmcd.close()
+		if counters:
+			counters.close()
 
 	# Segment identity is the URI; a restarted packager starts a new media sequence, and names
 	# derived from the wall clock make the URI unique across restarts.
@@ -355,9 +444,9 @@ def main():
 
 	while time.time() < deadline:
 		if time.time() >= next_report:
-			cmcd.event("t", sta=Tok(state), mtp=mtp, ltc=ltc)
+			cmcd.event("t", sta=Tok(state), mtp=mtp, ltc=ltc, **tsk())
 			next_report += args.cmcd_interval
-		url, extra = cmcd.request(args.url, "m", **once)
+		url, extra = cmcd.request(args.url, "m", **once, **tsk())
 		once.clear()
 		try:
 			status, body, meta = client.get(url, extra)
@@ -405,7 +494,7 @@ def main():
 			seg_url = urllib.parse.urljoin(args.url, u)
 			nxt = [relative(seg_url, urllib.parse.urljoin(args.url, uris[i + 1]))] if i + 1 < len(uris) else None
 			url, extra = cmcd.request(seg_url, "av", d=round(dur[u] * 1000) if u in dur else None, nor=nxt,
-									  mtp=mtp, ltc=ltc, su=state != "p", **once)
+									  mtp=mtp, ltc=ltc, su=state != "p", **once, **tsk())
 			once.clear()
 			try:
 				status, data, meta = client.get(url, extra)

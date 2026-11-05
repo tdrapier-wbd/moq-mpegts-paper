@@ -1,6 +1,6 @@
 # Test 80: a receiver switch that detects on the video PID and cuts at a random-access point
 
-**State: run and graded. C0, C4 and C5 hold; C2 and C6 fail.** Holding both legs 2 s and cutting at a random-access point cost every one-source fault the background's decoder hole and no bad picture, in all twelve runs, at most two frames repeated where the legs ran apart. Without the hold the egress cell lost 2.5 s in two runs of three. A relay's skip now reaches the wire flagged.
+**State: run and graded. C0, C4 and C5 hold; C2 and C6 fail.** Holding both legs 2 s and cutting at a random-access point cost every one-source fault the background's decoder hole and no bad picture, in all twelve runs, at most two frames repeated where the legs ran apart. Without the hold the egress cell lost 2.5 s in two runs of three. A relay's skip now reaches the wire flagged, though its clock never breaks.
 
 ## Objective
 
@@ -94,7 +94,7 @@ _Predicted:_ C0 holds. C2 fails on this clip: the hole is τ plus the wait for t
 
 **Part A, the arrivals.** 110 arrivals across the 30 faulted `vswitch` runs and both no-fault runs caused no cut. In `rap` each cost a hole of 0.15–0.25 s, within its before plus 0.1 s.
 
-**Part B.** On moq-lite 07 every export skipped programme at the relay loss and flagged it once, with `discontinuity_indicator` on the PCR PID (111) and on no other, the PMT version unchanged and no continuity error: at a 2 s delay video decode time stepped 5.24–6.44 s (R5: 6.9–8.1 s), at 10 s 1.5 s (R5: 2.7 s), in every run, both exports. The flag leads each stream's step in output byte order: video by 0.20–0.98 s, audio and teletext by up to 1.57 s; the PCR itself does not jump. The default-version control switched with every PID flagged, a new PMT, its step 7.3–7.6 s.
+**Part B.** On moq-lite 07 every export skipped programme at the relay loss and flagged it once, with `discontinuity_indicator` on the PCR PID (111) and on no other, the PMT version unchanged and no continuity error: at a 2 s delay video decode time stepped 5.24–6.44 s (R5: 6.9–8.1 s), at 10 s 1.5 s (R5: 2.7 s), in every run, both exports. The flag leads each stream's step in output byte order: video by 0.20–0.98 s, audio and teletext by up to 1.57 s. **The PCR does not jump, and no stream's timestamps leave it:** the export fills the outage with null packets on a PCR running at its 25 ms spacing, and each PID resumes with its DTS advanced as far as the PCR, within 0.05 s, so its offset to the PCR is unchanged (video +1.00 s before, +1.04 s after). No frame from before the skip follows the flag, which falls in the padding. A fourth run at 2 s, read packet by packet with a PCR-jump detector that found T64's 7 s synthetic step and nothing in the source, gave the same, its video stepping 7.62 s as it resumed a group later; on `204c97f4f`, the build [#7741](https://github.com/moq-dev/moq/issues/7741) reported, one run gave the same hole unflagged. The default-version control switched with every PID flagged, a new PMT, its step 7.3–7.6 s.
 
 **Grading.**
 
@@ -114,4 +114,8 @@ _Predicted:_ C0 holds. C2 fails on this clip: the hole is τ plus the wait for t
 - **A receiver switch can bring a media-aware failover under a second as a decoder sees it, if it holds both legs.** Detecting silence on the video PID and cutting, 2 s behind both legs, from the other leg's last keyframe before the failure, every one-source fault cost the background's decoder hole and no corrupt picture, against `tsswitch`'s 2.24 s on the same build. The price is 2 s of latency on top of each export's delay, and any lag between the legs as a repeat and a latency step.
 - **Without a hold a keyframe cut is not bounded under a second on an open-GOP clip.** It waits for the other leg's next keyframe, up to a GOP, and breaks the open GOP's leading pictures; a cut that skips more than half the stream's picture-order period also costs the decoder its ordering. Sub-second `rap` results here are one keyframe phase each.
 - **The legs' arrival skew, not the switch, sets what `lookback` repeats.** It varied 0.2–0.7 s between runs of one topology on one host.
-- **The demultiplexed export now tells a receiver it skipped.** The flag sits on the PCR PID, up to 1.6 s of output ahead of the streams' own steps, so a receiver acting on it acts early; the skip itself still costs the detection interval less what a resumed copy keeps.
+- **The demultiplexed export now marks a skip, but as a time-base change it is not.** The clock runs on through the skip and every stream keeps its offset to it, so a receiver sees a programme gap on an unbroken clock; the flag, on the PCR PID in that gap, announces a new time base equal to the old one. The skip itself still costs the detection interval less what a resumed copy keeps.
+
+## Corrections
+
+**Believed:** the flag leads each stream's timestamp step, so a receiver acting on it acts early; and, in #7741, the skip was a forward jump of PCR and PTS. **True:** the PCR never jumps; each stream's timestamps advance with it across padding, and only padding follows the flag. **Rule:** read a timestamp step against the PCR across it and the stream's offset to the PCR, never against the previous timestamp alone.

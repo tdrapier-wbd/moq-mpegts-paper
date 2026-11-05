@@ -1,10 +1,10 @@
 # Test 79 — What a NOC's sources say about the segmented lane's faults
 
-**State: run, each fault twice and a control; P1-ak's telemetry half.** Its CloudFront half waits on T76's end, which holds the distribution. On the deployed segmenter a dead video stops the segmented lane outright: no segment for 61 s, so every source sees only an absence. With a time-bound cut the lane hands the audio on through it, and liveness names the dead video in 3.4 s. CMCD v2 carries an origin outage within 0.2 s and nothing inside the stream; TR 101 290 catches dead audio in 7 s, and per-PID liveness catches every fault.
+**State: run, each fault twice and a control, then with the counters in CMCD and through CloudFront.** On the deployed segmenter a dead video stops the segmented lane outright: no segment for 61 s, so every source sees only an absence. With a time-bound cut the lane hands the audio on through it, and liveness names the dead video in 3.4 s. CMCD v2's own keys carry an origin outage within 0.2 s and nothing inside the stream; with the receiver's TR 101 290 counters as custom keys they name dead audio in 8 s. CloudFront's real-time logs parse only CMCD version 1, so B-8's v2 keys reach them raw. TR 101 290 catches dead audio in 7–8 s, and per-PID liveness catches every fault.
 
 ## Objective
 
-[T32](test-32-observability-survey.md) mapped the segmented lane's faults to what the origin, the playlist, a byte-faithful receiver and the media show, and found the most likely one, a stalled source, invisible to every HTTP-layer signal. Since then the receiver ([B-8](planned-experiments.md), `b8-hls-recv.py`) reports its own telemetry and CMCD v2 (CTA-5004-B), and TSDuck's `influx` plugin reports TR 101 290's error counters live. The question is P1-ak's: for each fault, which of the sources a NOC could watch signals it, how soon, and what CMCD v2 cannot express.
+[T32](test-32-observability-survey.md) mapped the segmented lane's faults to what the origin, the playlist, a byte-faithful receiver and the media show, and found the most likely one, a stalled source, invisible to every HTTP-layer signal. Since then the receiver ([B-8](test-30-segmented-distributed-resilience.md), `b8-hls-recv.py`) reports its own telemetry and CMCD v2 (CTA-5004-B), and TSDuck's `influx` plugin reports TR 101 290's error counters live. The question is P1-ak's: for each fault, which of the sources a NOC could watch signals it, how soon, and what CMCD v2 cannot express.
 
 ## Environment
 
@@ -82,17 +82,68 @@ _Predicted:_ dead video reads by cause, in liveness (`no access unit`) and TR 10
 
 _Prediction:_ held for liveness, the receiver log and CMCD. It failed for TR 101 290, which counts `PTS_error` only when the video returns, not while none arrives.
 
+### TR 101 290 counters in CMCD (criteria fixed before the first run)
+
+The receiver now carries TSDuck's counters as CMCD custom keys (`--ts-counters`): each priority's running total on every request and interval report (`tr101290-p1`, `-p2`, `-p3`), and an error record naming each counter that rises between two of TSDuck's reports (`ec` `tr101290-<counter>`). TSDuck posts to the receiver, which forwards each post unchanged to the collector, so the TR 101 290 column is graded as before. Offline, [`b8-cmcd-test.py`](scripts/b8-cmcd-test.py) passes and fails three broken copies: one counting a per-PID line, one raising an error for a counter already raised in the first report, one whose listener fails a report. The rig as above with `TS_PORT` set and `CMCD=query`, so request mode reaches the origin's log, on the deployed segmenter: the control once, the audio and origin arms twice each.
+
+1. **Validity.** The control raises no `tr101290-` error record from 25 s after the join, and every request after TSDuck's first report carries the three keys.
+2. **Carriage.** Each rise the TR 101 290 column records in a fault's window has its CMCD error record naming the counter within 1.5 s of the forwarded report (the receiver batches records up to a second), and CMCD names no counter the column lacks.
+3. **Reach.** CMCD's column re-graded: which faults it now carries explicitly, and when.
+
+_Predicted:_ dead audio as `tr101290-pid_error` at about 7 s; the origin outage as `tr101290-continuity_count_error` on resumption, about 33 s, after the `pl-fail` CMCD already had; the control nothing.
+
+**Results.** All three criteria hold.
+
+1. **Valid:** the control raised no `tr101290-` record, nor anything in any source. Every request after TSDuck's first report, 541–678 a run, and every interval report carried the three totals.
+2. **Carriage:** every rise the TR 101 290 column recorded has its CMCD error record, stamped within 2 ms of the forwarded report and reaching the collector 1.0 s later, the receiver's batching; CMCD named no other counter. TSDuck's reports reached the collector within 17 ms of their own timestamps.
+3. **Reach:** dead audio, which CMCD's own keys never named, now reaches it by cause.
+
+| Fault | CMCD v2, first explicit | Counters CMCD names | TR 101 290 | Per-PID liveness |
+| --- | --- | --- | --- | --- |
+| Audio PES dead 60 s | `tr101290-pid_error` 8.10, 8.18 | `pid_error`, `pts_error` | `PID_error` 8.10, 8.18 | `no access unit` 2.20, 2.05 |
+| Origin stopped 30 s | `pl-fail` or `rr` `rc=0`: 0.19, 0.08 | `continuity_count_error`, `pcr_error`, `pcr_discontinuity_indicator_error` on resumption | continuity 32.26, 32.30 | clock stopped 6.02, 6.00 |
+
+Against the first runs, TR 101 290 reported dead audio 1.1 s later and liveness 1.3 s sooner, alike in both repeats; routing the reports through the receiver accounts for at most 17 ms of it.
+
+_Prediction:_ held, dead audio a second later than predicted.
+
+### Through CloudFront: which keys reach the real-time logs (criteria fixed before the first run)
+
+A second distribution beside the soak's, whose one behaviour a viewer-request function answers (200, no body, no origin reached), logs every request to Kinesis with CloudFront's dedicated CMCD fields, the query string and the request headers. The keys are B-8's own: every request of the offline test's counters run (a lost segment, a retried one, both TSDuck reports), captured at its local origin in each form and replayed in order from the laptop, each request's index in its path.
+
+1. **Validity.** A CMCD v1 request with keys CloudFront documents (`br`, `bl`, `cid`, `d`, `ot`, `sid`, `v=1`) fills those dedicated fields, and a request with no CMCD fills none; otherwise void.
+2. **Reported,** per key B-8 sends and per form: whether a dedicated field carries it and with what value, and whether it reaches the log raw, in `cs-uri-query` or `cs-headers`, byte for byte.
+3. **Complete:** every replayed request appears in the log once.
+
+_Predicted:_ the dedicated fields are CMCD v1's, so the keys v2 shares with v1 fill them and v2's own (`sn`, `ltc`, `msd`) and the custom keys reach the log only raw.
+
+**Results.** Valid and complete; B-8's v2 keys reach the log only raw. [`p1ak-cf-cmcd.py`](scripts/p1ak-cf-cmcd.py) captured 83 requests a form and replayed them through one London edge, into a distribution, log configuration and stream created for the run and deleted after it. A diagnostic arm, added after the first look and not a criterion, replayed each request again with its `v=2` removed, which CMCD reads as version 1.
+
+1. **Valid:** the v1 control filled its seven fields with the values sent, in both forms, and the request without CMCD filled none. Every record's edge and status matched its response's. A first replay was void: its reader took the fields in the configuration's order, which CloudFront does not keep.
+2. **Reported:**
+
+| B-8's requests, either form | Dedicated fields filled | Raw, byte for byte |
+| --- | --- | --- |
+| As sent, `v=2` | none, for any key | every request, in `cs-headers` or `cs-uri-query` |
+| `v=2` removed (diagnostic) | every key v1 defines, with the value sent (`bs`, `cid`, `d`, `mtp`, `ot`, `sf`, `sid`, `st`, `su`), and `cmcd-version` 1; not `nor`, which v2 writes as a list | every request |
+
+`sn`, `ltc`, `msd` and the three `tr101290-` totals have no field and reach the log only raw; their presence does not stop the v1 keys parsing.
+
+3. **Complete:** 335 of 335 requests logged once.
+
+_Prediction:_ failed. The keys v2 shares with v1 fill no field when the payload says `v=2`: CloudFront parses only version 1, so a v2 sender's keys reach a NOC through these logs only by parsing the raw field.
+
 ## Conclusions
 
 1. **A segmenter that cuts only at random-access points amplifies a dead video into a dead service**, where [T24](test-24-partial-media-plane-stall.md) found the media-aware lane contains it. One that also cuts at a content-time bound contains it too: the audio goes on, and every packager cuts the same segments.
-2. **CMCD v2, as B-8 sends it, expresses a transport fault at once and nothing inside the stream.** A dead elementary stream, a continuity hole and a stalled source are not CMCD's to say: the last two appear only as records that stop. A buffer level, or TS counters in custom keys, would carry them; neither is sent.
+2. **CMCD v2's own keys express a transport fault at once and nothing inside the stream; the receiver's TR 101 290 counters, as custom keys, add what TSDuck sees.** Dead audio then reaches CMCD by cause, and a continuity hole on resumption. A stalled source still appears only as records that stop; a buffer level, which B-8 does not send, would carry it. **Through CloudFront none of it reaches a dedicated field**: the real-time logs parse only CMCD version 1 and keep a v2 payload raw.
 3. **TR 101 290 at the receiver gives the cause for dead audio** (`PID_error`) and marks a hole on resumption, but reports nothing while its input is stopped.
-4. **Per-PID liveness detects every fault**, dead audio in 3.4–3.6 s, dead video in 3.4 s once the segmenter cuts at a bound, and the rest at its 6 s clock timeout. Its timeout must exceed the gap between segment deliveries, since an ungroomed receiver hands on whole segments.
-5. **For a NOC**, three faults are named by cause: the origin outage within 0.2 s, dead audio within 3.4–7 s (liveness, TR 101 290), and, with the time-bound cut, dead video within 3.4 s (liveness alone). Without the cut, dead video reads only as an absence, as does a stalled source, timed at three segment durations or more; the stalled source has no explicit signal in any source until it resumes, as [T32](test-32-observability-survey.md) found at the origin.
+4. **Per-PID liveness detects every fault**, dead audio in 2.1–3.6 s, dead video in 3.4 s once the segmenter cuts at a bound, and the rest at its 6 s clock timeout. Its timeout must exceed the gap between segment deliveries, since an ungroomed receiver hands on whole segments.
+5. **For a NOC**, three faults are named by cause: the origin outage within 0.2 s, dead audio within 2.1–8.2 s (liveness, then TR 101 290 and CMCD with its counters), and, with the time-bound cut, dead video within 3.4 s (liveness alone). Without the cut, dead video reads only as an absence, as does a stalled source, timed at three segment durations or more; the stalled source has no explicit signal in any source until it resumes, as [T32](test-32-observability-survey.md) found at the origin.
 
 ## Limits, stated in advance
 
-- One clip, a local origin and no CDN: the CloudFront half (which CMCD keys reach the real-time logs) waits on T76's end.
+- One clip and a local origin; CloudFront saw one run's requests replayed through one edge, not a session through it.
 - TSDuck reports TR 101 290 counters, not a vendor probe's alarms; P2-a's survey asks the vendors.
-- The receiver reports no TS-level counters in CMCD (B-8's custom keys are not built), so CMCD's reach is that of the keys CTA-5004-B defines.
+- The counters ride in custom keys no specification defines, so a collector must know their names.
 - The campaign's own segmenter alone, in its two variants, and no groomer after the receiver: the deployed lane grooms before the IRD, which smooths what TR 101 290 and liveness see.
