@@ -98,13 +98,15 @@ As proposed, export opened only once every SI entry held a snapshot or failed, s
 
 **State.** [#3533](https://github.com/moq-dev/moq/issues/3533) closed by [#3784](https://github.com/moq-dev/moq/pull/3784) in [#3793](https://github.com/moq-dev/moq/pull/3793): `export_test` passes and [T40](test-40-continuous-join-through-srt.md) no longer reads the stall through SRT. On that build `moq import ts` can still exit at the first join with _frame timestamp is below the live edge_ (T40 § `main-5d0991b9-swap`), a separate monotonic-timeline check filed as [#3798](https://github.com/moq-dev/moq/issues/3798), because the #3533 fix's `reanchor()` applies to legacy audio only.
 
-### The mux rate the lane could not carry — closed upstream, citing this campaign's groomer
+### The mux rate the lane could not carry — closed upstream, citing this campaign's groomer; its one-window measurement reported as [#7958](https://github.com/moq-dev/moq/issues/7958)
 
 **The finding.** `moq export ts` carried content only: null packets do not cross MoQ, so reconstructed streams had no stuffing and no declared multiplex rate — [`mpegts-pacer`](https://github.com/tdrapier-wbd/mpegts-pacer)'s README line that the rate is _"not recoverable from MoQ"_ is quoted in the fix.
 
 **Closed** by [#3831](https://github.com/moq-dev/moq/pull/3831): import measures whole-multiplex rate on the PCR PID (nulls included), publishes `mpegts.muxRate` once half-second windows agree within 2 %; export balances null stuffing ahead of each clock packet without delaying media; `--mux-rate` overrides; absent rate exports byte-identically to before.
 
-**Verified here** ([T13](test-13-downstream-grooming.md) § _The exporter now stuffs and declares a rate_, file domain, `0.11.2-615d166d`): stuffing **4.93 %** vs source **4.69 %**; declared **9,981,799 b/s** vs **9,945,951 b/s** (**+0.36 %**); explicit `--mux-rate` **+0.25 %**; continuity clean. **PCR accuracy and repetition are unmoved** (P2: 0/1,807 vs 0/1,892 inside 481 ns; P1: 11.34 % vs 11.21 % above 40 ms) — the P2 gate becomes answerable on ungroomed egress but still fails comprehensively; a groomer remains required for both PCR criteria. The absent-rate path is untested on a genuinely variable source (filtering nulls from CBR still yields a stable lower rate).
+**Verified here** ([T13](test-13-downstream-grooming.md) § _The exporter now stuffs and declares a rate_, file domain, `0.11.2-615d166d`): stuffing **4.93 %** vs source **4.69 %**; declared rate **+0.36 %**, explicit `--mux-rate` **+0.25 %**; continuity clean; a variable source records no rate and exports unpadded. PCR accuracy and repetition were unmoved on that build; the fixed-delay export passes both ([T21](test-21-permanence-soak.md)).
+
+**Open.** The rate is one 2 s window's, kept within 1 %. Measured 0.19 % low at a restart on a 25 Mb/s CBR feed with no stuffing, it stopped the padded export every 10–20 min (T21). Reported as #7958, asking whether the import should refine the rate or the export report the shortfall.
 
 ### `ffmpeg -c copy` drops most of a broadcast multiplex — reported as [#5950](https://github.com/moq-dev/moq/issues/5950)
 
@@ -413,10 +415,6 @@ Residue outside both issues: TDT/TOT off-grid, one or two PCR-only packets per 4
 ### Video overran its transport buffer where the multiplex outran its Rx — reported as [#5142](https://github.com/moq-dev/moq/issues/5142), fixed by [#5207](https://github.com/moq-dev/moq/pull/5207) and [#5306](https://github.com/moq-dev/moq/pull/5306)
 
 `Slot::layout` spaced each PID by its own count, so PIDs with equal counts coincided and video ran back to back between them: a unit test of one full slot of a 25 Mb/s broadcast peaked video TB at 1,067 B on `f8215bc47`, against 459 B for the same packets in smooth weighted round-robin ([T45](test-45-live-tstd-remux.md)). #5207 interleaves each slot, with our test as the regression; the residue at the slot's edges, program tables written twice ahead of a capped video lane, was [reported on #5304](https://github.com/moq-dev/moq/pull/5304#issuecomment-6125008012) and removed by #5306's planner. On `main` with #5306 (`0d9e9ff78`) the 110 s cut overruns neither video nor system TB. **Closed.**
-
-### #3798's reproduction — moot
-
-[T41](test-41-import-reanchor-coverage.md)'s fixtures, posted to #3798, confirmed the re-anchor set once and widened its scope from the codec to the stream type. Since #4543 nothing re-anchors.
 
 ### A loop wrap moved audio against video — contributed as [#4513](https://github.com/moq-dev/moq/pull/4513), closed in favour of [#4543](https://github.com/moq-dev/moq/pull/4543)
 
