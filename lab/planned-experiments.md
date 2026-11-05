@@ -28,7 +28,7 @@ The campaign's forward roadmap: what is outstanding, why it matters, what gates 
 
 | # | What remains | Gate | Done when | Protocol |
 | --- | --- | --- | --- | --- |
-| P2-a | What commercial monitoring would have caught: the vendor survey | — (outreach, not apparatus) | Survey answers mapped against the measured fault-to-telemetry table | [T32](test-32-observability-survey.md) |
+| P2-a | What commercial monitoring would have caught: T32's five outreach questions, best as fixture trials | vendor contacts (the author) | Each question answered or marked unanswered, and the gap list published against T32's fault table | [T32](test-32-observability-survey.md) |
 
 **Open in the paper, with no experiment scheduled:** the [Evidence](evidence.md) §5 rows no entry above names, and the control strand's clustering and rights windows ([Control](../docs/control-plane.md), open questions). Of the deployment milestones ([lab README](README.md)), operations has P1-l and P2-a but nothing for NOC tooling or an SLA.
 
@@ -41,7 +41,7 @@ Untaken quests on upstream `main` whose result would move an entry above, ranked
 | `route-health/recovery` | L | P1-b; [Architecture](../docs/architecture.md) §5 | Relays would switch from a route lagging a same-epoch standby by more than the reader's delay, before the idle timeout, without a 2022-7 receiver | Its metadata-subscription and route-selection quests; epochs on every hop, which moq-transport no longer carries (#7239), so never P1-j's moqx hop |
 | `qos-publisher-timeliness` | M | P1-l | A health verdict per publisher from the relay alone; the per-subscriber verdict is on `main` | The lag histogram whose type it reuses, which waits on moq-net's QUIC acknowledgments |
 
-Set aside: the QoS line's lag histogram (R8 only), the E2EE line beyond P1-ae's gate (a contract option, not a requirement: [Control](../docs/control-plane.md) §7.3), `broadcast-fairness` (tenants sharing a cluster link; one operator's channels until P1-j's second hop), `perf/shard-default` (our relay's knee, which P1-j's supersedes), `auth-token-fetch` (a gate for P1-ac's moqx arm only if moqx asks a token of FETCH).
+Set aside: the QoS line's lag histogram (R8 only), the E2EE line beyond P1-ae's gate (a contract option, not a requirement: [Control](../docs/control-plane.md) §7.3), `broadcast-fairness` (tenants sharing a cluster link; one operator's channels until P1-j's second hop), `perf/shard-default` (our relay's knee, which P1-j's supersedes), `auth-token-fetch` (a gate for P1-ac's moqx arm only if moqx asks a token of FETCH), `mux-rate-raise` (our #7958; exporting at the source's own rate stands in for it).
 
 ## Blocked on apparatus
 
