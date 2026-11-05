@@ -1,6 +1,6 @@
 # Test 39 — Observability across an administrative boundary
 
-**State: partially run, 2026-09-11. Part A run and passed; Part B blocked on an upstream gap, with the blocker identified and evidenced rather than assumed.** Tier placement and the reasoning for it are in _Tiering_ below, including the one place this stretches a tier.
+**State: Parts A and C run and passed; Part B's blocker, a tooling gap identified and evidenced below, is closed on late October 2026 `main` (`import --echo-path`, `export --echo`) and in no release; Part B runs as [P1-l](planned-experiments.md#p1--establishes-where-one-architecture-is-superior).** Tier placement and the reasoning for it are in _Tiering_ below, including the one place this stretches a tier.
 
 **Headline.** A standalone process at the client edge, on its own subscription, **catches a T24-class partial-media fault that no relay-side telemetry can express** — _measured_: the suppressed audio PID alarmed on its own at media t=25.025 s with every other elementary stream still delivering, while the groomer ran alongside it unmodified and the relay's counters carried no per-PID field in which the fault could appear. That settles the tier split the design rests on: **tier 2 can prove bytes flowed and can never prove the media was healthy**, so the only place the delivered signal can be assessed is hardware the broadcaster does not own.
 
