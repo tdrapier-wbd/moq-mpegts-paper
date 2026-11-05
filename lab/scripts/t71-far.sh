@@ -25,7 +25,8 @@
 # RIST_PORT (9712; the main profile's one port), CLOCK_PORT (9710), BUFMS (1000), DELAY (1s),
 # VPID (111), DEV (ens5), IFB (ifb71); the segmented lane: SEG_PORT (18731), PACER
 # (~/pacer-97f3a38/mpegts-pacer), RATE (11438000), its cushion BUFMS, DEADLINE_MS (unset; else
-# each segment fetch is bounded, through t74-fetch-deadline.py)
+# each segment fetch is bounded, through t74-fetch-deadline.py), HEDGE_MS (unset; else a fetch
+# still running at HEDGE_MS is requested again on a second open connection, through t74-hedge.py)
 set -euo pipefail
 
 ACTION=${1:?action}
@@ -158,6 +159,9 @@ recv() {
 		if [ -n "${DEADLINE_MS:-}" ]; then
 			recv=$SCRIPTS/t74-fetch-deadline.py
 			dl=(--fetch-deadline-ms "$DEADLINE_MS")
+		elif [ -n "${HEDGE_MS:-}" ]; then
+			recv=$SCRIPTS/t74-hedge.py
+			dl=(--hedge-ms "$HEDGE_MS")
 		fi
 		# shellcheck disable=SC2016
 		rx=(bash -c 'python3 "$1" "$2" - --seconds 0 --poll 250 --log "$3/recv.jsonl" "${@:7}" 2>"$3/recv.err" |

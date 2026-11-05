@@ -1,6 +1,6 @@
 # Test 31 — Congestion and capacity: the step ladders, both planes
 
-**State: both step-capacity ladders are run, replicated and graded on content in the `netns`/`cake` rig — three replicates per rung on both lanes — with each lane's absorption boundary walked, and the segmented one also run in T20's loopback/`netem` rig, which carries a MoQ arm. The delay × contention × RTT matrix is run in three replicates on the merged build: no release delay up to 6 s absorbs a sustained 0.8× share, and against a 5 s dip to 0.8× only 6 s at 200 ms RTT absorbs the video, with the shaper dropping nothing; at 20 ms the relay's qlog finds that loss in its own abandonment of groups, all of it at 6 s and most at 2 s (criterion 8). Every MoQ figure in this file is graded by [`t28-content-lost.py`](scripts/t28-content-lost.py); the PCR-graded MoQ figures this file used to carry were an artefact of the exporter and are withdrawn (see _Corrections_).** [T8b](test-8b-congestion-control.md) settled which controller wins under which provisioning and queue discipline, and attributed the MoQ lane's shared-bottleneck collapse to per-subscriber deadline shedding at `--latency-max`. This experiment asks a different question — how much impairment each lane absorbs before programme is lost — and extends T8b with step-capacity ladders on both planes plus the withheld segmented C2 cells.
+**State: both step-capacity ladders are run, replicated and graded on content in the `netns`/`cake` rig — three replicates per rung on both lanes — with each lane's absorption boundary walked, and the segmented one also run in T20's loopback/`netem` rig, which carries a MoQ arm. The delay × contention × RTT matrix is run in three replicates on the merged build: no release delay up to 6 s absorbs a sustained 0.8× share, and against a 5 s dip to 0.8× only 6 s at 200 ms RTT absorbs the video, with the shaper dropping nothing; at 20 ms the relay's qlog finds that loss in its own abandonment of groups, all of it at 6 s and most at 2 s, and on the sustained share all of it at both RTTs (criterion 8). Every MoQ figure in this file is graded by [`t28-content-lost.py`](scripts/t28-content-lost.py); the PCR-graded MoQ figures this file used to carry were an artefact of the exporter and are withdrawn (see _Corrections_).** [T8b](test-8b-congestion-control.md) settled which controller wins under which provisioning and queue discipline, and attributed the MoQ lane's shared-bottleneck collapse to per-subscriber deadline shedding at `--latency-max`. This experiment asks a different question — how much impairment each lane absorbs before programme is lost — and extends T8b with step-capacity ladders on both planes plus the withheld segmented C2 cells.
 
 **Headline: the MoQ lane loses picture at every rung below 1.1× of the stream's rate, including 1.0×, and keeps its sound.** Against a 9.95 Mb/s stream on `ffa5b81b`, sixty seconds at exactly the stream's rate costs **7.3–9.6 s of video in holes** (10.3–12.6 s conserved), and at **0.9× it costs 13.4–18.4 s** across six samples, in holes of up to 2.4 s, while audio loses 0–1.7 s. Chronic 0.8× costs 13.4–25.7 s of video and 0.5× costs 60.2–75.6 s — at 0.5× the picture stops for most of the dip. These are the holes; each shedding cell is a further 1.5–9.4 s short when its window closes. **1.1× is clean in all three replicates**, so the boundary lies between 1.0× and 1.1× of the transport-stream rate. A 5 s transient at 0.8× costs 0–1.1 s in holes and is 1.6–4.3 s short at close, which may be lag rather than loss. The lane sheds more picture than the deficit it is short of — which, by reasoning rather than measurement, follows from discarding whole groups on a deadline — and it sheds each track separately: video is evicted while audio continues. Neither padding nor the congestion controller changes these figures beyond single-sample scatter.
 
@@ -198,6 +198,39 @@ Controls peak at 0.14–0.22 s of queue with 0.00–0.03 s abandoned.
 
 **Recovery (criterion 2's tests).** After every dip the class runs at or above its pre-dip rate (19.69–23.53 against 19.53–19.76 Mb/s), and each subscriber's queue ends the window at 0.001–0.023 s, its pre-dip level. The 10 % buffer test cannot be applied: the pre-dip queue is 0.0001–0.004 s, so 10 % of it is below the 0.14–0.22 s the queue reaches in an unimpaired control.
 
+### On the sustained share the relay sheds the tail of almost every group, at either RTT
+
+Criterion 8 on the sustained rung, on criterion 8's build, on a fourth host off the core [T21](test-21-permanence-soak.md)'s export uses, with no build beside it. 24 cells and three positive controls, 54 subscribers, none void.
+
+```bash
+# fourth host; the logging is criterion 8's
+L=(RELAY_QLOG=1 "RELAY_RUST_LOG=warn,moq_net::lite::publisher=debug" NS=2 \
+	"SUB_RUST_LOG=info,moq_net::lite::subscriber=debug,moq_mux::container::consumer=debug")
+sudo taskset -c 0-2,4-6 env BIN=<bin-3c0daa21-qlog> "${L[@]}" DELAYS="2 6" RTTS="20 200" CAP_XS="2 0.8" \
+	DIP_S=0 REPS=3 bash lab/scripts/t31-delay-matrix.sh <out>
+sudo taskset -c 0-2,4-6 env BIN=<bin-3c0daa21-qlog> "${L[@]}" DELAYS=6 RTTS=20 CAP_XS=0.8 DIP_S=5 DIP_AT=30 \
+	REPS=3 bash lab/scripts/t31-delay-matrix.sh <out-pos>
+python3 lab/scripts/t31-relay-queue.py <out>/n2-* --dip-at 0 --dip-s 80 --csv sustained.csv
+python3 lab/scripts/t31-relay-queue.py <out-pos>/n2-* --csv pos.csv
+```
+
+**Validity (8a′).** Every control loses 0.00 s of video. Every sustained subscriber lies within criterion 7's range widened by 1 s, so no cell is labelled. Connections pair with their publishers within 0.11 % of bytes in the controls and positive controls, and within 0.55–1.98 % in the sustained cells. The positive controls lose 0.24–0.44 s and the relay abandons 0.18–0.39 s, placed in its queue for both subscribers in all three replicates, as criterion 8 found: the grader stands.
+
+| `--delay`, RTT | Video lost | Abandoned by the relay (share of the loss) | Video groups reset | Relay queue, median | Placed in the relay's queue |
+| --- | --- | --- | --- | --- | --- |
+| 2 s, 20 ms | 16.8–18.5 s | 15.0–17.0 s (86–92 %) | 66–67 | 0.39–0.41 s | 6 of 6 |
+| 6 s, 20 ms | 14.2–15.0 s | 14.5–15.8 s (99–107 %) | 65 | 0.76–0.80 s | 6 of 6 |
+| 2 s, 200 ms | 18.0–19.7 s | 16.3–17.9 s (90–94 %) | 60–66 | 0.41–0.44 s | 6 of 6 |
+| 6 s, 200 ms | 14.3–18.0 s | 15.1–18.3 s (100–107 %) | 60–64 | 0.77–0.87 s | 6 of 6 |
+
+Controls hold a median queue of 0.001–0.003 s.
+
+**The queue (8b′).** The relay resets 60–67 video groups in the 80 s, a median of 1.17 s apart: nearly every group, each for `old`. Each reset abandons the group's unsent tail, 0.0–0.9 s of its media, so the loss is spread through the window: no subscriber's largest hole exceeds 1.32 s. The queue holds its plateau to the end of the window, its last sample at its median. Its peak is 1.02–1.20 s at the join at 2 s, as in the controls (0.80–1.07 s), and 1.08–1.67 s at any point in the window at 6 s. Each subscriber skips 1–6 groups itself. The controller's window falls to 8.3–8.9 kB at 20 ms. At 200 ms it never drops below its initial 15 kB, as in the controls. The shaper drops nothing, its backlog peaks at 61–163 kB against 130–814 kB in the controls, and the class carries 15.36–15.59 of its 15.92 Mb/s.
+
+**Placement (8c′).** Every sustained cell places its loss in the relay's queue, for both subscribers in all three replicates. The subscriber's own skips account for the rest.
+
+**Prediction (8d′): not falsified.** The shaper drops nothing. At both RTTs the relay expires groups, and what it abandons accounts for the loss in every cell. Its queue holds a plateau through the window, which grows with the delay, rather than rising and draining as it did at 200 ms under the transient. A longer delay raises the plateau and saves about 3 s on average: 17.5 to 14.7 s at 20 ms, and 18.7 to 16.1 s at 200 ms. What remains is close to the share's shortfall, 20 % of the 80 s.
+
 ## Measured — the segmented step-capacity ladder
 
 **Environment.** EC2 secondary, 8 vCPU / 15 GB. Source the same ~9.95 Mb/s CBR slice of `contrib-10m.ts`, packaged by `tsp -O hls` to nginx and pulled over **HTTP/3** by [`hls-verbatim-recv.py`](scripts/hls-verbatim-recv.py), the byte-faithful receiver — an FFmpeg receiver re-muxes and would grade itself rather than the wire ([T42](test-42-h3-receiver-fidelity.md)). Provisioned rate 20 Mb/s, rungs derived from `STREAM_MBIT=9.95` exactly as the MoQ ladder derives them. Rig [`t28-t31-segmented-ladder.sh`](scripts/t28-t31-segmented-ladder.sh) over [`t20-h3-arm.sh`](scripts/t20-h3-arm.sh), one sample per cell, **wire** domain, at **P1**.
@@ -306,6 +339,13 @@ This is a characterisation, not a gate. "Pass" marks cells that meet the program
 - **8c. Placement.** A subscriber's lost video is placed in the relay's queue when the media the relay abandoned for it is within 0.2 s or 20 % of its video lost, whichever is larger; at the subscriber when its own skips account for it instead; otherwise it is unplaced. A cell takes a placement when both subscribers have it in at least two of three replicates.
 - **8d. The prediction it can falsify.** The relay abandons a group only once the transport has held it past its drift budget. So at 20 ms the abandoned media accounts for the loss, and at 200 ms, where the dip is absorbed, the queue rises and drains with nothing abandoned.
 
+**Criterion 8 on the sustained rung ([Evidence](evidence.md) §3.3), fixed before it runs.** This is criterion 7's sustained share, where no delay up to 6 s helps, read with criterion 8's instruments. The build is criterion 8's (`3c0daa21`, relay built with qlog), with its subscriber logging. n = 2, `--delay` {2, 6 s} × RTT {20, 200 ms}, the class at 0.8 × n × the stream's rate for the whole 80 s window, against its 2 × n control, three replicates, interleaved: 24 cells. Each replicate adds one transient cell as the grader's positive control: criterion 8's 5 s dip at 6 s and 20 ms, whose loss that run placed in the relay's abandonment. The rig runs on a fourth host, off the core another run there uses, and no build runs beside it. [`t31-relay-queue.py`](scripts/t31-relay-queue.py) grades the sustained cells with the window as the impairment (`--dip-at 0 --dip-s 80`).
+
+- **8a′. Validity.** Every control loses ≤ 0.1 s of video. Each sustained subscriber's video lost lies within criterion 7's range for its delay and RTT at n = 2, widened by the method's 1 s; otherwise the build or host has moved the result, and the cell is graded but labelled. Each connection pairs with its publisher's by bytes within 2 %. The positive control places its loss in the relay's queue (8c's rule) in at least two of three replicates; otherwise the grader is not used on the sustained cells.
+- **8b′. The queue.** As 8b, over the window: its median and peak and the peak's time, the relay controller's congestion window, the shaper's backlog and drops, the resets with their reasons, and the subscriber's own skips.
+- **8c′. Placement.** 8c's rule and tolerance, per cell.
+- **8d′. The prediction it can falsify.** The shaper drops nothing, as in criteria 7 and 10. The relay expires groups against the delay budget at both RTTs, so abandoned media accounts for the loss in every cell. Its queue holds a plateau set by the delay through the window, rather than rising and draining as it did at 200 ms under the transient.
+
 ## Limits, stated in advance
 
 - **Namespace primary; wide-area corroboration optional.** Results bound behaviour at a controlled bottleneck, not internet-scale fan-out ([T26](test-26-cross-host-fanout.md) retires co-resident subscriber artefacts only for fan-out, not for this rig).
@@ -325,7 +365,7 @@ This is a characterisation, not a gate. "Pass" marks cells that meet the program
 | 5 | Latency-max ladder at n ∈ {2, 3} | **Not run at contention; superseded by 6–7 on `--delay` builds.** The budget axis was exercised only at n = 1, and only against an outage rather than a capacity step — recorded in [T28](test-28-failure-injection-matrix.md), where it produced a non-monotonic result that this criterion's phrasing assumes cannot happen |
 | 6 | Delivered latency on `--delay` builds | **Met.** About twice the delay; no subscriber drifts more than 100 ms, none excluded |
 | 7 | Delay × contention × RTT | **No delay in {1, 2, 4, 6 s} suffices** at n ∈ {2, 3} or any RTT: 14.0–21.9 s of video lost against 0.00 s controls, falling 2.7–3.2 s in median from 1 s to 6 s |
-| 8 | Recovery on `--delay` builds | **Measured on the 5 s transient, n = 2.** At 20 ms RTT the loss is the relay's abandonment of groups (all of it at 6 s, 71–84 % at 2 s, where the rule leaves the cell unplaced); at 200 ms and 6 s the relay's queue rises to 0.40–0.96 s and drains with at most 0.05 s abandoned. No rate or queue regression after any dip; the 10 % buffer test cannot be applied to a near-empty queue. One replicate at 200 ms fails validity |
+| 8 | Recovery on `--delay` builds | **Measured on the 5 s transient, n = 2.** At 20 ms RTT the loss is the relay's abandonment of groups (all of it at 6 s, 71–84 % at 2 s, where the rule leaves the cell unplaced); at 200 ms and 6 s the relay's queue rises to 0.40–0.96 s and drains with at most 0.05 s abandoned. No rate or queue regression after any dip; the 10 % buffer test cannot be applied to a near-empty queue. One replicate at 200 ms fails validity. **On the sustained share, n = 2:** at both RTTs and delays the loss is the relay's abandonment of nearly every group's tail, placed in 24 of 24 cells, and its queue holds a 0.4 s plateau at 2 s and 0.8 s at 6 s |
 | 9 | Error bars | **Met** for criteria 7 and 10 and every rung of both `netns`/`cake` ladders: three replicates per cell, quoted as ranges |
 | 10 | A delay against a transient shortfall | **6 s at 200 ms RTT; none in {1, 2, 6 s} at 20 ms**, at n ∈ {2, 3}, on video. The shaper drops nothing; audio loses up to 2.11 s, which the criterion does not grade |
 
@@ -336,7 +376,7 @@ Criterion 5 deserves a note rather than a bare "not run": it asks for the _small
 The rig tears down and rebuilds from `t8b-netns.sh` on the EC2 secondary, and nothing here waits on a third party.
 
 - **Whether the MoQ boundary is the lane's or the wire's.** On `b581c27e` the lane's mean wire rate is 0.99× the TS rate (criterion 10's controls), so mean framing overhead does not set the 1.0×–1.1× boundary measured on `ffa5b81b`; its rate over a keyframe's span is not measured.
-- **Buffer and RSS instrumentation on the sustained rungs** for criterion 2. Criterion 8 reads the relay's queue from qlog on the transient only.
+- **RSS instrumentation on the sustained rungs** for criterion 2. Criterion 8 reads the relay's queue from qlog.
 - **Durations beyond 60 s** on either lane's boundary rungs; the segmented lane's margin is set by retention against accumulated lag, so a longer dip at 0.9× is the cell an operator sizing retention needs.
 - **The withheld C2 cells** remain unpublished until the competing-flow instrumentation this protocol adds is in place — publishing them without it was judged worse than silence ([T8b § C2 withheld](test-8b-congestion-control.md#the-segmented-rows-of-c2-are-withheld-pending-a-re-run)).
 

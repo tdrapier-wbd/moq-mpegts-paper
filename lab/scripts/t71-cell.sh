@@ -27,7 +27,7 @@ TO=${TO:-$(command -v gtimeout || command -v timeout)}
 R=t71/runs/$CELL
 BUFMS=${BUFMS:-1000}
 DELAY=${DELAY:-1s}
-FENV="ORIGIN_IP=$ORIGIN_IP BUFMS=$BUFMS DELAY=$DELAY${DEADLINE_MS:+ DEADLINE_MS=$DEADLINE_MS}"
+FENV="ORIGIN_IP=$ORIGIN_IP BUFMS=$BUFMS DELAY=$DELAY${DEADLINE_MS:+ DEADLINE_MS=$DEADLINE_MS}${HEDGE_MS:+ HEDGE_MS=$HEDGE_MS}"
 OENV="BUFMS=$BUFMS"
 # CAPTURE=<origin NIC>: TCP headers of the segmented lane at the origin, into $R/origin.pcap.
 CAPTURE=${CAPTURE:-}
@@ -87,7 +87,7 @@ put "$FAR" "$R/origin.tar" "$LOG/$CELL/origin.tar"
 on "$FAR" 60 "tar -xf $R/origin.tar -C $R && rm $R/origin.tar && cd $R && tar -cf - clock-far.txt impair.txt recv-events.log receive.log \$(ls recv.jsonl recv.err pacer.log sched.jsonl 2>/dev/null)" |
 	tar -xf - -C "$LOG/$CELL"
 rm "$LOG/$CELL/origin.tar"
-echo "lane=$LANE loss=$LOSS secs=$SECS bufms=$BUFMS delay=$DELAY deadline_ms=${DEADLINE_MS:-} capture=${CAPTURE:+1} broadcast=$BCAST" >"$LOG/$CELL/cell.txt"
+echo "lane=$LANE loss=$LOSS secs=$SECS bufms=$BUFMS delay=$DELAY deadline_ms=${DEADLINE_MS:-} hedge_ms=${HEDGE_MS:-} capture=${CAPTURE:+1} broadcast=$BCAST" >"$LOG/$CELL/cell.txt"
 
 trap - EXIT
 step "done: $(on "$FAR" 30 "stat -c %s $R/egress.ts") egress bytes; $(grep -c . "$LOG/$CELL/source.csv") source rows; $(tr '\n' ' ' <"$LOG/$CELL/impair.txt")"

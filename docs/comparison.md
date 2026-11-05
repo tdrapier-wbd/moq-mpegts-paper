@@ -335,7 +335,7 @@ Transparent carriage is no longer single-vendor, but **transparent is not always
 **Six limits qualify every verdict here**, each with its conditions in [Evidence](../lab/evidence.md) §4 and, where one exists, the §5 row there that would discharge it.
 
 - **No lane has been graded on a hardware IRD, and every 1+1 result comes from a software receiver** against a self-tested ST 2022-7 oracle (§5.1); row 1 would discharge both.
-- **The data-plane comparison is one clip over two routes, and each impairment cell one run**; no attempt yet, but for row 9's third source, which tests carriage cost alone.
+- **The data-plane comparison is one clip over two routes, and each impairment cell one run**; no attempt yet, but for row 8's third source, which tests carriage cost alone.
 - **Fan-out is one relay in one region or two CDN edges**; no attempt yet past one hop.
 - **Most media-aware results are on September 2026 builds** and hold on current upstream only where stated; no attempt yet at a full re-run.
 
@@ -352,7 +352,7 @@ Transparent carriage is no longer single-vendor, but **transparent is not always
 5. **Sub-second requirement: routes or preference?** It decides MoQ's addressable share, and is a commercial question (§5.2).
 6. **Edge gateway at the demarcation or at a regional PoP?** It sets the delivery bill (§4.5). No attempt yet.
 7. **Genuine segment loss against lateness?** A redundant origin covers it inside one CDN (§7); a second edge or a Content Steering pathway, specification-only, has no attempt yet (§6.2).
-8. **Relay portability against commoditised delivery economics?** ([Evidence](../lab/evidence.md) §3.7; row 10.)
+8. **Relay portability against commoditised delivery economics?** ([Evidence](../lab/evidence.md) §3.7; row 9.)
 9. **A real estate's fade and connectivity profile?** The satellite-hybrid case turns on correlated fades and on whether IP availability is independent of fade at each site (§1.2). Only an estate's own records answer it.
 
 ---

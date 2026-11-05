@@ -24,7 +24,9 @@ group to reach the relay by its first byte that is at least its size. A subscrib
 matched to its `sub.<i>.log` by its `old` resets against the log's `group error err=old` lines, and
 to its publisher by bytes; with nothing to go by, both follow start order (both feeds carry one
 clip from one instant). The dip is read from `events.txt`; a control cell takes the same instant,
-DIP_AT s after the publishers connect.
+DIP_AT s after the publishers connect. A shortfall held for the whole window has no dip in
+`events.txt`: grade it with --dip-at 0 and --dip-s the window, and read q_med_s, the queue's median
+across it, where a transient has q_pre_s.
 
     t31-relay-queue.py <cell-dir>... [--csv out.csv] [--dip-at 30] [--dip-s 5]
 """
@@ -206,6 +208,7 @@ def grade(d: Path, dip_at: float, dip_s: float) -> list[dict]:
 		q = [(t, (r - s - a) / rate) for t, r, s, a in zip(grid, rx, tx, ab)]
 		pre = [v for t, v in q if t_a + 10 <= t < start]
 		pre_med = statistics.median(pre) if pre else float("nan")
+		during = [v for t, v in q if start <= t <= end]
 		after = [(t, v) for t, v in q if start <= t <= end + 30]
 		peak_t, peak = max(after, key=lambda x: x[1]) if after else (start, float("nan"))
 		back = next((t for t, v in after if t >= peak_t and v <= pre_med * 1.1), None)
@@ -239,7 +242,8 @@ def grade(d: Path, dip_at: float, dip_s: float) -> list[dict]:
 			"cell": d.name, "sub": i, "video_lost_s": lost,
 			"abandoned_media_s": round(media, 3), "resets": len(conn.resets), "never_opened": len(never),
 			"reset_groups": " ".join(groups) or "-", "skips": " ".join(skips) or "-",
-			"q_pre_s": round(pre_med, 4), "q_peak_s": round(peak, 3), "q_peak_at_s": round(peak_t - start, 2),
+			"q_pre_s": round(pre_med, 4), "q_med_s": round(statistics.median(during), 3) if during else "NA",
+			"q_peak_s": round(peak, 3), "q_peak_at_s": round(peak_t - start, 2),
 			"q_back_s": round(back - end, 2) if back else "no",
 			"q_end_s": round(statistics.median([v for t, v in q if t >= last_t - 5]), 4) if q else "NA",
 			"cwnd_pre": round(statistics.median(cw_pre)) if cw_pre else "NA",

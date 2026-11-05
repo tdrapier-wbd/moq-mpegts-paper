@@ -314,8 +314,8 @@ Same division measured in the data plane: pacing primitive general and upstream;
 - **The incumbent's side is a parity threshold, not a cost.** Commercially sensitive inputs are excluded: no customer pricing, no vendor contract or discount terms, no transponder or fibre lease rates, no incumbent's actual or depreciated route cost, and no third-party reports of what anyone pays at negotiated volume. This qualifies §4.4 and §6, which compare against our own figures instead of theirs. Only an operator can discharge it, in private, by substituting its own route cost into the linear arithmetic (§10).
 - **Three inputs are neither published nor measured, and each is labelled wherever it appears.** The negotiated-discount figure in §4.4 is a **hypothetical** percentage off published list — illustrative arithmetic, not anyone's terms. The CDN relay rates are **assumptions** about where a competitive market would land, since only two providers publish a MoQ relay tariff. The self-hosted build-up is **illustrative**. Nothing here should be read as evidence that a particular rate is obtainable. No attempt yet: a committed-volume relay quote would discharge the second, which carries the most (§10).
 - **Staffing and the control plane are outside every figure**, and at low route counts they can exceed all of them: at the single-route scale in §4, one on-call engineer costs more than the entire modelled transport line. **This is a transport-line comparison, not a business case**, and no attempt has been made to price them.
-- **The carriage multiplier is measured on two sources** (§3), and on both MoQ's advantage is the source's stuffing. It qualifies the deciding line in §4.4; [Evidence](../lab/evidence.md) §5 row 9 would discharge it.
-- **The rented-relay market premise is not yet met:** relay portability between implementations is partial, so the suppliers in §4.6 and §7.1 are not interchangeable. [Evidence](../lab/evidence.md) §5 row 10.
+- **The carriage multiplier is measured on two sources** (§3), and on both MoQ's advantage is the source's stuffing. It qualifies the deciding line in §4.4; [Evidence](../lab/evidence.md) §5 row 8 would discharge it.
+- **The rented-relay market premise is not yet met:** relay portability between implementations is partial, so the suppliers in §4.6 and §7.1 are not interchangeable. [Evidence](../lab/evidence.md) §5 row 9.
 - **The satellite hybrid is reasoned, not priced** (§6.1): no satellite capacity rate is published, no fade statistics for a real estate are held, and nothing on the hybrid path has been measured. No attempt yet.
 
 ---
@@ -331,13 +331,13 @@ Same division measured in the data plane: pacing primitive general and upstream;
 
 **Engineering, with a direct economic payoff.**
 
-- **How much of MoQ's carriage advantage survives a third source?** On two it _is_ the source's stuffing: 5.3 % against SRT on a clip 4.57 % nulls, none on a stuffing-free live feed. A loosely filled carrier would bound the range. The cheapest outstanding measurement on the deciding line ([Evidence](../lab/evidence.md) §5 row 9).
+- **How much of MoQ's carriage advantage survives a third source?** On two it _is_ the source's stuffing: 5.3 % against SRT on a clip 4.57 % nulls, none on a stuffing-free live feed. A loosely filled carrier would bound the range. The cheapest outstanding measurement on the deciding line ([Evidence](../lab/evidence.md) §5 row 8).
 - **What is the overhead on a lossy real path?** Both protocols are measured back-to-back at 1 % random loss and neither moved by more than a point; random loss beyond that stresses a transport rather than models a route, and the sender-side cost is inferred rather than captured. No attempt yet.
 - **What does SRT actually cost to fan out?** N origin sessions or a re-origination tier, so a per-datagram framing comparison flatters SRT at exactly the topology broadcast uses. No attempt yet.
 
 **Platform maturity, which the model assumes away.**
 
-- **Is relay capacity a market the buyer can shop?** The cost case treats it as a commodity procurable from more than one supplier; relay portability is partial (§4.6; [Evidence](../lab/evidence.md) §5 row 10).
+- **Is relay capacity a market the buyer can shop?** The cost case treats it as a commodity procurable from more than one supplier; relay portability is partial (§4.6; [Evidence](../lab/evidence.md) §5 row 9).
 - **What does relay memory cost to operate around?** A sizing line rather than a restart cycle, since it plateaus softly rather than climbing indefinitely — **budgeted at about 2–2.5× the slot ceiling per publisher** — and the cost lands on multi-channel relay density, not on audience: growth is flat across 0–4 subscribers ([Evidence](../lab/evidence.md) §3.6). That plateau was measured on the quinn build; on the noq build one 24 h re-soak read the relay flat, so whether the budget is a property of the design or of the QUIC stack is open. No experiment is scheduled.
 - **How much of the operational-saving hypothesis survives running an immature platform to a broadcast SLA?** Staffing already outweighs the modelled transport line at single-route scale (§9). Only operation to an SLA would answer it.
 

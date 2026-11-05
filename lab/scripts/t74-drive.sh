@@ -2,12 +2,13 @@
 # T74's and T75's matrices on T71's rig, one cell at a time; resumable: a cell whose record is
 # complete is skipped, a failed one reported and passed.
 #
-#   ORIGIN_IP=<addr> ORIGIN=<ssh alias> FAR=<ssh alias> t74-drive.sh <t74|t75|p1ap> [seconds] [rounds...]
+#   ORIGIN_IP=<addr> ORIGIN=<ssh alias> FAR=<ssh alias> t74-drive.sh <t74|t75|p1ap|hedge> [seconds] [rounds...]
 #
 # T74: per round, {clean, time bursts} × the four lanes at the 2 s budget, the lanes rotated per round.
 # P1-ap (DEADLINE_MS, CAPTURE=<origin NIC>): per round, the segmented lane under time bursts without
 # and then with the fetch deadline, a header capture at the origin on each; round 1 adds a clean cell
-# with the deadline.
+# with the deadline. Hedge (HEDGE_MS, CAPTURE): the same with the re-request on a second open
+# connection in place of the deadline.
 # T75: per round at 2 s, RIST under {clean, 1 %, T73's Gilbert bursts, T74's time bursts} and SRT
 # under {1 %, Gilbert}, then RIST and SRT at 1 % at the 1 s budget; T74's SRT cells complete the 2 s
 # pairs. Round r's time bursts use seed 7400 + r in both matrices, so RIST meets SRT's timeline.
@@ -37,7 +38,7 @@ loss_of() {
 }
 
 cell() {
-	local name=$1 lane=$2 cond=$3 r=$4 bufms=$5 delay=$6 dl=${7:-}
+	local name=$1 lane=$2 cond=$3 r=$4 bufms=$5 delay=$6 dl=${7:-} hg=${8:-}
 	if [ -s "$LOG/$name/cell.txt" ]; then
 		echo "skip $name"
 		return
@@ -48,7 +49,7 @@ cell() {
 			return
 		}
 	fi
-	BUFMS=$bufms DELAY=$delay DEADLINE_MS=$dl CAPTURE=${CAPTURE:-} \
+	BUFMS=$bufms DELAY=$delay DEADLINE_MS=$dl HEDGE_MS=$hg CAPTURE=${CAPTURE:-} \
 		bash "$HERE/t71-cell.sh" "$name" "$lane" "$(loss_of "$cond" "$r")" "$SECS" ||
 		echo "FAILED $name"
 }
@@ -80,6 +81,13 @@ for r in "${ROUNDS[@]}"; do
 		cell "p1ap-r$r-seg-tb" seg tb "$r" 2000 2s
 		cell "p1ap-r$r-seg-tb-dl" seg tb "$r" 2000 2s "$DEADLINE_MS"
 		[ "$r" != 1 ] || cell "p1ap-r$r-seg-clean-dl" seg clean "$r" 2000 2s "$DEADLINE_MS"
+		;;
+	hedge)
+		: "${HEDGE_MS:?set HEDGE_MS}" "${CAPTURE:?set CAPTURE to the origin NIC}"
+		hedge=$HEDGE_MS
+		cell "hedge-r$r-seg-tb" seg tb "$r" 2000 2s
+		cell "hedge-r$r-seg-tb-hg" seg tb "$r" 2000 2s "" "$hedge"
+		[ "$r" != 1 ] || cell "hedge-r$r-seg-clean-hg" seg clean "$r" 2000 2s "" "$hedge"
 		;;
 	*)
 		echo "unknown matrix: $WHICH" >&2

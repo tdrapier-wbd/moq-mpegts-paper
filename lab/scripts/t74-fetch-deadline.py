@@ -57,7 +57,8 @@ def main():
 			return plain_get(self, url, extra)
 		except Exception as e:
 			if state["fired"]:
-				raise TimeoutError(f"fetch deadline {deadline * 1000:.0f} ms at {(time.time() - t0) * 1000:.0f} ms") from e
+				ms = (time.time() - t0) * 1000
+				raise TimeoutError(f"fetch deadline {deadline * 1000:.0f} ms at {ms:.0f} ms") from e
 			raise
 		finally:
 			with lock:

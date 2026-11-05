@@ -14,10 +14,15 @@
 #   dropped, restarted whenever it ends or falls silent for SILENCE_S (ts-stall-guard.py); logs each
 #   export's start, end and stall and every liveness event, and keeps the export's PID in
 #   <out>/export.pid. With GRADE_RATE set, the export is also graded in flight at that constant rate
-#   (continuity, absolute PCR accuracy at ±500 ns) into <out>/grade.log.
+#   (continuity, absolute PCR accuracy at ±481 ns, each failure timestamped) into <out>/grade.log;
+#   with MONITOR=1, t21-pcr-monitor.py adds one UTC-stamped line a minute to <out>/monitor.log.
+#   CONNECT_JWT names a file holding a subscribe token: the URL carrying it goes in MOQ_CONNECT, so
+#   the token is in no command line. PERTURB passes its arguments to pcr-perturb.py ahead of the
+#   graders, as their positive control; SECS overrides <hours>.
 #
 # env: GROUP (239.255.0.1:5000), RING_S (60), SEG_S (20), POST_S (20), MAX_EVENTS (10),
-#      UNIT (moq-live-publisher), EXPORT_FLAGS (--delay 1s), SILENCE_S (10), GRADE_RATE (unset)
+#      UNIT (moq-live-publisher), EXPORT_FLAGS (--delay 1s), SILENCE_S (10), GRADE_RATE (unset),
+#      MONITOR (0), CONNECT_JWT (unset), PORT (443), PERTURB (unset), SECS (unset)
 set -uo pipefail
 
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
@@ -76,25 +81,51 @@ watch)
 	BIN=${1:?bin dir} OUT=${2:?out dir} HOURS=${3:?hours} ORIGIN=${4:?origin} BCAST=${5:?broadcast}
 	mkdir -p "$OUT"
 	read -ra XFLAGS <<<"$EXPORT_FLAGS"
+	URL="https://$ORIGIN:${PORT:-443}/anon"
+	DIAL=(--connect "$URL")
+	TOKENED=
+	if [ -n "${CONNECT_JWT:-}" ]; then
+		DIAL=()
+		TOKENED="$URL?jwt=$(<"$CONNECT_JWT")"
+	fi
+	stamp() { while IFS= read -r l; do printf '%s %s\n' "$(utc)" "$l"; done; }
+	perturb() {
+		if [ -n "${PERTURB:-}" ]; then
+			local p
+			read -ra p <<<"$PERTURB"
+			python3 "$HERE/pcr-perturb.py" "${p[@]}" --log "$OUT/perturb.log" 2>>"$OUT/perturb.err"
+		else
+			cat
+		fi
+	}
 	grade() {
 		if [ -n "$GRADE_RATE" ]; then
-			tee >(tsp -I file - -P continuity -P pcrverify --absolute --jitter-max 13 \
+			tee >(tsp -I file - -P continuity -P pcrverify --absolute --jitter-max 13 --timestamp \
 				--bitrate "$GRADE_RATE" -O drop 2>>"$OUT/grade.log")
 		else
 			cat
 		fi
 	}
-	echo "$(utc) watch flags=[$EXPORT_FLAGS] silence=${SILENCE_S}s grade_rate=${GRADE_RATE:-off}" >>"$OUT/exports.log"
-	end=$(($(date +%s) + HOURS * 3600))
+	monitor() {
+		if [ "${MONITOR:-0}" = 1 ]; then
+			tee >(python3 "$HERE/t21-pcr-monitor.py" --window 60 | stamp >>"$OUT/monitor.log")
+		else
+			cat
+		fi
+	}
+	echo "$(utc) watch flags=[$EXPORT_FLAGS] silence=${SILENCE_S}s grade_rate=${GRADE_RATE:-off} monitor=${MONITOR:-0} token=${CONNECT_JWT:+file}" >>"$OUT/exports.log"
+	end=$(($(date +%s) + ${SECS:-$((HOURS * 3600))}))
 	n=0
 	while [ "$(date +%s)" -lt "$end" ]; do
 		n=$((n + 1))
 		echo "$(utc) start $n" >>"$OUT/exports.log"
-		timeout -s INT $((end - $(date +%s))) python3 "$HERE/ts-stall-guard.py" --silence "$SILENCE_S" \
-			--log "$OUT/exports.log" --pidfile "$OUT/export.pid" -- \
-			"$BIN/moq" --connect-tls-insecure --connect "https://$ORIGIN:443/anon" --broadcast "$BCAST" \
+		MOQ_CONNECT=$TOKENED timeout -s INT $((end - $(date +%s))) python3 "$HERE/ts-stall-guard.py" \
+			--silence "$SILENCE_S" --log "$OUT/exports.log" --pidfile "$OUT/export.pid" -- \
+			"$BIN/moq" --connect-tls-insecure ${DIAL[@]+"${DIAL[@]}"} --broadcast "$BCAST" \
 			export ts "${XFLAGS[@]}" 2>>"$OUT/export.log" |
+			perturb |
 			grade |
+			monitor |
 			python3 "$HERE/ts-liveness.py" - --warmup 10 --learn 40 --jsonl \
 				>>"$OUT/liveness.jsonl" 2>>"$OUT/liveness.err"
 		echo "$(utc) end $n rc=${PIPESTATUS[0]}" >>"$OUT/exports.log"

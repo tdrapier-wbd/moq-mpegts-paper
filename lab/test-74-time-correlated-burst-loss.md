@@ -1,6 +1,6 @@
 # Test 74 — Time-correlated burst loss on the long path
 
-**State: run; criteria 2–5 hold, criterion 1 but for one probe reading 0.2 ms out of band. The segmented lane's burst failure is the lane's: under bursts in time it fails two replicates of three, where every continuous lane stays whole. P1-ap: a failing fetch waits on a retransmission timeout, and a 1 s fetch deadline with a retry on a fresh connection does not bound it.** Rig: [T73](test-73-long-path-budget-burst.md)'s at its 2 s budget, with a loss scheduler that defines bursts in time rather than in datagrams ([`t74-time-burst.py`](scripts/t74-time-burst.py), started by `t71-far.sh`; the matrix by [`t74-drive.sh`](scripts/t74-drive.sh)).
+**State: run; criteria 2–5 hold, criterion 1 but for one probe reading 0.2 ms out of band. The segmented lane's burst failure is the lane's: under bursts in time it fails two replicates of three, where every continuous lane stays whole. P1-ap: a failing fetch waits on a retransmission timeout, and a 1 s fetch deadline with a retry on a fresh connection does not bound it. A re-request at 500 ms on a second, kept-warm connection does: whole in three replicates of three, for 1.8–9.1 % more bytes.** Rig: [T73](test-73-long-path-budget-burst.md)'s at its 2 s budget, with a loss scheduler that defines bursts in time rather than in datagrams ([`t74-time-burst.py`](scripts/t74-time-burst.py), started by `t71-far.sh`; the matrix by [`t74-drive.sh`](scripts/t74-drive.sh)).
 
 ## Objective
 
@@ -91,7 +91,8 @@ _Prediction falsified_ for the segmented lane, which was to be whole; SRT and bo
 - **Under bursts defined in time, segmented HTTP alone fails to stay whole on the 116 ms path at a 2 s budget**: in two replicates of three (11.3 s lost; a 7.8 s stall) and in the both-direction diagnostic. The continuous lanes, whose steady flow lets each loss be detected from the packets behind it, stay whole.
 - **The datagram-counted model made the failure worse but did not create it.** Bursts on one direction alone did not fail the lane in either diagnostic.
 - **A 20 ms burst turns a fetch into seconds through a retransmission timeout**, after which the response is resent one round trip at a time (2.2–5.6 s, captured).
-- **Re-requesting on a fresh connection does not bound it at this budget.** On the 116 ms path a new connection needs about the second of slack a 2 s cushion leaves, so a 1 s deadline cuts healthy retries and each cut costs 1.5 s. Open: whether a re-request on a connection already open does ([Evidence](evidence.md) §5 row 4).
+- **Re-requesting on a fresh connection does not bound it at this budget.** On the 116 ms path a new connection needs about the second of slack a 2 s cushion leaves, so a 1 s deadline cuts healthy retries and each cut costs 1.5 s.
+- **Re-requesting on a connection already open bounds it.** At 500 ms on a second connection kept warm by the playlist polls, the lane stayed whole in three replicates of three. Without the re-request, the same timelines cost programme in one and continuity in another. No segment waited over 0.75 s after the join, and the duplicates cost 1.8–9.1 % more bytes. One path, one budget, HTTP/1.1 over TCP.
 
 ## The failing fetch, and a deadline on it (P1-ap)
 
@@ -129,3 +130,40 @@ _Predicted._ A failing fetch begins with a retransmission timeout on a response'
 A new connection fetches a segment in 976–983 ms on this path when it loses nothing, which leaves the deadline 17–24 ms. Two retries that had lost nothing were cut as their last bytes arrived, and two segments were cut twice. Each cut cost about 1.5 s before the next attempt finished, so where it fired the deadline replaced one long recovery with a chain of short ones, 3.2–5.7 s end to end. In both rounds where it fired it also cut the joining fetch, and those two cells ran about 1 s below the others' latency (2,387 and 2,517 ms, against 3,144–3,495 ms), with less cushion when their bursts came; not investigated. 4. **The clean control:** whole, the deadline never firing; its slowest fetch, the joining one on a new connection, took 974 ms. Met, by 26 ms, so criterion 3 is not labelled.
 
 _Prediction_: the failing fetch's shape confirmed. With the deadline, no segment was lost, but waits reached 5.7 s and the programme lost 5.8 s: falsified.
+
+## A re-request on a connection already open ([Evidence](evidence.md) §5 row 4)
+
+**Procedure.** P1-ap's rig, relaunched. The origin is on a host of its own in the same region, with no standing units, rather than beside the soak. Per round r of three, on seed 7400 + r: the segmented lane under time bursts, then again with [`t74-hedge.py`](scripts/t74-hedge.py), which runs the receiver unchanged over two kept-alive connections. Segment fetches alternate between them, and each playlist poll also goes out on the idle one, so neither idles past a retransmission timeout, after which Linux cuts a sender's window. That makes both as warm as the receiver's one connection. A segment fetch still running at 500 ms is requested again on the other connection, and the first complete response is used; the slower one finishes unused. Round 1 adds a clean cell with the hedge. Every cell has a header capture of the lane's TCP at the origin.
+
+**The hedge, set before running.** A healthy fetch on a kept-alive connection takes about 160 ms on this path, and one that recovers a burst by SACK about 6–96 ms more. A failing fetch falls silent for 335–447 ms, a retransmission timeout, before it resends. At 500 ms only the last has not finished, and a request on a warm connection should then complete within about 200 ms, inside the second of slack the 2 s cushion leaves.
+
+**Pass criteria, fixed before running:**
+
+1. Path, scheduler and captures as P1-ap's criterion 1.
+2. **A failing fetch captured without the hedge:** at least one fetch of 2 s or more across the three rounds. None in three rounds is reported as not captured, and criterion 3 then says nothing about the failure.
+3. **The hedge:** the lane whole (T73's criterion 6) in all three cells with it, and it bounds the failure; programme lost in at least one, and it does not. Reported per cell: the hedges fired and which connection answered, the longest wait for a segment, the segments lost, and the bytes the hedges added, against the same round without it.
+4. **The clean control:** whole, the hedge firing on no fetch but the joining one; otherwise 500 ms is too tight for this path and criterion 3 is labelled.
+
+_Predicted._ The hedge bounds the failure: a fetch stalled by a retransmission timeout is overtaken at 500 ms by one on the other connection that completes about 200 ms later, so no segment waits more than about 0.8 s and the lane is whole in all three. A burst that also takes the hedge's request costs one more round trip.
+
+```bash
+HEDGE_MS=500 CAPTURE=<origin-nic> ORIGIN_IP=<EC2_IP> ORIGIN=<origin-host> FAR=<far-host> \
+	bash lab/scripts/t74-drive.sh hedge 120
+python3 lab/scripts/t74-tcp-recovery.py <cell>/origin.pcap --slow-ms 600
+```
+
+**Results**, seven cells:
+
+1. **Path, scheduler and captures hold.** Every switch landed within 0.10 ms of its schedule, and 0.88–1.18 % of the window was lost each way, in bursts of mean 18.3–21.0 ms. Both cells of a round met the same timeline. Round trip 115.0–116.6 ms, clock bound at most 1.23 ms. Every capture spans its window with no packet dropped by the kernel.
+2. **A failing fetch captured,** in round 1 without the hedge: 3.86 s. It began without a silence (its longest send gap was 23 ms). The fetch before it on the same connection had waited out a 353 ms retransmission timeout, and this one went out on the window that left, regrowing one round trip at a time. Round 3's longest fetch took 1.81 s, a retransmission timeout and 831 segments resent; round 2's took 0.62 s.
+3. **The hedge bounds the failure.** Every cell fetched all its segments. Each cell with the hedge also hedged its joining fetch, whose original answered first; the table counts the hedges after it.
+
+| Round | Without the hedge | With it: hedges, re-request first | With it: longest wait after the join | With it: bytes added | With it: programme |
+| --- | --- | --- | --- | --- | --- |
+| 1 | 3.48 s lost, 16 continuity errors, 2 groomer stalls; waits up to 3.86 s | 9, 5 | 0.75 s | 14.6 MB (9.1 %) | whole |
+| 2 | whole; waits up to 0.62 s | 2, 0 | 0.67 s | 5.1 MB (3.2 %) | whole |
+| 3 | 5 continuity errors, one groomer stall, no content lost; waits up to 1.81 s | 1, 1 | 0.75 s | 2.9 MB (1.8 %) | whole |
+
+The bytes added are the unused responses, the join's included; every one completed. The slowest original a re-request overtook took 5.47 s. 4. **The clean control:** whole. The hedge fired once, on the joining fetch (968 ms), whose re-request, the second connection's first, took 967 ms. Met.
+
+_Prediction_: confirmed after the join, with no wait over 0.75 s and the lane whole in all three cells. The joining fetch, on new connections, took 0.97–1.31 s with or without the hedge.

@@ -112,7 +112,8 @@ def fetcher(path, c0_epoch):
 		for line in open(path):
 			r = json.loads(line)
 			if r.get("ev") in ("fetcher-exit", "fetcher-start") and r["t"] >= c0_epoch:
-				out.append({k: r[k] for k in r if k in ("ev", "status", "ran_s")} | {"at_s": round(r["t"] - c0_epoch, 2)})
+				ev = {k: r[k] for k in r if k in ("ev", "status", "ran_s")}
+				out.append(ev | {"at_s": round(r["t"] - c0_epoch, 2)})
 	return out
 
 
@@ -150,7 +151,10 @@ def self_test():
 
 	t0 = 1_700_000_000.0
 	b = leg(t0, 0.040)
-	cut = lambda i, t: not 120 <= t < 151
+
+	def cut(i, t):
+		return not 120 <= t < 151
+
 	# Each case: A, the rejoin (s after the restore; None, never), A's mismatches after it, the content step.
 	cases = {
 		# back at 151 s at the live edge, same numbers and bytes: rejoins 1 s after the restore
@@ -164,7 +168,8 @@ def self_test():
 		# back at 151 s under numbers shifted by 1,000: never rejoins
 		"renumbered": ([(t, (s + 1000) % 65536, p, ts) for t, s, p, ts in leg(t0, 0, cut)], None, None, 31.0),
 		# back at 151 s where it stopped, 31 s behind its partner: never pairs, content steps one datagram
-		"resumed-behind": ([(t + (31 if t - t0 >= 120 else 0), s, p, ts) for t, s, p, ts in leg(t0, 0, lambda i, t: t < 169)],
+		"resumed-behind": ([(t + (31 if t - t0 >= 120 else 0), s, p, ts)
+							for t, s, p, ts in leg(t0, 0, lambda i, t: t < 169)],
 						   None, None, round(90000 / rate) / 90000),
 		# never cut: the negative control
 		"clean": (leg(t0, 0), None, None, None),
