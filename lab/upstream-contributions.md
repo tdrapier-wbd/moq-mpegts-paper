@@ -100,13 +100,13 @@ As proposed, export opened only once every SI entry held a snapshot or failed, s
 
 ### The mux rate the lane could not carry — closed upstream, citing this campaign's groomer; its one-window measurement reported as [#7958](https://github.com/moq-dev/moq/issues/7958)
 
-**The finding.** `moq export ts` carried content only: null packets do not cross MoQ, so reconstructed streams had no stuffing and no declared multiplex rate — [`mpegts-pacer`](https://github.com/tdrapier-wbd/mpegts-pacer)'s README line that the rate is _"not recoverable from MoQ"_ is quoted in the fix.
+**The finding.** `moq export ts` carried content only: null packets do not cross MoQ, so reconstructed streams had no stuffing and no declared multiplex rate.
 
 **Closed** by [#3831](https://github.com/moq-dev/moq/pull/3831): import measures whole-multiplex rate on the PCR PID (nulls included), publishes `mpegts.muxRate` once half-second windows agree within 2 %; export balances null stuffing ahead of each clock packet without delaying media; `--mux-rate` overrides; absent rate exports byte-identically to before.
 
 **Verified here** ([T13](test-13-downstream-grooming.md) § _The exporter now stuffs and declares a rate_, file domain, `0.11.2-615d166d`): stuffing **4.93 %** vs source **4.69 %**; declared rate **+0.36 %**, explicit `--mux-rate` **+0.25 %**; continuity clean; a variable source records no rate and exports unpadded. PCR accuracy and repetition were unmoved on that build; the fixed-delay export passes both ([T21](test-21-permanence-soak.md)).
 
-**Open.** The rate is one 2 s window's, kept within 1 %. Measured 0.19 % low at a restart on a 25 Mb/s CBR feed with no stuffing, it stopped the padded export every 10–20 min (T21). Reported as #7958, asking whether the import should refine the rate or the export report the shortfall.
+**Open.** The rate is one 2 s window's, kept within 1 %. Measured 0.19 % low at a restart on a 25 Mb/s CBR feed with no stuffing, it stopped the padded export every 10–20 min (T21). Reported as #7958 (should the import refine the rate, or the export report the shortfall?); [#7967](https://github.com/moq-dev/moq/pull/7967) (draft) does both: the rate rises after one higher window, and a missed deadline names the rate needed.
 
 ### `ffmpeg -c copy` drops most of a broadcast multiplex — reported as [#5950](https://github.com/moq-dev/moq/issues/5950)
 
