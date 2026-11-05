@@ -118,4 +118,4 @@ _Predicted:_ C0 holds. C2 fails on this clip: the hole is τ plus the wait for t
 
 ## Corrections
 
-**Believed:** the flag leads each stream's timestamp step, so a receiver acting on it acts early; and, in #7741, the skip was a forward jump of PCR and PTS. **True:** the PCR never jumps; each stream's timestamps advance with it across padding, and only padding follows the flag. **Rule:** read a timestamp step against the PCR across it and the stream's offset to the PCR, never against the previous timestamp alone.
+**Believed:** the flag leads each stream's timestamp step, so a receiver acting on it acts early; and, in #7741, the skip was a forward jump of PCR and PTS. **True:** the PCR never jumps; each stream's timestamps advance with it across padding, and only padding follows the flag. **Rule:** [method notes](method-notes.md) §2, on reading a timestamp step against the PCR.
