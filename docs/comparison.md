@@ -40,8 +40,6 @@ Status: working draft. Layer: **the data-plane choice.** Scope: the candidates e
 
 **For most primary-distribution routes there are _two_ viable Internet-native data planes.** They differ on latency only where nothing is conformant: **held TR 101 290 P1/P2-conformant, MoQ delivers a picture over one internet path in 2,447 ms and segmented HTTP in 2,604 ms**, its wire passing the 13818-1 buffer model too ([Evidence](../lab/evidence.md) §3.11). On a route of seconds, latency does not choose between them. **Neither plane is an unconditional choice.** Segmented HTTP leads on most of the remaining axes — maturity, delivery economics and the delivery path's interoperability. Its path back to an IRD-ready transport stream is off the shelf at classic segment durations and groomed to P1/P2 in software, but no free receiver survives an origin failure, and no receiver on either plane has met hardware (§6.2, §9.1, §11). Everything that makes either plane _broadcast-grade_ sits above the transport and is common to both ([Problem](problem.md) §1). **Below about one second no plane here is demonstrated conformant over a whole capture**, so MoQ's sub-second case is architecturally credible and not yet evidenced (§5.1).
 
-The demanding comparator is **segmented HTTP carrying MPEG-TS**: specified, interoperable along the whole delivery path and commodity-delivered today, where MoQ has one implementation (§9.2). Point-to-point incumbents set a low bar on fan-out (§3).
-
 The rows are the requirements of [Problem](problem.md) §5 that a data plane decides (R8 is not one), a week's operation, and the three stages a deployment has to source. ✓ met, within the note's condition; ◐ met in part; ✗ not met; — not measured. Every mark rests on software receivers and one clip or feed per cell (§12), and **no lane has met a hardware IRD**.
 
 | Requirement | MoQ, media-aware lane | MoQ, opaque lane | Segmented HTTP | SRT / RIST (incumbent) |
@@ -58,7 +56,7 @@ The rows are the requirements of [Problem](problem.md) §5 that a data plane dec
 | **Fan-out fabric as a service** | ◐ Cloudflare, Akamai and moq.pro operate MoQ relays, the two that publish a rate at four to ten times commodity delivery; otherwise self-run (§3) | ◐ the same relays; the one CDN-hosted relay measured stalled single sessions (§3) | ✓ any HTTP CDN, a dozen suppliers (§3) | ✗ no commodity market sells it to the destination (§3) |
 | **Open subscriber** (receive to TS) | ◐ `moq export ts`, one implementation (§9.2) | ◐ `moq export ts`; `moq2ts`'s console receiver, untested here (§9.3) | ◐ `tsp -I hls` and FFmpeg at classic durations, neither surviving an origin restart; nothing free at low latency (§9.2) | ✓ open-source SRT and RIST receivers (§1.1) |
 
-**Latency marks every lane met because R4 asks for a bounded few seconds**; the sub-second band is a projection on all of them (§5.1). **Only the opaque lane and segmented HTTP merge legs started apart**: the first leaves its importer single, the second rests on one CDN, and the media-aware lane's redundancy is a switch ([Architecture](architecture.md) §5.2).
+**Latency marks every lane met because R4 asks for a bounded few seconds**; the sub-second band is a projection on all of them (§5.1).
 
 ---
 
@@ -146,7 +144,7 @@ Internet-measured for segmented HTTP, media-aware MoQ and SRT ([T4](../lab/test-
 
 ## 4. Hand-off (R3)
 
-**Both planes reach a P1/P2-conformant wire in software, neither yet on hardware, at different costs: MoQ at a peak-coded-frame buffer, segmented HTTP at a 1–3 s cushion, and only segmented HTTP's wire passes the T-STD too** (§5.1, §2). Segmented HTTP reassembles off the shelf, and MoQ hands the groomer bursts two orders of magnitude smaller.
+**Both planes reach a P1/P2-conformant wire in software, neither yet on hardware, at different costs: MoQ at a peak-coded-frame buffer, segmented HTTP at a 1–3 s cushion; segmented HTTP's groomed wire passes the T-STD too, and MoQ's only through upstream's export for a CBR source** (§5.1, §2). Segmented HTTP reassembles off the shelf, and MoQ hands the groomer bursts two orders of magnitude smaller.
 
 ### 4.1 Obligation
 
@@ -197,8 +195,6 @@ Internet-measured for segmented HTTP, media-aware MoQ and SRT ([T4](../lab/test-
 
 **At equal P1/P2 conformance MoQ keeps 6 % over segmented HTTP and nothing over the tunnels.** Byte-faithful SRT carries the source's own PCR grid over the public internet with 0 P2 violations at 481 ns, ungroomed, at a latency the operator sets — **1,623 ms at a 1 s jitter buffer**, and reducible ([Evidence](../lab/evidence.md) §3.1). **So the sub-second band, the one hard technical discriminator MoQ has over the incumbents ([Economics](economics.md) §7.4), is not demonstrated at conformance on MoQ, and no configuration below one second has passed a whole capture on any lane.** Byte-faithful carriage comes closest, at 114–234 ms on loopback with a damaged stretch in each run, which weighs against MoQ, and the ~650 ms defect bounds that in MoQ's favour. **On a 116 ms path at an equal 1 s budget, only SRT stays whole at 1 % loss**, each MoQ lane losing under a second in one run of three and the media-aware lane trailing both by about 0.25 s; at 2 s every lane is, the MoQ lanes at 2.02–2.30 s and segmented HTTP at 3.22 s, which alone fails under burst loss (§6.1). On CUBIC neither MoQ lane carries 0.1 % ([Evidence](../lab/evidence.md) §3.11). **Neither lane has been graded on a hardware IRD** ([Evidence](../lab/evidence.md) §4).
 
-**A source whose timeline steps back costs MoQ's import programme at each step**, on a release and on upstream's current import alike: a deployment constraint separate from latency ([Architecture](architecture.md) §12, question 3).
-
 ### 5.2 Sub-second need
 
 **Whether MoQ's sub-second claim matters is a condition of its case specifically: does the sub-second requirement exist on identifiable routes, or is it a preference?** "A few seconds tolerable" is true of the feed's own integrity and understates the transition: replacing a geostationary path with a 2–5 s one consumes a downstream budget that was previously free, at every destination — splice and blackout timing, alignment between affiliates on different paths during a migration, live handback, and re-distribution — so it has to be answered per route by the destination.
@@ -211,7 +207,7 @@ Internet-measured for segmented HTTP, media-aware MoQ and SRT ([T4](../lab/test-
 
 ### 6.1 Impairment
 
-**Loss separates the congestion controllers, not the lanes, and once the lanes are substrate-matched nothing cleanly separates them.** Low-Latency HLS **requires** HTTP/2 or HTTP/3, so on HTTP/3 both lanes share QUIC, its per-stream loss isolation and RFC 9218 priorities; MoQ differs in the object and subscription model above it. Measured head-to-head under one shaper ([Evidence](../lab/evidence.md) §3.3):
+**Loss separates the congestion controllers, not the lanes.** Low-Latency HLS **requires** HTTP/2 or HTTP/3, so on HTTP/3 both lanes share QUIC, its per-stream loss isolation and RFC 9218 priorities; MoQ differs in the object and subscription model above it. Measured head-to-head under one shaper ([Evidence](../lab/evidence.md) §3.3):
 
 - **At 10 % loss both lanes hold full rate on BBR and both collapse on CUBIC**, so "segment fetching degrades under loss" compares TCP's default controller with QUIC's tuned one. On HTTP/3, through a byte-faithful receiver, the segmented lane loses nothing up to ~20 % applied loss.
 - **Reordering ranks controllers, not lanes**: equalised for packet size, the segmented lane on HTTP/3 keeps a quarter of the stream whatever the controller, and the media-aware figure moves across the whole range on one controller flag ([T20](../lab/test-20-segmented-http3.md)).
@@ -246,7 +242,7 @@ Internet-measured for segmented HTTP, media-aware MoQ and SRT ([T4](../lab/test-
 
 ## 9. Interoperability and implementations
 
-**Segmented HTTP wins the delivery path decisively and, for a single programme, the receive path at classic durations; "interoperable" has to say which layer it means.** HTTP bytes pass through every CDN and cache, where MoQ's relay is a protocol implementation and a MoQ feed crosses eight of nine other implementations' public relays intact after the join, but only five for a subscriber joining mid-stream ([Evidence](../lab/evidence.md) §3.7). **Segmented HTTP excludes multi-programme carriage by specification, not delivery path**: "Transport Stream Segments MUST contain a single MPEG-2 Program," yet a CDN carries one intact ([Evidence](../lab/evidence.md) §3.1). HLS requires only PAT and PMT, where MoQ threads SDT, NIT, EIT and TDT/TOT through its catalog. SCTE-35 has a specified `EXT-X-DATERANGE` mapping, and CMCD/CMSD give client reporting MoQ has only in drafts, but **neither plane defines how an origin establishes that what a subscriber received was intact** ([Architecture](architecture.md) §9.4).
+**Segmented HTTP wins the delivery path decisively and, for a single programme, the receive path at classic durations; "interoperable" has to say which layer it means.** HTTP bytes pass through every CDN and cache, where MoQ's relay is a protocol implementation and a MoQ feed crosses nine of nine other implementations' public relays intact after the join, but only five for a subscriber joining mid-stream ([Evidence](../lab/evidence.md) §3.7). **Segmented HTTP excludes multi-programme carriage by specification, not delivery path**: "Transport Stream Segments MUST contain a single MPEG-2 Program," yet a CDN carries one intact ([Evidence](../lab/evidence.md) §3.1). HLS requires only PAT and PMT, where MoQ threads SDT, NIT, EIT and TDT/TOT through its catalog. SCTE-35 has a specified `EXT-X-DATERANGE` mapping, and CMCD/CMSD give client reporting MoQ has only in drafts, but **neither plane defines how an origin establishes that what a subscriber received was intact** ([Architecture](architecture.md) §9.4).
 
 ### 9.1 Layers
 
@@ -334,7 +330,7 @@ Transparent carriage is no longer single-vendor, but **transparent is not always
 
 **Four limits qualify every verdict here**, each with its conditions in [Evidence](../lab/evidence.md) §4 and, where one exists, the §5 row there that would discharge it.
 
-- **No lane has been graded on a hardware IRD, and every 1+1 result comes from a software receiver** against a self-tested ST 2022-7 oracle (§5.1); row 1 would discharge both.
+- **No lane has been graded on a hardware IRD, and every 1+1 result comes from a software receiver** against a self-tested ST 2022-7 oracle (§7); row 1 would discharge both.
 - **The data-plane comparison is one clip over two routes, and each impairment cell one run**; no attempt yet, but for row 8's third source, which tests carriage cost alone.
 - **Fan-out is one relay in one region or two CDN edges**; no attempt yet past one hop.
 - **Most media-aware results are on September 2026 builds** and hold on current upstream only where stated; no attempt yet at a full re-run.

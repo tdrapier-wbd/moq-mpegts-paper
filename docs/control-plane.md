@@ -37,7 +37,7 @@ Status: working draft. Layer: **above the transport.** Scope: the provisioning, 
 
 **Revocation is a poll, not a push, and three settings disable it silently; that, not its speed, is what binds a primary-broadcast deployment** (§4.1, §8). Read the acceptance criteria in §8 as proposals, one of which §4.1 records as unachievable.
 
-**For a token, de-provisioning is surgical only under one key per unit of entitlement** (§4); an endpoint that decides a certificate's grant narrows it in place (§3).
+**For a token, de-provisioning is surgical only under one key per unit of entitlement** (§4); upstream's authorization server narrows a certificate's grant in place (§3).
 
 **Read what follows as a specification for something an operator builds**, with the token, key and enforcement machinery as the part sensibly adopted rather than written (§6).
 
@@ -104,7 +104,7 @@ This asymmetry — a strongly consistent but comparatively slow control plane, a
 
 > **Across two implementations, enforcement transfers and the token does not.** `moq-relay` and moqx each refused everything outside a grant before any payload byte and matched on path segments, but their token formats, carriage, key scope, disclosure and withdrawal all differ, so what an operator carries between relays is the entitlement record, rendered for each. One part of the shape above does not hold everywhere: on moqx's release a live session outlives its token's expiry ([Evidence](../lab/evidence.md) §3.10, [T53](../lab/test-53-token-interop.md)).
 
-**The role split above is load-bearing.** On an earlier build, client-certificate authentication for _subscribers_ did not scope them: a peer presenting a valid certificate and no token at all was served every channel in the estate, including another broadcaster's ([T38](../lab/test-38-entitlement-estate.md) Part 5). On the current relay a certificate admits nothing on its own, its name and fingerprint reach the authorization endpoint, and a relay that pairs a client CA with anonymous public access refuses to start. An endpoint that decides by the certificate enforced a twenty-cell licensing matrix exactly, and withdrew or narrowed one certificate's grant within a re-check while the channel it kept ran on ([Evidence](../lab/evidence.md) §3.10).
+**The role split above is load-bearing.** On an earlier build, client-certificate authentication for _subscribers_ did not scope them: a peer presenting a valid certificate and no token at all was served every channel in the estate, including another broadcaster's ([T38](../lab/test-38-entitlement-estate.md) Part 5). On the current relay a certificate admits nothing on its own, its name and fingerprint reach the authorization endpoint, and a relay that pairs a client CA with anonymous public access refuses to start. Upstream's own authorization server, keyed on the certificate chain (upstream `main`, November 2026), enforced a twenty-cell licensing matrix exactly, and withdrew or narrowed one certificate's grant within a re-check while the channel it kept ran on ([Evidence](../lab/evidence.md) §3.10).
 
 ---
 
@@ -285,10 +285,10 @@ Behavioural criteria, which matter more than the numbers:
 
 - **Revocation correctness.** A revoked or unrefreshed entitlement results in no further delivery within the stated bound — one to two re-check periods plus ≈ 0.11 s, worst case one TTL otherwise. **Measured; and the TTL backstop holds even with revalidation disabled.**
 - **Enforcement correctness.** No delivery ever occurs without a valid, in-scope, unexpired token, verified by attempting out-of-scope and expired subscriptions and confirming denial. **Measured: zero payload bytes on every refusing arm, counted at the receiver.** Add to this criterion that it must be verified at the _receiver_, not from relay logs, because one refusal mechanism logs nothing.
-- **Isolation correctness.** No cross-tenant access under any tested path. **Measured for tokens, and for client certificates behind an endpoint that decides by certificate**; an earlier build admitted a certificate's holder to every tenant (§3).
+- **Isolation correctness.** No cross-tenant access under any tested path. **Measured for tokens, and for client certificates behind upstream's authorization server**; an earlier build admitted a certificate's holder to every tenant (§3).
 - **Operational usability.** Provisioning and revocation are simple enough that a NOC can perform an emergency disable under time pressure without error. **This criterion is currently failed by the mechanism, not by the operator**: the intuitive "revoke now" setting is one of the three that makes a session unrevocable, and it reports no error.
 - **Key handling.** Keys never present on edge nodes; no cleartext media or control path. **Measured and met** (§7.2); no transport-stream structure was recoverable from the wire.
-- **De-provisioning granularity.** _A criterion from measurement._ Withdrawing one channel from a multi-channel affiliate must not interrupt the channels it keeps. Met for tokens only under one key per unit of entitlement (§4), and for certificates by an endpoint that narrows the grant (§3).
+- **De-provisioning granularity.** _A criterion from measurement._ Withdrawing one channel from a multi-channel affiliate must not interrupt the channels it keeps. Met for tokens only under one key per unit of entitlement (§4), and for certificates by upstream's authorization server, which narrows the grant in place (§3).
 
 **Validation plan**, for what is still unvalidated: penetration testing of the API, the token issuance path, tenant-isolation boundaries and federation interconnects; red-team scenarios covering cross-tenant access, token theft and replay, a compromised endpoint, a compromised federation peer over-reaching its negotiated scope, and control-plane privilege escalation. The enforcement, revocation, rotation and isolation paths have been exercised against a single relay driven by a stub ([Evidence](../lab/evidence.md) §3.10), which leaves the gaps in §9.
 
