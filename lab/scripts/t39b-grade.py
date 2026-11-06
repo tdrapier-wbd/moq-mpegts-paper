@@ -9,6 +9,10 @@
   run <out dir> [--json grade.json]
       Every `<arm>-<n>/` trial t39b-echo-return.sh wrote, against the rules and criteria fixed in
       the test file (Part B), which are the constants below.
+  live <out dir> [--json grade.json]
+      The live hour t39b-live.sh wrote: Part B's criteria 5 and 6 from LIVE_SKIP_S after the
+      first snapshot, with the frozen-row positive control, and T21's catalog-rate criteria
+      from the monitored export's windows.
 
 A row is STOPPED at the first snapshot whose `units` equal those of a snapshot received at least
 STOP_S earlier, and resumes at the first snapshot whose `units` grew. The feedback is ABSENT
@@ -32,6 +36,9 @@ LATENCY_S = 6.0
 RECOVER_S = 10.0
 CADENCE_S = 1.5
 SETTLE_S = 10.0
+LIVE_SKIP_S = 90.0
+DAMAGE_S = 10.0
+SOURCE_BPS = 25_000_000
 EXPECT = {"audio": "audio", "video": "video", "stall": "all", "relay": "absent"}
 EXPECT_LOCAL = {"audio": "audio", "video": "video", "stall": "all", "relay": "all"}
 
@@ -305,6 +312,151 @@ def run(args):
     return 0
 
 
+# ---- live -----------------------------------------------------------------------------------
+
+TR101290 = ("pcrRepetitionError", "pcrDiscontinuityIndicatorError", "ptsError",
+            "continuityCountError", "patError", "pmtError", "tsSyncLoss", "crcError")
+
+
+def damage_times(rep):
+    """When the importer's own TR 101 290 counters moved: the contribution's damage, as tier 1
+    saw it."""
+    out, last = [], None
+    for t, _, value in rep:
+        m = value.get("mpegts") or {}
+        now = tuple(m.get(k, 0) for k in TR101290)
+        if last is not None and now != last:
+            out.append(t)
+        last = now
+    return out
+
+
+def exits(path, lo, hi):
+    """Export ends in (lo, hi): (t, reason)."""
+    return [(round(t, 1), rest.split("\t", 1)[-1]) for t, kind, rest in tsv(path)
+            if kind == "end" and lo < t < hi]
+
+
+def freeze(snaps, pid, t0, dur):
+    """A copy of `snaps` with `pid`'s units held at their t0 value for `dur` seconds."""
+    held, out = None, []
+    for t, rows, value in snaps:
+        rows = dict(rows)
+        if pid in rows and t0 <= t <= t0 + dur:
+            held = rows[pid][1] if held is None else held
+            rows[pid] = (rows[pid][0], held, rows[pid][2])
+        out.append((t, rows, value))
+    return out
+
+
+def monitor(path):
+    out = []
+    for t, body, rest in tsv(path):
+        kv = dict(x.split("=", 1) for x in (body + " " + rest).split() if "=" in x)
+        if "rate_bps" in kv:
+            out.append((t, {k: float(v) for k, v in kv.items() if v.replace(".", "", 1).lstrip("-").isdigit()}))
+    return out
+
+
+def live(args):
+    d = args.out
+    ev = {name: t for t, name, _ in tsv(os.path.join(d, "events.tsv"))}
+    marks = {name: (t, rest) for t, name, rest in tsv(os.path.join(d, "marks.tsv"))}
+    echo = snapshots(os.path.join(d, "echo.tsv"), "feedback")
+    rep = snapshots(os.path.join(d, "report.tsv"), None)
+    if not echo or "first" not in marks:
+        print(json.dumps({"error": "no feedback" if not echo else "the source never started"}))
+        return 1
+    first = marks["first"][0]
+    until = ev.get("stop") or ev.get("source_ended") or echo[-1][0]
+    start = echo[0][0] + LIVE_SKIP_S
+    r = {"build_dir": d, "graded_s": round(until - start, 1), "snapshots": len(echo),
+         "source_ended_early": "source_ended" in ev}
+
+    # Criterion 5: the path holds.
+    sel = [s for s in echo if start <= s[0] <= until]
+    gaps = [b[0] - a[0] for a, b in zip(sel, sel[1:])]
+    r["cadence_mean_s"] = round((sel[-1][0] - sel[0][0]) / (len(sel) - 1), 3) if len(sel) > 1 else None
+    r["gap_max_s"] = round(max(gaps), 3) if gaps else None
+    r["gaps_over_cadence"] = sum(g > CADENCE_S for g in gaps)
+    r["full_rows"] = round(sum(GRADED <= set(s[1]) for s in sel) / max(len(sel), 1), 4)
+    r["sub_exits"] = exits(os.path.join(d, "sub-exits.tsv"), first + 20, until)
+    trailing = until - sel[-1][0] if sel else None
+    r["c5"] = (r["cadence_mean_s"] is not None and r["cadence_mean_s"] <= CADENCE_S
+               and r["gap_max_s"] <= ABSENT_S and trailing is not None and trailing <= ABSENT_S
+               and not r["sub_exits"])
+
+    # Criterion 6: no false alarm, damage counted by the importer excused and listed.
+    damage = damage_times(rep)
+    alarms = sorted([(t, p, k) for t, p, k in row_alarms(echo) if k == "stop" and start <= t <= until]
+                    + [a[:3] for a in absent_alarms(sel, until)])
+    def near(t):
+        return any(abs(t - x) <= DAMAGE_S for x in damage)
+
+    r["damage_moments"] = len([x for x in damage if start <= x <= until])
+    r["alarms_excused"] = [(round(t - start, 1), p, k) for t, p, k in alarms if near(t)]
+    r["alarms"] = [(round(t - start, 1), p, k) for t, p, k in alarms if not near(t)]
+    r["comparator_alarms"] = [(round(t - start, 1), p, why)
+                              for t, p, why in local_alarms(os.path.join(d, "live.tsv"))
+                              if start <= t <= until]
+    r["c6"] = not r["alarms"]
+    t0 = start + min(600.0, (until - start) / 2)
+    pos = [(t, p, k) for t, p, k in row_alarms(freeze(echo, 121, t0, 10.0)) if k == "stop" and start <= t <= until]
+    base = [(t, p, k) for t, p, k in row_alarms(echo) if k == "stop" and start <= t <= until]
+    r["control_positive"] = [round(t - t0, 2) for t, p, _ in pos if p == 121 and (t, p, "stop") not in base]
+    r["control_ok"] = len(r["control_positive"]) == 1
+
+    # Reported: the release clock per 10 minutes, and each row's class.
+    bins = {}
+    for t, _, value in sel:
+        rel = (value.get("feedback") or {}).get("release") or {}
+        b = int((t - start) // 600)
+        bins.setdefault(b, []).append((rel.get("drift"), rel.get("outOfTolerance")))
+    r["release_per_10min"] = []
+    for b in sorted(bins):
+        drifts = [x for x, _ in bins[b] if isinstance(x, (int, float))]
+        oot = [y for _, y in bins[b] if isinstance(y, (int, float))]
+        r["release_per_10min"].append({"from_min": b * 10,
+                                       "drift": [round(min(drifts), 1), round(max(drifts), 1)] if drifts else None,
+                                       "outOfTolerance_added": (oot[-1] - oot[0]) if len(oot) > 1 else None})
+    r["classes"] = {p: row[0] for p, row in sorted(echo[-1][1].items())}
+
+    # T21: the catalog's rate after the import's fix.
+    mon = monitor(os.path.join(d, "mux-monitor.tsv"))
+    def dev(bps):
+        return round((bps - SOURCE_BPS) / SOURCE_BPS * 100, 4)
+
+    r["mux_windows"] = len(mon)
+    sizes = sorted(kv.get("packets", 0) for _, kv in mon)
+    full = [(t, kv) for t, kv in mon if sizes and kv.get("packets", 0) >= 0.9 * sizes[len(sizes) // 2]]
+    r["mux_first_windows_pct"] = [dev(kv["rate_bps"]) for _, kv in full[:2]]
+    thin_end = marks.get("thin_end", (None, ""))[0]
+    r["thin_end_s"] = round(thin_end - first, 1) if thin_end else None
+    after = [(t, kv) for t, kv in mon if thin_end and t >= thin_end + 40 and t <= until]
+    r["mux_after_pct"] = [min((dev(kv["rate_bps"]) for _, kv in after), default=None),
+                          max((dev(kv["rate_bps"]) for _, kv in after), default=None)]
+    rise = [t for t, kv in mon if thin_end and t >= thin_end and abs(dev(kv["rate_bps"])) <= 0.01]
+    r["mux_raised_after_s"] = round(rise[0] - thin_end, 1) if rise else None
+    r["mux_cc_windows"] = sum(kv.get("cc", 0) > 0 for t, kv in mon if t >= start)
+    r["mux_gt40_windows"] = sum(kv.get("gt40", 0) > 0 for t, kv in mon if t >= start)
+    r["mux_exits"] = exits(os.path.join(d, "mux-exits.tsv"), first + 20, until)
+    r["m1"] = len(r["mux_first_windows_pct"]) == 2 and all(-0.25 <= x <= -0.15 for x in r["mux_first_windows_pct"])
+    r["m2"] = bool(after) and all(abs(dev(kv["rate_bps"])) <= 0.01 for _, kv in after)
+    r["m3"] = not r["mux_exits"] and not r["sub_exits"]
+
+    print(json.dumps(r, indent=1))
+    print()
+    for c, name in [("c5", "holds for the hour"), ("c6", "no false alarm"),
+                    ("control_ok", "frozen-row positive control"),
+                    ("m1", "T21 stimulus: first windows low"), ("m2", "T21 fix: rate raised and held"),
+                    ("m3", "T21 consequence: no export ended")]:
+        print(f"{c} {name}: {'PASS' if r[c] else 'FAIL'}")
+    if args.json:
+        with open(args.json, "w") as f:
+            json.dump(r, f, indent=1)
+    return 0
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n", 1)[0])
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -313,11 +465,12 @@ def main():
     s.add_argument("faulted")
     s.add_argument("--pids", required=True)
     s.add_argument("--for", dest="dur", type=float, required=True)
-    g = sub.add_parser("run")
-    g.add_argument("out")
-    g.add_argument("--json")
+    for name in ("run", "live"):
+        g = sub.add_parser(name)
+        g.add_argument("out")
+        g.add_argument("--json")
     args = ap.parse_args()
-    return stim(args) if args.cmd == "stim" else run(args)
+    return {"stim": stim, "run": run, "live": live}[args.cmd](args)
 
 
 if __name__ == "__main__":

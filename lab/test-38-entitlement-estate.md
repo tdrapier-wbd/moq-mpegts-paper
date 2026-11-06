@@ -4,7 +4,7 @@
 
 **Headline.** The matrix is enforced combinatorially — all twenty-eight cells correct, every licensed pair delivering and every unlicensed pair refusing. And **narrow topology does achieve surgical de-provisioning**: withdrawing one channel from an affiliate that holds a key per channel left the channel it kept running to the end of the observation window, uninterrupted and indistinguishable from a session that had nothing done to it. Under broad topology the same operation took the kept channel down for **2.78 s** and required re-provisioning it under a new credential, because **the revocable unit is the key, not the grant inside the token.** That is the de-provisioning-granularity term the design document's scope trade-off does not consider, and it decides the topology.
 
-**The sharpest result is about mTLS, and it is a warning.** A client presenting a certificate signed by the relay's configured root, carrying **no token at all**, was served every channel in the estate — including the channel no affiliate licenses and **the other broadcaster's channel**. mTLS confers unrestricted access at whatever path is dialled. It cannot express a licensing matrix, and an operator who issues per-affiliate certificates expecting them to scope access gets the opposite of what they intended. That was `fd4f5d82e`. On the redesigned relay a certificate alone admits nothing, and an endpoint that decides by certificate enforces the matrix exactly and narrows or withdraws one certificate's grant within a re-check; upstream's own server gives every certificate the same grant (§ Part 5 on the redesigned relay).
+**The sharpest result is about mTLS, and it is a warning.** A client presenting a certificate signed by the relay's configured root, carrying **no token at all**, was served every channel in the estate — including the channel no affiliate licenses and **the other broadcaster's channel**. mTLS confers unrestricted access at whatever path is dialled. It cannot express a licensing matrix, and an operator who issues per-affiliate certificates expecting them to scope access gets the opposite of what they intended. That was `fd4f5d82e`. On the redesigned relay a certificate alone admits nothing, and an endpoint that decides by certificate enforces the matrix exactly and narrows or withdraws one certificate's grant within a re-check; upstream's own server now does so from a rules file, scoping by the certificate's chain (§ Part 5 on upstream's own server).
 
 ## Objective
 
@@ -293,11 +293,32 @@ All 123 requests carrying a certificate named the right one, by SAN and by DER f
 
 The 0.3–0.4 s is where the rig's withdrawal fell in the 2 s re-check, not a floor: one just after a re-check would wait up to 2 s.
 
-**Reported.** `moq auth serve --mtls-subscribe 'bcast/ch1/**'` gave all four certificates `bcast/ch1` (9.41–9.44 MB) and nothing else: upstream's server authenticates certificates but cannot tell affiliates apart, so per-affiliate scope needs an endpoint that decides by `tls.fingerprint` or `tls.name`, here the router. **Narrowing B to `ch1`** at the router, under the same certificate, stopped B's `ch2` session 0.42 s later (0.32 s in the second run), and its `ch1` session delivered to the end of the window with 0 continuity errors. Where the endpoint decides the grant, the grant is the revocable unit, not the credential.
+**Reported.** `moq auth serve --mtls-subscribe 'bcast/ch1/**'` gave all four certificates `bcast/ch1` (9.41–9.44 MB) and nothing else: that build's server authenticated certificates but could not tell affiliates apart, so per-affiliate scope needed an endpoint that decides by `tls.fingerprint` or `tls.name`, here the router. **Narrowing B to `ch1`** at the router, under the same certificate, stopped B's `ch2` session 0.42 s later (0.32 s in the second run), and its `ch1` session delivered to the end of the window with 0 continuity errors. Where the endpoint decides the grant, the grant is the revocable unit, not the credential.
+
+## Part 5 on upstream's own server (criteria fixed before the first run)
+
+Upstream's `moq auth serve` now reads a TOML file whose rules scope a certificate by the SHA-256 of any certificate in its chain, the rule naming the certificate nearest the leaf winning, and re-reads the file when it changes. The relay reports the chain as `tls.chain`, listing only the certificates the leaf provably descends from. This repeats the matrix, withdrawal and narrowing above with that server in the router's place: one `moq auth serve <file> --key-dir kd --revalidate 2s --expires 1h`, its file replaced by atomic rename. The PKI gains an intermediate G under the root, issuing leaves g1 and g2, and a leaf H under the root that no rule names. The file grants A, B, C and F their rows above, G `bcast/ch2`, and g2 nothing (an empty rule). Rig [`t38-part5-native.sh`](scripts/t38-part5-native.sh), which prints a verdict per criterion.
+
+**Pass:**
+
+1. **The matrix holds through the file.** All twenty cells match the table above; one wrong cell fails.
+2. **A chain scopes, and a presented certificate claims nothing.** g1 receives `bcast/ch2` and none of the other four targets; g2 receives none of the five; H receives nothing on `bcast/ch2`, alone or with G's certificate appended to the chain it presents.
+3. **Withdrawal by edit.** Removing B's rule stops both of B's sessions within 3 s of the rename; A's `ch1` session delivers on, with no continuity errors.
+4. **Narrowing by edit.** Narrowing B's rule from {`ch1`, `ch2`} to {`ch1`} stops its `ch2` session within 3 s, and its `ch1` session delivers on, with no continuity errors.
+5. **A bad edit changes nothing.** After a file that does not parse is renamed into place, B's `ch1` session delivers for the next 10 s, and the server logs that it kept the last valid policy.
+
+**Results, on `1a6ac473d`: all five criteria pass, in one run.** Upstream's server now scopes each certificate itself; the router is no longer needed.
+
+1. **The matrix.** The twenty cells matched the table exactly: 9.38 MB on each granted cell, 0 elsewhere.
+2. **Chains.** g1 received `bcast/ch2` (9.20 MB) and nothing on the other four targets; g2 received nothing on any, its empty rule overriding G's; H received nothing on `bcast/ch2`, alone or with G's certificate after its own, since the relay lists only certificates the leaf descends from.
+3. **Withdrawal.** Removing B's rule stopped B's `ch1` and `ch2` sessions 0.41 s and 0.42 s after the rename; A's `ch1` delivered to the end of the window with 0 continuity errors.
+4. **Narrowing.** Narrowing B to `ch1` stopped its `ch2` session 0.40 s after the rename; its `ch1` delivered to the end of the window with 0 continuity errors.
+5. **A bad edit.** B's `ch1` delivered for the 11.75 s left in the window, and the server logged twice that it was keeping the last valid policy, naming the parse error.
+
+As above, 0.4 s is where the edit fell in the 2 s re-check, not a floor.
 
 ## Open
 
 - **Per-subscriber RSS under authorization is unmeasured**, for the instrument reason in Part 4. It needs a relay restarted between arms.
-- **Per-affiliate certificate scope needs an endpoint upstream does not ship.** Its server grants every verified certificate one rule set (§ Part 5 on the redesigned relay); the router that scoped them here is rig code.
-- **Grant-level de-provisioning is measured for certificates only.** An endpoint that decides a certificate's grant narrows it in place (§ Part 5 on the redesigned relay). Behind upstream's server a token's grant is what the token carries, so narrowing a token still means withdrawing its key, and the key estate is sized by the licensing matrix; neither the relay's cost nor the auth server's grows with it (§ The key estate costs the relay nothing; § The estate behind an auth server).
+- **Grant-level de-provisioning is measured for certificates only.** Upstream's server narrows a certificate's grant in place (§ Part 5 on upstream's own server). Behind upstream's server a token's grant is what the token carries, so narrowing a token still means withdrawing its key, and the key estate is sized by the licensing matrix; neither the relay's cost nor the auth server's grows with it (§ The key estate costs the relay nothing; § The estate behind an auth server).
 - **Rights windows**, per the limits above.

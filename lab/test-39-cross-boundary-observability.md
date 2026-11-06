@@ -1,6 +1,6 @@
 # Test 39 — Observability across an administrative boundary
 
-**State: Parts A and C run and passed; Part B, the return path, is measured on loopback on late October 2026 `main` (in no release): it carries the client edge's report on one scoped credential and names a dead audio or video stream, and it reads a total stall as silence and ends with its exporter. The run at scale is [P1-l](planned-experiments.md#p1--establishes-where-one-architecture-is-superior).** Tier placement and the reasoning for it are in _Tiering_ below, including the one place this stretches a tier.
+**State: Parts A and C run and passed; Part B, the return path, is measured on loopback on late October 2026 `main` (in no release): it carries the client edge's report on one scoped credential and names a dead audio or video stream, and it reads a total stall as silence and ends with its exporter. On the live feed it held for an hour with no false alarm. The run at scale is [P1-l](planned-experiments.md#p1--establishes-where-one-architecture-is-superior).** Tier placement and the reasoning for it are in _Tiering_ below, including the one place this stretches a tier.
 
 **Headline.** A standalone process at the client edge, on its own subscription, **catches a T24-class partial-media fault that no relay-side telemetry can express** — _measured_: the suppressed audio PID alarmed on its own at media t=25.025 s with every other elementary stream still delivering, while the groomer ran alongside it unmodified and the relay's counters carried no per-PID field in which the fault could appear. That settles the tier split the design rests on: **tier 2 can prove bytes flowed and can never prove the media was healthy**, so the only place the delivered signal can be assessed is hardware the broadcaster does not own.
 
@@ -87,6 +87,13 @@ Pass criteria, fixed before the first run:
 
 Tier 1's report is recorded beside each arm and not graded.
 
+**On the live feed, for an hour.** The same path on a later `main` (`1a6ac473d`), fed the live multiplex byte for byte from the primary's HLS edge (`tsp -I hls` from the playlist's first segment, about 12 s behind the live edge, then the regulator; started at the edge, each late segment reached the importer as a burst, and both exports dropped frames from the start), on the laptop beside T76's soak as one logged viewer of the edge ([`t39b-live.sh`](scripts/t39b-live.sh), graded by `t39b-grade.py live`). No fault is injected: the hour asks whether the path holds on real content. Its first 60 s lose one packet in 500, all from the two data PIDs, for T21's rate test; grading starts 90 s after the first snapshot. Criteria, fixed before the run:
+
+5. **It holds for the hour.** Feedback at one snapshot per 1.5 s or better on average, no gap over 3.0 s, and the exporter never ends.
+6. **No false alarm.** No audio or video row stopped and no absence, except within 10 s of damage the importer's own report counts, each listed; every client-edge comparator alarm is listed beside them.
+
+Reported, not graded: the release clock's drift and out-of-tolerance count per 10 minutes, and the report's class for each PID. Grader controls: the same rules over a copy of the hour's feedback with PID 121's `units` frozen for 10 s must alarm once, on 121; unmodified, criterion 6 is the negative control.
+
 ### Part C — dual-scope credentials
 
 `lab/scripts/t39-token-dualscope.sh`. Six cells over one token carrying both a `--subscribe` prefix for media and a `--publish` prefix for a telemetry path, checking that each is honoured for its own prefix and refused for the other's, and that a neighbouring tenant's telemetry path is refused.
@@ -155,6 +162,8 @@ The client-edge detector column is from the armed trials; the stall and relay ar
 - **Not alarm inputs on a fresh subscriber:** over the first 75 s of a healthy run the release clock's drift estimate ranged −123 to +352 ppm and its out-of-tolerance count reached 24–33. The exporter runs no TR 101 290 checks; the importer counted 42 `PTS_error` in each partial arm, one per 700 ms of the stopped stream.
 
 **Against Part B's criteria:** 1, pass (14 of 14); 2, fail on the stall arm (6 of 8, then 4 of 4); 3, fail: video 4 of 4 and the relay arm 2 of 2, audio 1 of 4 (5.14 s; three at 6.13 s, because the criterion's bound counted the cadence once), the stall arm none; 4, fail on the relay arm.
+
+**On the live feed, the path holds for an hour.** Criterion 5, pass: 3,698 snapshots in the 3,608 s graded, one a second on average, the longest gap 1.05 s, every row in every snapshot, and the subscriber's exporter ran throughout. Criterion 6, pass: no row stopped and no absence, the importer counted no damage, and the client-edge comparator raised nothing. The grader's control, PID 121 frozen for 10 s in a copy of the hour's feedback, alarmed once, 4.0 s in. The release clock settled: its drift estimate stayed within −12 to +7 ppm in every 10 minutes, and its out-of-tolerance count stopped rising after the first 90 s. The classes were as on loopback, AC-3 (123) among the data PIDs.
 
 ## Metrics
 
