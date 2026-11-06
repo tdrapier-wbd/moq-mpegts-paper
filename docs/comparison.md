@@ -70,7 +70,7 @@ The rows are the requirements of [Problem](problem.md) §5 that a data plane dec
 | **Segmented HTTP** | HLS carrying MPEG-TS segments, its original container (DVB-DASH profiles ISOBMFF only), at classic segment durations over HTTP/1.1 | cacheable-object pull over commodity delivery |
 | **SRT / Zixi / RIST** | a reliable UDP tunnel per destination, optionally through a gateway tier | point-to-point session transport |
 
-The grouping flatters two of them: RIST is openly specified and multi-vendor where the others are not (§1.1). **Segmented HTTP is scoped to a 5–10 s delivery budget and single-programme feeds**; its low-latency and multi-programme variants are described for completeness. **All three rows assume the IP path carries the whole feed**; the satellite-hybrid architectures of VSF TR-06-4 Parts 7 and 8, where RIST carries only the bytes a site lost, answer a different question and are treated in §1.2.
+**Segmented HTTP is scoped to a 5–10 s delivery budget and single-programme feeds**; its low-latency and multi-programme variants are described for completeness. **All three rows assume the IP path carries the whole feed**; the satellite-hybrid architectures of VSF TR-06-4 Parts 7 and 8, where RIST carries only the bytes a site lost, answer a different question and are treated in §1.2.
 
 Two exclusions. **TS-over-HTTP/1.1**, a continuous TS in a chunked response, has no agreed specification and several incompatible implementations, so choosing it buys a vendor rather than a protocol. **WebRTC/SFU** does not carry an MPEG-TS at all. Segmented HTTP is assessed against [HTTP Live Streaming 2nd Edition](https://datatracker.ietf.org/doc/draft-pantos-hls-rfc8216bis/) (`draft-pantos-hls-rfc8216bis-22`, which obsoletes RFC 8216 and folds in Low-Latency HLS), quoted from the normative text because practitioner convention diverges from it in both directions.
 
@@ -119,7 +119,7 @@ Internet-measured for segmented HTTP, media-aware MoQ and SRT ([T4](../lab/test-
 
 **Scrambling is a narrow gate.** Primary distribution is protected by the transport and the operator ([Control plane](control-plane.md) §7.3), and consumer conditional access is applied downstream of the IRD, so the gate binds only a route that must hand a feed to the IRD **still scrambled** — a BISS-class scheme held end to end, or a third-party feed the distributor may not descramble — and there it is binary.
 
-**MoQ's remaining mux-content advantage is multi-programme carriage alone, and only on the opaque lane**, unmeasured on one. Against the media-aware lane segmented HTTP keeps stuffing, CAT, continuity counters and wall clock.
+**MoQ's remaining mux-content advantage is multi-programme carriage alone, and only on the opaque lane**, unmeasured on one.
 
 ---
 
@@ -181,7 +181,7 @@ Internet-measured for segmented HTTP, media-aware MoQ and SRT ([T4](../lab/test-
 
 ## 5. Latency (R4)
 
-**This axis separates the two data planes only where nothing is conformant.** There MoQ delivers a picture over one internet path in **141 ms**, inside a single segment's span; held at P1/P2 conformance, MoQ delivers in **2,447 ms** and segmented HTTP, on one-second segments, in **2,604 ms**, on one clip and a clean path ([Evidence](../lab/evidence.md) §3.11). **Every latency figure on the media-aware lane must be quoted with the conformance of the same bytes.** All are _delivery_ latency, source to groomed egress, excluding the encoder and decoder delay that no plane here varies.
+**This axis separates the two data planes only where nothing is conformant.** There MoQ delivers a picture over one internet path in **141 ms**, inside a single segment's span; held at P1/P2 conformance, MoQ delivers in **2,447 ms** and segmented HTTP, on one-second segments, in **2,604 ms**, on one clip and a clean path ([Evidence](../lab/evidence.md) §3.11). All are _delivery_ latency, source to groomed egress, excluding the encoder and decoder delay that no plane here varies.
 
 **Segmented HTTP's floor is arithmetic, not implementation quality.** `PART-HOLD-BACK` MUST be at least twice, and SHOULD be at least three times, the part target, and production part targets sit around 200–330 ms, so the hold-back alone is roughly 0.6–1 s before encode, packaging, delivery and the gateway's de-jitter buffer. The specification warns that a shorter target trades buffer for a greater "likelihood of playback stall." Two to five seconds is the realistic envelope, and **through the free clients that turn HLS back into a transport stream it is nearer six**, because none fetches parts ([Evidence](../lab/evidence.md) §3.9); the 2,604 ms above takes no parts, only one-second segments.
 
@@ -315,7 +315,7 @@ Transparent carriage is no longer single-vendor, but **transparent is not always
 | **Redundancy to R6** | Receiver-side selection yielding no visible failure during contracted content | **Cleared for single-track**; for a multi-track mux on the opaque lane through a late join, each leg's loss and a killed export (one clip, one host), and on the media-aware lane for a co-started pair only, on one host or two ([Evidence](../lab/evidence.md) §3.4) | **Cleared conditionally** — hitless for a co-started pair configured alike, and for two origins in one CDN origin group behind receivers released in phase; silent time-travel when misconfigured (§7) |
 | **Fan-out to R2** | Marginal cost per destination approaching zero, with a known scaling model | **Indicated.** Linear to the relay's CPU; through a CDN-hosted relay, on the media-aware lane only (§3) | **Indicated.** One origin fetch per segment per CDN edge, at two edges; no origin knee to 128 edges ([Evidence](../lab/evidence.md) §3.4, §3.6) |
 | **Operable at fleet scale** | A fault in one of hundreds of feeds is localisable from telemetry | **Unassessed** | **Unassessed** |
-| **Delivered-media health at a subscriber** | An origin can tell that what a subscriber _received_ was intact | **Not satisfied by any candidate** ([Architecture](architecture.md) §9.4) | **Not satisfied** |
+| **Delivered-media health at a subscriber** | An origin can tell that what a subscriber _received_ was intact | **Partial**, on upstream `main`: a subscriber's own report names a dead audio or video stream, on loopback and for an hour live; a total stall reads as silence ([Architecture](architecture.md) §9.4) | **Partial**: CMCD custom keys carrying the receiver's TR 101 290 counters name dead audio, not dead video, on loopback; CloudFront's logs keep them raw ([Architecture](architecture.md) §9.4) |
 | **A receive stage at the route's latency budget** | A stage turns the delivered feed back into a transport stream at the latency the route allows | **Cleared, single-implementation** (§9.2) | **Cleared at classic segment durations, open below them** (§9.1) |
 
 ### 11.2 Preference by route
