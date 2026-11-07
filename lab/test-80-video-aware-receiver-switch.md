@@ -1,6 +1,6 @@
 # Test 80: a receiver switch that detects on the video PID and cuts at a random-access point
 
-**State: run and graded. C0, C4 and C5 hold; C2 and C6 fail.** Holding both legs 2 s and cutting at a random-access point cost every one-source fault the background's decoder hole and no bad picture, in all twelve runs, at most two frames repeated where the legs ran apart. Without the hold the egress cell lost 2.5 s in two runs of three. A relay's skip now reaches the wire flagged, though its clock never breaks.
+**State: run and graded. C0, C4 and C5 hold; C2 and C6 fail.** Holding both legs 2 s and cutting at a random-access point cost every one-source fault the background's decoder hole and no bad picture, in all twelve runs, at most two frames repeated where the legs ran apart. Without the hold the egress cell lost 2.5 s in two runs of three. A relay's skip never breaks the clock, and on upstream's fix, which flags only a clock that jumps, it reaches the wire unflagged.
 
 ## Objective
 
@@ -114,7 +114,15 @@ _Predicted:_ C0 holds. C2 fails on this clip: the hole is τ plus the wait for t
 - **A receiver switch can bring a media-aware failover under a second as a decoder sees it, if it holds both legs.** Detecting silence on the video PID and cutting, 2 s behind both legs, from the other leg's last keyframe before the failure, every one-source fault cost the background's decoder hole and no corrupt picture, against `tsswitch`'s 2.24 s on the same build. The price is 2 s of latency on top of each export's delay, and any lag between the legs as a repeat and a latency step.
 - **Without a hold a keyframe cut is not bounded under a second on an open-GOP clip.** It waits for the other leg's next keyframe, up to a GOP, and breaks the open GOP's leading pictures; a cut that skips more than half the stream's picture-order period also costs the decoder its ordering. Sub-second `rap` results here are one keyframe phase each.
 - **The legs' arrival skew, not the switch, sets what `lookback` repeats.** It varied 0.2–0.7 s between runs of one topology on one host.
-- **The demultiplexed export now marks a skip, but as a time-base change it is not.** The clock runs on through the skip and every stream keeps its offset to it, so a receiver sees a programme gap on an unbroken clock; the flag, on the PCR PID in that gap, announces a new time base equal to the old one. The skip itself still costs the detection interval less what a resumed copy keeps.
+- **The demultiplexed export's skip is a programme gap on an unbroken clock, and on upstream's fix it is unflagged.** The clock runs on through the skip and every stream keeps its offset to it. The flag #7785 set there announced a new time base equal to the old one; #7981 keeps the flag for a clock that jumps, so a receiver sees the skip only as the gap in each stream's decode time. The skip itself still costs the detection interval less what a resumed copy keeps.
+
+## Part B on the flag fix
+
+Upstream's [#7981](https://github.com/moq-dev/moq/pull/7981) (`main` at `2460728a2`) flags a PCR only where its clock jumps, so the skip above, on an unbroken clock, should go out unflagged. Part B's command unchanged on that build, three runs at each delay and the control; each export read by `t6-switch-grade.py` and the PCR-jump detector above.
+
+_Criteria, fixed before running._ Void as criterion 1, or unless the detector again finds T64's 7 s step and nothing in the source. **Passes** if every moq-lite 07 export that skips programme keeps its PCR within 100 ms of its packet count and sets `discontinuity_indicator` on no PID in its skip; the control keeps its switch with every PID flagged and a new PMT; and the programme lost stays within Part B's range at each delay. A PCR jump is reported, and passes only if its first PCR is flagged.
+
+_Results._ None void; the detector found T64's step (+6.5 s) and nothing in the source. **No moq-lite 07 export set `discontinuity_indicator` on any PID, and no PCR left its packet count by 100 ms**: 18 exports in nine runs, the video skipping 6.4–7.6 s at a 2 s delay and 1.5–3.6 s at 10 s. The control's two switches kept every PID flagged with a new PMT, the flag on the first PCR after a +6.3 s jump. **The loss clause fails as written** at 10 s, 3.0 and 3.6 s in two of six runs against Part B's 1.5 s, but three runs of the old build interleaved with the last three lost 1.5–3.0 s, each flagged once: Part B's three runs had shared one group phase, and the builds lose alike. **The fix holds**: a skip on an unbroken clock goes out unflagged, and a declared switch's jump keeps its flags.
 
 ## Corrections
 
