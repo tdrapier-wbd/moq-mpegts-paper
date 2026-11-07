@@ -42,6 +42,8 @@ ENDPOINTS=(
 	"red5|moqt://moq-relay.red5.net:4433|moq-transport-22|0"
 	"stitcher|moqt://34-72-6-160.sslip.io:443|moq-transport-22|0"
 	"cloudflare-18|moqt://draft-18-interop.cloudflare.mediaoverquic.com:443|moq-transport-18|0"
+	"moq-ng-22|moqt://moq-ng.cloudflare.mediaoverquic.com:443|moq-transport-22|0"
+	"moq-ng-18|moqt://moq-ng.cloudflare.mediaoverquic.com:443|moq-transport-18|0"
 )
 
 export RUST_LOG=${RUST_LOG:-info,moq_net=debug}
