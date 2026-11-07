@@ -51,7 +51,7 @@ Status: working draft. Layer: **above the transport.** Scope: an end-to-end refe
 
 **The edge gateway makes the platform broadcast-grade, and its output is conformant on PCR repetition on the wire in software on both lanes.** Behind the media-aware lane it fails the 13818-1 buffer model, which re-timing cannot repair and only a re-multiplexing stage restores (§4.2, §4.3).
 
-**Only legs of one broadcast merge, so the lane decides what a 1+1 pair protects.** The opaque lane's pair is hitless and leaves the importer single; on the media-aware lane redundancy is a switch at the receiver, which protects the importer and costs a decoder about one to three seconds at each fault (§5.2).
+**Only legs of one broadcast merge, so the lane decides what a 1+1 pair protects.** The opaque lane's pair is hitless and leaves the importer single; on the media-aware lane redundancy is a switch at the receiver, which protects the importer and, holding both legs 2 s, costs a fault no decoder hole beyond the stream's own; a gateway's fault costs the IRD's input switch (§5.2).
 
 **The transport is a swappable dependency**: packaging, catalog, reassembly and control are specified independently of the draft, so a draft upgrade is thin glue rather than a media rewrite (§10).
 
@@ -349,7 +349,7 @@ flowchart LR
 
 **On the opaque lane the pair is hitless and either leg can be restarted alone, but the importer is not protected.** Passthrough legs carry the importer's packets verbatim, continuity counters included, so two stream-clocked groomers behind two passthrough exports of one broadcast emit one transport. A leg that mutes and returns rejoins its partner's numbering exactly, and a leg joining late puts the same programme in the same slots under the same numbers, so an ST 2022-7 receiver merges the pair through a late join, a blackout and a killed export (§5.1). The importer stays single: its loss ends every passthrough export (§5.4), so the input's protection is the source's (§5.3).
 
-**On the media-aware lane a merge needs both legs started together and restarted together, which a 24/7 service cannot promise, so on this lane redundancy is a switch.** The exporter renders continuity counters from its own process state and, on a multi-track mux, orders units that tie on decode time by its own release clock, so only co-started legs are byte-identical (§5.1), and a leg restarted alone does not rejoin the merge. **Numbering the counters from the stream narrows that gap for a late join, not for a return.** With each PID's continuity counter renumbered in line between the export and the groomer, by a prototype stage rather than anything upstream ships, a leg 8 s late is byte-identical to its partner from 2.9 s after it joins, though the join's first 2.9 s differ in content and order. A leg back from a blackout did not re-merge, and that cell has not been run on the build that places clock-table revisions on the media grid ([Evidence](../lab/evidence.md) §3.4; one clip, one host). Until a returning leg merges behind a stage upstream ships, the design makes each leg its own broadcast, from its own importer through its own path and export, into an input switch at the edge gateway:
+**On the media-aware lane a merge needs both legs started together and restarted together, which a 24/7 service cannot promise, so on this lane redundancy is a switch.** The exporter renders continuity counters from its own process state and, on a multi-track mux, orders units that tie on decode time by its own release clock, so only co-started legs are byte-identical (§5.1), and a leg restarted alone does not rejoin the merge. **Numbering the counters from the stream narrows that gap for a late join, not for a return.** With each PID's continuity counter renumbered in line between the export and the groomer, by a prototype stage rather than anything upstream ships, a leg 8 s late is byte-identical to its partner from 2.9 s after it joins, though the join's first 2.9 s differ in content and order. A leg back from a blackout did not re-merge, and that cell has not been run on the build that places clock-table revisions on the media grid ([Evidence](../lab/evidence.md) §3.4; one clip, one host). Until a returning leg merges behind a stage upstream ships, the design makes each leg its own broadcast, from its own importer through its own path and export, into an input switch at each edge gateway:
 
 ```mermaid
 flowchart LR
@@ -362,20 +362,35 @@ flowchart LR
         RX["Path X"]
         RY["Path Y"]
     end
-    subgraph Edge["Edge gateway"]
-        XA["Export A"] --> SW["Input switch\n(2 s hold, keyframe cut)"]
-        XB["Export B"] --> SW
-        SW --> GR["Groomer"]
+    subgraph Edge1["Edge gateway 1"]
+        XA1["Export A"] --> SW1["Input switch\n(2 s hold, keyframe cut)"]
+        XB1["Export B"] --> SW1
+        SW1 --> GR1["Groomer"]
     end
-    IRD["IRD"]
-    SRC --> PA --> RX --> XA
-    SRC --> PB --> RY --> XB
-    GR --> IRD
+    subgraph Edge2["Edge gateway 2"]
+        XA2["Export A"] --> SW2["Input switch\n(2 s hold, keyframe cut)"]
+        XB2["Export B"] --> SW2
+        SW2 --> GR2["Groomer"]
+    end
+    IRD1["IRD 1\n(input switch)"]
+    IRD2["IRD 2\n(input switch)"]
+    SRC --> PA --> RX
+    SRC --> PB --> RY
+    RX --> XA1
+    RX --> XA2
+    RY --> XB1
+    RY --> XB2
+    GR1 --> IRD1
+    GR1 --> IRD2
+    GR2 --> IRD1
+    GR2 --> IRD2
 ```
 
 Two broadcasts protect the importer as well as the paths, and the legs start, restart and return at their own times at no cost to the output, with no failover waiting on the transport. **What a fault costs is the switch's design.** One that detects only absent packets and cuts anywhere costs a decoder about one to three seconds. One that detects silence on the video stream, holds both legs 2 s and cuts from the standby's last keyframe before the failure costs no decoder hole beyond the stream's own and no corrupt picture, repeating at most two frames where the legs arrive apart, for 2 s of latency on top of the export's delay; without the hold, a keyframe cut on an open-GOP source still costs up to 2.3 s (§5.4). That switch is a model measured with a software decoder, not a product, and whether an IRD decodes cleanly across its cut is unmeasured (§12, question 1). Legs fed from separate sources protect the input too, adding their offset to each cut. The switch could instead be made in the relay, by the demultiplexing export following a standby importer of the same broadcast, but then each importer's start and restart is itself a marked programme switch (§5.3). This lane keeps per-track egress, prioritisation and selection (§6).
 
-So **a route that needs hitless 1+1 takes the opaque lane and leaves importer protection to the source, and a route on the media-aware lane gets importer protection at the cost of a cut at each fault**, which a switch holding both legs keeps within the stream's own decoder hole at 2 s of latency. The lane also decides planned maintenance: on the opaque lane one leg can be drained and restored alone under a merging receiver, and a merged media-aware pair must be restored together, which is why §9's runbook says what it says.
+**The receive chain is doubled, as the installed base doubles it**: two IRDs on one satellite signal, or two SRT receivers each taking both inputs. Each of two edge gateways switches both legs and feeds both IRDs. The two outputs differ, since each switch cuts on its own arrivals and each export numbers its own counters, so an IRD chooses between gateways with its own input switch, not a merge. A leg's fault costs what the gateway's switch costs; a gateway's fault costs that input switch, unmeasured (§12, question 1). Fed once per site, each leg serving both gateways, the pair adds nothing to delivery; gateways subscribing separately double it.
+
+So **a route that needs hitless 1+1 takes the opaque lane and leaves importer protection to the source, and a route on the media-aware lane gets importer protection at the cost of a cut at each fault**, which a switch holding both legs keeps within the stream's own decoder hole for a leg's fault, at 2 s of latency. The lane also decides planned maintenance: on the opaque lane one leg can be drained and restored alone under a merging receiver, and a merged media-aware pair must be restored together, which is why §9's runbook says what it says.
 
 ### 5.3 Responsibilities
 
@@ -396,7 +411,7 @@ So **a route that needs hitless 1+1 takes the opaque lane and leaves importer pr
 | **Source (playout)** | Upstream input failover selects the backup; break-before-make at the source and rare. Both delivery legs then carry the new program and nothing downstream re-initialises |
 | **Importer** | Both legs carry its broadcast, so both lose it. On October 2026 `main` the standby takes over as a marked programme switch, which `export ts --stitch` follows with a new PMT and every PID flagging the break: about one detection interval of programme at a hard kill (1.1–1.2 s at a 1 s idle timeout, which a decoder sees as 1.3 s of hole), next to none at a standby's start or restart, and on early November `main` 0.28–0.36 s at a clean exit, with every demultiplexing exporter kept, in a mesh too ([Evidence](../lab/evidence.md) §3.4). Not hitless. Selected at the receiver instead (§5.2), a switch that detects only absent packets cuts once the failed leg's export falls silent, after a hard kill its delay and about a second of padding later: at a 500 ms receive timeout an importer, relay or export lost cost a decoder 0.8–2.9 s, waiting on no idle timeout. One that detects silence on the video stream decides 1.3 s sooner. Cutting at the standby's next keyframe, it cost 0.45–2.3 s of decoder hole on an open-GOP source and broke the pictures leading each cut; holding both legs 2 s and cutting from the standby's last keyframe before the failure, it cost no hole beyond the stream's own, no corrupt picture and at most two frames repeated, in twelve runs of four fault classes (P1, file domain, one clip, loopback, early November 2026 `main`; [Evidence](../lab/evidence.md) §3.4). A passthrough export refuses `--stitch` and ends with its importer, so the opaque lane's merged pair has no importer protection |
 | **Relay or link** | The surviving leg keeps flowing and the IRD rides it hitlessly; the affected receiver can additionally re-home (supervisor-assisted today). On the media-aware lane's pair selected at the receiver, a 0.3 s uplink outage costs nothing, and one of 3 to 12 s costs what a hard kill does |
-| **Edge (receiver / groomer)** | The redundant leg's egress continues; the ST 2022-7 merge covers the loss hitlessly |
+| **Edge (receiver / groomer)** | On a merged pair the other gateway's egress continues and the ST 2022-7 merge covers the loss hitlessly. On the media-aware lane's switched pair the IRD's input switch moves to the other gateway, a cut of unmeasured cost (§5.2) |
 | **Content loss behind a healthy groomer** | The groomer must detect and mute (§4). With that in place, exactly one input-select switch at any threshold. **Monitoring keys on programme content, not packet arrival** |
 | **A leg that returns** | Rejoins the schedule and the numbering (§5.2). Input-select protection is restored immediately, and on the media-aware lane at no cost to the output, an importer cut off past the idle timeout reconnecting on its own; sequence-merge protection on the opaque lane, and on the media-aware lane only with the pair restarted together |
 | **IRD** | The second IRD, also dual-input, keeps delivering; doubling the receiver removes the last single point |
