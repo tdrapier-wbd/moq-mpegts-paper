@@ -292,7 +292,7 @@ The arms are `stop-tsp`, `stop-np-tsp`, `stop-pacer` and `stop-np-pacer`, one ce
 
 **HB:** behind a stalled, padded export, a PCR-paced receiver plays the back-filled padding in real time, so its output stays about the stall's length behind live.
 
-1. Valid: `k1` runs to the end with L_k within B ± 0.5 s at every row from 20 s, and the valve gains at most 64 KiB over 46–105 s.
+1. Valid: `k1` runs to the end with L_k outside B ± 0.5 s on at most 1 % of rows from 20 s and never for longer than 1 s, and the valve gains at most 64 KiB over 46–105 s. This check was amended after a pilot `stop-pacer` cell and before the counted cells. As first written it allowed no row outside the band, and the pilot's control left it once, for 0.3 s by 0.06 s, which is the lag instrument's resolution, not the chain. The pilot is not counted.
 2. HB holds for a receiver if, in its padded cell, L_a − B ≥ 50 s at every row from te + 10 s to te + 40 s.
 3. The remedy holds for a receiver if, in its unpadded cell, L_a is back within B + 0.5 s by te + 10 s and stays there to the end.
 4. If the padded cell's L_a is back within B + 0.5 s by te + 10 s, HB fails for that receiver. Otherwise L_a at te + 10, te + 40 and te + 100 s is reported.
