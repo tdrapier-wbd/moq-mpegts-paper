@@ -262,16 +262,15 @@ A subscriber slower than the stream cannot be served at the live edge with all i
 **Implementation defects, each with a measured trigger:**
 
 1. **Resumed sessions hang (main).** They hang for 18–60 s when many resume after a freeze longer than a 30 s idle timeout: 18 of 96 sessions. The cause is the 20 ms endpoint-wide stateless-reset interval against in-phase keep-alives. The previous stack does not do this. Remedy tested: `--listen-reset-secret`, with which none of 64 hung.
-2. **Padding back-fill.** The export writes a stalled output's missed padding all at once: 60 s of PCR in 0.5 s. Remedy tested: `--mux-rate 0` (a 2.5× peak). A PCR-paced receiver behind it is not tested.
+2. **Padding back-fill.** The export writes a stalled output's missed padding all at once: 60 s of PCR in 0.5 s. Remedy tested: `--mux-rate 0` (a 2.5× peak). Behind a padded export, a PCR-regulating remultiplexer passes the burst on at 54× the line rate, where the groomer, which strips padding, absorbs it (Part B). Neither sits a stall behind live, as had been inferred.
 3. **Follow misreads the reconnect.** After the subscriber's own reconnect, `--follow` takes the unchanged publisher for a replacement and the export exits. `--stitch` works around it (live 2.8 s after a 30 s freeze) at the price of a flagged program switch.
-4. **The export does not shed on a slow output.** It blocks instead of shedding to the live edge, and after about 80 s at half rate exits with a clock-drift error that blames the source.
+4. **A padded export does not shed on a slow output.** It blocks instead of shedding to the live edge, and after about 80 s at half rate exits with a clock-drift error that blames the source. Unpadded, it sheds, and its lag holds at about 4 s (Part E).
 
 **Not established:**
 
 - hundreds of stuck head-ends (N stops at 32, and the reset drain with more clients or real-network jitter is untested);
 - a frozen downstream relay;
-- T25's kill-and-relaunch churn on main;
-- a slowed subscriber without padding.
+- T25's kill-and-relaunch churn on main.
 
 ## Follow-up: Parts B–E, criteria fixed before running
 
@@ -310,6 +309,15 @@ The arms are `r2` with light abusers: `r2x32l` (32) once, `r2x64` (64) twice, an
 3. The remedy holds at 64 if every session of `r2x64-rs` ends within 15 s of the SIGCONT.
 4. Victims are graded by criterion 1.
 
+### Part C′: the reset drain with 64 full abusers
+
+This part was added after Part C's validity check failed (see the results), and before its own first cell. It repeats Part C with abusers as in `r2`, each export drained by a reader: `r2x64f` twice and `r2x64f-rs` once. Sessions end, and are late, as in Part C.
+
+1. Valid: criterion zero, every abuser's pre-event bytes within 5 % of victim 1's, showing the laptop kept all 66 readers at the line rate.
+2. HC holds if both `r2x64f` cells drain for longer than 60 s.
+3. The remedy holds at 64 if every session of `r2x64f-rs` ends within 15 s of the SIGCONT.
+4. Victims are graded by criterion 1.
+
 ### Part D: T25's killed-peer storm on main
 
 The arms are `storm` (idle timeout 10 s) twice and `storm30` (30 s) once on main, and `storm30` once on the previous stack. From 45 s, every 5 s, the rig SIGKILLs every abuser export and starts 40 new light ones. Twelve generations run, 480 sessions, and the last is killed at 105 s. The cell ends at 170 s.
@@ -327,3 +335,27 @@ F is the relay's footprint, F0 its median over 39–45 s, and S the sessions it 
 The arm is `slow-np` twice, on main, graded by criterion 3's thresholds unchanged.
 
 **HE:** the latency comes from the export's blocked writer, not from its padding. HE holds if both cells' lag exceeds 4 s (criterion 3.1 still fails) and their video share exceeds 25 % (criterion 3.2 passes), against 20 % padded.
+
+### Follow-up results
+
+Fourteen counted cells ran, all on main except one `storm30` on the previous stack. Per-cell values are in [`results/t82-followup.csv`](results/t82-followup.csv). The victims pass criterion 1 in every cell.
+
+**Part B.** All four cells are valid. `k1` left its band on 0.1–0.4 % of rows, never for more than 0.5 s, and no valve read a byte during the stop. No receiver's output has a continuity error.
+
+| Cell | Receiver | Export | B | `L_a` at te + 10 / 40 / 100 s | Back within B + 0.5 s | Receiver's first second after te | Video after te vs victim |
+| --- | --- | --- | --: | --- | --: | --: | --: |
+| `stop-tsp` | `tsp regulate` | padded | 6.8 s | 6.7 / 6.8 / 6.6 s | 7.3 s | 539 Mb/s | 96 % |
+| `stop-np-tsp` | `tsp regulate` | unpadded | 7.1 s | 7.1 / 7.0 / 7.2 s | 7.6 s | 20 Mb/s | 96 % |
+| `stop-pacer` | groomer | padded | 1.1 s | 3.7 / 2.3 / 1.3 s | 67 s | 8.8 Mb/s | 100 % |
+| `stop-np-pacer` | groomer | unpadded | 1.1 s | 4.8 / 3.4 / 1.5 s | 85 s | 9.8 Mb/s | 100 % |
+
+`tsp -P regulate --pcr-synchronous` does not play the back-filled padding out in real time. Those packets reach it with PCRs already behind its clock, and it forwards them as they come: 539 Mb/s over the first second, against the export's 606 Mb/s. The burst passes through to whatever it feeds. Unpadded, its first second carries 20 Mb/s, then almost nothing for 6 s, and it resumes at its baseline lag.
+
+The groomer strips the back-fill's 440,000 null packets and keeps its output at the line rate throughout, muting through the stall. It resumes 3.7 s behind live (4.8 s unpadded) and drains to its cushion over a minute or more. Its 9.95 Mb/s output leaves it about 3.6 % over the 9.6 Mb/s of media to drain with (inferred). That lag comes from the stall, not from the padding. The uncounted pilot agreed: 3.8 / 2.3 / 1.3 s, back after 67 s.
+
+**Part E.** The unpadded export sheds to the live edge, dropping frames that miss their deadline, and its lag stays flat instead of growing.
+
+| Arm | Lag, max | Lag slope | Video PES vs victim | Export RSS growth | End |
+| --- | --: | --: | --: | --: | --- |
+| `slow-np` ×2 | 3.9 and 4.3 s | 0.001 and 0.009 s/s | 47 % | 31 and 20 MB | live 0.1–0.2 s after the throttle lifts, behind a 1.5–2.1× burst |
+| `slow` ×2, padded (above) | 31.3 s | 0.48 s/s | 20 % | 23 MB | live 0.5 s after, behind a 31× burst |
