@@ -157,8 +157,6 @@ _The latency column is source-to-groomed-egress over the public internet from a 
 | MoQ | three CDNs today (Cloudflare, Akamai, moq.pro); otherwise you | $0.040–0.050/GB published by two of them, or hyperscaler egress if self-run |
 | SRT / Zixi / RIST | **you, or a managed media service** | own transit, or ~$0.09/GB metered egress, or per-flow premium |
 
-Hyperscalers sell elasticity, so always-on primary distribution should buy committed or commodity delivery instead.
-
 **A CDN can operate a MoQ relay; it cannot commoditise SRT.** A relay is a cache and holds no per-destination state a CDN would have to operate, whereas SRT fan-out needs a stateful gateway per stream per destination, which is a media-server business. SRT therefore scales through re-origination or owned transit, and CDNs take it only as contribution ingest. **An open specification combined with a cache-shaped relay primitive** is what enables multi-vendor competition; openness alone, in SRT's case, did not.
 
 **The argument is limited to sub-second routes.** At seconds of latency, primary distribution favours segmented HTTP on commodity economics, and the cost of the broadcast-grade edge layer remains on either plane (§7.2). **The price follows the product, not the HTTP version**: classic HLS rides HTTP/1.1 and Low-Latency HLS needs HTTP/2 or HTTP/3, and CloudFront and Akamai publish no surcharge for HTTP/3 delivery, so either segmented mode sits in a delivery contract already negotiated, where a MoQ relay is a separate product with its own rate.
@@ -227,11 +225,11 @@ Hyperscalers sell elasticity, so always-on primary distribution should buy commi
 
 ### 7.1 Options by transport
 
-**Data-plane choice largely sets the build-or-rent options**, for the relay-as-cache reason in §4.6, whose table prices them: SRT or RIST means owning the replication, since CDNs take it only as contribution ingest; segmented HTTP means it _can_ be rented from a dozen suppliers at commodity rates; and MoQ today means building it or renting from one of **three**, the two that publish a rate at four to ten times commodity.
+**Data-plane choice largely sets the build-or-rent options**, for the relay-as-cache reason in §4.6, whose table prices them: SRT or RIST means owning the replication, since CDNs take it only as contribution ingest; segmented HTTP means it _can_ be rented from a dozen suppliers at commodity rates; and MoQ today means building it or renting from one of **three**.
 
 ### 7.2 Risk transfer
 
-**A CDN takes on the fan-out, point-of-presence operation, peering and capacity risk.** It does **not** take the conformance hand-off, for which nothing off the shelf exists on the MoQ lane ([Evidence](../lab/evidence.md) §3.2); TR 101 290 monitoring inside its network; the entitlement and control plane (§8); the receive estate (§2); or operations to the broadcast standard.
+**A CDN takes on the fan-out, point-of-presence operation, peering and capacity risk.** It does **not** take the conformance hand-off, which on the MoQ lane only upstream's export performs, in the subscriber and graded in software only ([Architecture](architecture.md) §4.2); TR 101 290 monitoring inside its network; the entitlement and control plane (§8); the receive estate (§2); or operations to the broadcast standard.
 
 **The complexity transferred is bandwidth-shaped and the complexity retained is broadcast-shaped**: renting moves most of the _bill_, not most of the _engineering_.
 
@@ -297,7 +295,7 @@ Same division measured in the data plane: pacing primitive general and upstream;
 
 - **Infrastructure providers — CDNs and hyperscalers — capture the durable value.** They sell fungible capacity per unit, the one input nobody self-supplies past a certain reach, and the [cost model](../lab/cost-model.md) §5 puts it at roughly 90 % of a self-built transport bill. The caveat is §4.6's: for MoQ the market premise the buyer relies on is not yet met.
 - **Control-plane vendors have a real market, and it is not the giants.** A smaller organisation has fewer systems to integrate and often no codified process for the work at all, so the vendor's opinionated model _is_ the product — bought as a way of acquiring a process rather than automating one. That is exactly why the same product cannot be sold upmarket: a mature broadcaster already has the process, encoded across those isolated systems, and needs it honoured rather than replaced.
-- **Data-plane vendor value has moved rather than disappeared.** There is little left in _transport_. But the campaign's own negative results are a product specification: nothing off the shelf turns a MoQ egress into a conformant transport stream ([Evidence](../lab/evidence.md) §3.2), and the campaign's own groomer does so only as far as P1/P2 (§3.16 of the same document). **The value sits at the hand-off, not in the carriage** — the edge appliance, the IRD-facing gateway, the conformance stage — which is a smaller market than transport was, and a real one.
+- **Data-plane vendor value has moved rather than disappeared.** There is little left in _transport_. But the campaign's own results are a product specification: no stock groomer turns a MoQ egress into a conformant transport stream ([Evidence](../lab/evidence.md) §3.2), the campaign's own does so only as far as P1/P2, and upstream's export, which passes the buffer model too, is graded in software only (§3.16 of the same document). **The value sits at the hand-off, not in the carriage** — the edge appliance, the IRD-facing gateway, the conformance stage — which is a smaller market than transport was, and a real one.
 
 ### 8.5 Unsponsored interoperability
 

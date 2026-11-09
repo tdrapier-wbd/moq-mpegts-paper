@@ -85,7 +85,7 @@ The first runs of `seg-kill`, `seg-freeze` and `origin-down` issued their failur
 
 ## Stock receivers behind the group (P1-aq), criteria fixed before running
 
-[T6](test-6-relay-resilience.md) found no stock TS client that survives an origin restart, its clients facing the origin; behind the group, neither receiver above saw a failed fetch. P1-aq puts TSDuck's `tsp --realtime -I hls --live` in both legs' fetchers, each under [`p1aq-stock-recv.py`](scripts/p1aq-stock-recv.py), which restarts it a second after it exits and logs each burst of output as a segment (`B8=<it> P1AQ_FETCHER=tsp t61-cell.sh CELL`). The rest is the environment above. The six cells, and a seventh on one receiver's path:
+[T6](test-6-relay-resilience.md) found no stock TS client that survives an origin restart, its clients facing the origin; behind the group, neither receiver above saw a failed fetch. P1-aq puts TSDuck's `tsp --realtime -I hls --live` in both legs' fetchers, each under [`p1aq-stock-recv.py`](scripts/p1aq-stock-recv.py), which restarts it a second after it exits and logs each burst of output as a segment (`B8=<it> P1AQ_FETCHER=tsp t61-cell.sh CELL`). GStreamer is left out: its HLS elements send the viewer key on the first playlist request only. The rest is the environment above. The six cells, and a seventh on one receiver's path:
 
 | Cell | At 120 s | At 150 s | What CloudFront should see |
 | --- | --- | --- | --- |
