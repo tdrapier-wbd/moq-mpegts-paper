@@ -2,17 +2,17 @@
 
 ## Objective
 
-[Comparison](../docs/comparison.md) §1.1 argues that RIST should hand a groomer the _cleanest_ egress of the transports this paper weighs, on the reasoning that a packet-level tunnel with a jitter buffer "reconstructs the original packet cadence, delayed, rather than reassembling a stream from objects or segments." That was reasoned and explicitly flagged as unmeasured, and it was the largest unmeasured structural claim in the paper.
+[Comparison](../docs/comparison.md) §1.1 argued that RIST should hand a groomer the _cleanest_ egress of the transports this paper weighs, on the reasoning that a packet-level tunnel with a jitter buffer "reconstructs the original packet cadence, delayed, rather than reassembling a stream from objects or segments."
 
 This runs RIST and SRT through the instrument [T14](test-14-data-plane-comparison.md) used, so the point-to-point class can be quoted in the same units as MoQ and segmented HTTP.
 
-Measurement 4 extends the same legs from cadence to carriage, asking what each transport does to the DVB time tables it carries, and adds the media-aware lane to the comparison. It settles an upstream design question — whether a clock should be relayed from the source or synthesised at the edge — and it separates the two classes of machine more sharply than the cadence measurements do.
+Measurement 4 extends the same legs from cadence to carriage, asking what each transport does to the DVB time tables it carries, and adds the media-aware lane to the comparison.
 
 ### Pass criteria (fixed before the runs)
 
 1. **The instrument resolves what it is asked to.** A transport leg is only reportable if a no-transport control run through the same chain is measurably _finer_ than it. Without that, a "clean" result cannot be distinguished from the rig's own floor.
 2. **RIST's median burst and worst-case silence are stated against MoQ's 12.4 kB / 149 ms and segmented HTTP's 2.95 MB / 4.01 s**, from the same source clip and the same 1 ms burst threshold.
-3. **§10.1's claim is graded either way.** "RIST is cleanest" is falsifiable, and a result that contradicts it is the more valuable outcome, since it is currently load-bearing in a section that recommends RIST for routes that do not need internet-scale fan-out.
+3. **§1.1's claim is graded either way.** "RIST is cleanest" is falsifiable, and a result that contradicts it is the more valuable outcome, since it is currently load-bearing in a section that recommends RIST for routes that do not need internet-scale fan-out.
 
 ## Environment
 
@@ -98,7 +98,7 @@ At the resolving source (5 ms release, ~30.6 kB bursts):
 | Max gap | 34.0 ms | 36.7 ms | 36.6 ms | 35.5 ms | **149.4 ms** | 34.9 ms |
 | 10 ms peak/mean | 7.40 | 3.43 | 4.31 | 3.43 | 23.93 | **3.28** |
 
-**RIST and SRT reproduce their input and add nothing to it.** Median and p95 burst are identical to the no-transport control at both source granularities, to three significant figures, across RIST Main, RIST Simple and SRT. The mechanism §10.1 proposed is exactly right: these are packet tunnels, and what comes out is what went in, delayed by the jitter buffer.
+**RIST and SRT reproduce their input and add nothing to it.** Median and p95 burst are identical to the no-transport control at both source granularities, to three significant figures, across RIST Main, RIST Simple and SRT. The mechanism §1.1 proposed is exactly right: these are packet tunnels, and what comes out is what went in, delayed by the jitter buffer.
 
 **They do smooth within the burst, though not its size.** The 10 ms peak/mean halves against the raw UDP control — 3.43 against 7.40 — because the jitter buffer drains a 30.6 kB group over a longer sub-interval than the kernel does. Burst _size_ is the source's; burst _concentration_ is improved.
 
@@ -182,7 +182,7 @@ egress   f0 1c 58 1a 47 42 52 02 01 00 ef 9a 02 00 00 00 00 44 45 55 …   ident
 
 **Proxying a clock is correct for a pipe and insufficient for a remultiplexer.** A constant-delay pipe that never repeats a section is late by its path and cannot be later; the measurement above puts that at ~600 ms of instrument and nothing of transport. A stage that rebuilds the multiplex and re-emits SI on its own cadence is a different machine: it is late by however long it holds a section, and below its own emission rate it repeats one.
 
-The fix that follows is narrow. For a latest-value table the interval should be a _floor on repetition_ and not the emission schedule — emit when the value changes, fall back to the interval only to satisfy the DVB maximum. The reasoning that a source's observed cadence "means nothing downstream" holds for a static table, where a repetition carries the same information whenever it is sent; for a clock the cadence _is_ the information.
+For a static table a repetition carries the same information whenever it is sent; for a clock the cadence _is_ the information. Upstream took the fix this implies, the interval as a floor on repetition with emission on change ([#2934](https://github.com/moq-dev/moq/issues/2934), closed); it is not measured here.
 
 ### Against the pass criteria
 
@@ -190,7 +190,7 @@ The fix that follows is narrow. For a latest-value table the interval should be 
 | --- | --- |
 | 1. Instrument resolves what it is asked to | **Met, on the second attempt.** The first run was the rig's floor; the UDP control caught it and the source was tightened until the control sat below MoQ. |
 | 2. RIST stated in T14's units | **Met.** Both source conditions, same clip, same 1 ms threshold, tool validated against T14's retained captures. |
-| 3. §10.1 graded either way | **Met, and it graded against the claim** on burst size while confirming its mechanism and its worst-case silence. |
+| 3. §1.1 graded either way | **Met, and it graded against the claim** on burst size while confirming its mechanism and its worst-case silence. |
 
 ## Observations
 
@@ -198,12 +198,10 @@ The fix that follows is narrow. For a latest-value table the interval should be 
 - **MoQ's median burst is threshold-sensitive where the tunnels' is not.** Swept from 0.2 ms to 5 ms, MoQ's median runs 7.1 → 25.8 kB while every point-to-point leg stays at 30.6 kB and segmented HTTP at megabytes. T14's 12.4 kB is therefore a 1 ms-threshold figure rather than a natural constant. The comparison is unaffected — the threshold was fixed in advance and applied identically to every leg, and MoQ is finer than the tunnels at every threshold up to 2 ms — but the single number should not be quoted as though the grouping were incidental to it.
 - **RIST Simple profile only works receiver-listens / sender-calls.** Asking a Simple-profile sender to listen fails with `Address already in use` on a demonstrably free port, which cost a hung run before the direction was tested directly. Main profile supports both. The rig now gives each leg its own port block and aborts if the publisher dies rather than letting the receiver block forever.
 - **The transparency result makes the source the thing to specify.** Since a tunnel's egress is its ingress, "RIST hands over a clean stream" is a statement about the encoder, not about RIST. On a true CBR hardware feed the tunnels should be smoother than anything measured here; behind a bursty software packager they are exactly as bursty as it is. Neither is a protocol property.
-- **Transparency extends to carriage, and that is what makes the incumbents' clock handling safe.** The same property measured on cadence holds on the time tables: the transports neither parse nor repeat a section, so a forwarded TDT is late by the path and by nothing else. It follows that "proxy the source's clock" is advice about constant-delay pipes rather than about time tables, and it does not transfer to a stage that re-emits SI on a cadence of its own.
-- **A test whose control drifts identically to its arms has measured its own instrument.** All three clock legs returned a spread within 3 ms of each other; the shared component was the replay-rate error in `timeref --start`, and only the presence of a no-transport control made it separable from a transport property. This is the same lesson the cadence half of T15 learned, arrived at from the other direction.
 
 ## Conclusion
 
-**§10.1's mechanism is confirmed and its ranking is not.** RIST is a transparent packet tunnel, as argued — measured identical to a no-transport control on burst size at two source granularities, and so is SRT. But transparency is not the same as cleanliness: fed this campaign's publisher, RIST hands a groomer 30.6 kB bursts where MoQ hands it 12.2 kB from the same source, because MoQ's granularity is set by its object model and does not track its input.
+**§1.1's mechanism is confirmed and its ranking is not.** RIST is a transparent packet tunnel, as argued — measured identical to a no-transport control on burst size at two source granularities, and so is SRT. But transparency is not the same as cleanliness: fed this campaign's publisher, RIST hands a groomer 30.6 kB bursts where MoQ hands it 12.2 kB from the same source, because MoQ's granularity is set by its object model and does not track its input.
 
 **On the axis that sizes a groomer's start gate, the tunnels win.** Worst-case silence is ~35 ms on RIST and SRT against MoQ's 149 ms and segmented HTTP's 4.01 s. Median burst and maximum silence rank the four differently, and a hand-off argument has to say which it means.
 
@@ -217,7 +215,6 @@ The fix that follows is narrow. For a latest-value table the interval should be 
 | --- | --- |
 | RIST and SRT under loss and RTT | Loopback has neither. This measures delivery shape on a healthy path, not recovery. |
 | A true CBR hardware source | Would establish the tunnels' floor rather than this publisher's. The transparency result makes this the interesting remaining variable. |
-| RIST Advanced profile | libRIST 0.2.20 exposes it; nothing in the comparison currently turns on it. |
 | A proxied clock through MoQ under loss | Measured on a clean loopback path only. Whether a lost snapshot group extends the staleness above is untested, and it is the arm that would matter on a real route. |
 | The clock legs' true end-to-end latency | The rig's publisher blocks until its peer connects, which anchors `timeref` before the stream flows and turns the stall into a constant offset. Fixing it means anchoring after the connection is up. |
 | Whether `cbr-output`'s spacing survives a groomer's input stage | It reduces burst absorption, and whether that lets a smaller buffer pass TR 101 290 is a groomer question ([architecture](../docs/architecture.md) §4.5). |
