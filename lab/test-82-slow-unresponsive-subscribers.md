@@ -272,3 +272,58 @@ A subscriber slower than the stream cannot be served at the live edge with all i
 - a frozen downstream relay;
 - T25's kill-and-relaunch churn on main;
 - a slowed subscriber without padding.
+
+## Follow-up: Parts B–E, criteria fixed before running
+
+The first report left four questions open. Each part below fixes its hypothesis and criteria before its first cell. The rig, builds, clip and instruments are those above, except where a part says otherwise. Parts C and D use _light_ abusers: their export writes straight to `/dev/null` with no reader, so 64 of them fit the laptop. A light abuser's fate is read from its own log, from the first `session terminated` or `session error` line, which is the instrument the hang analysis above used.
+
+### Part B: a PCR-paced receiver behind a stalled export
+
+Defect 2's consequence was inferred, not measured: that a receiver playing out by PCR, behind an export that back-filled a 60 s stall, sits about 60 s behind live.
+
+In each cell, abuser `a1`'s export feeds a _valve_ (`t82-reader.py` with the `stop` throttle, forwarding what it reads), then a receiver, then a reader that logs the receiver's output. A chain control `k1` runs the same chain with no throttle, in the same cell. The cell ends at 230 s.
+
+The two receivers:
+
+- `tsp -P regulate --pcr-synchronous` (TSDuck 3.45), which forwards every packet, nulls included, at the pace of its PCR;
+- the campaign's groomer, `mpegts-pacer` at `97f3a38`, the build in T76's soak: `stdout 9950000 --latency-ms 1000 --max-latency-ms 8000 --stall-ms 1000 --on-stall mute`.
+
+The arms are `stop-tsp`, `stop-np-tsp`, `stop-pacer` and `stop-np-pacer`, one cell each, on main. L_a and L_k are the lags of `a1`'s and `k1`'s receiver output behind victim 1's video DTS. B is k1's median L_k over 20–45 s, and te is 105 s, when the valve resumes.
+
+**HB:** behind a stalled, padded export, a PCR-paced receiver plays the back-filled padding in real time, so its output stays about the stall's length behind live.
+
+1. Valid: `k1` runs to the end with L_k within B ± 0.5 s at every row from 20 s, and the valve gains at most 64 KiB over 46–105 s.
+2. HB holds for a receiver if, in its padded cell, L_a − B ≥ 50 s at every row from te + 10 s to te + 40 s.
+3. The remedy holds for a receiver if, in its unpadded cell, L_a is back within B + 0.5 s by te + 10 s and stays there to the end.
+4. If the padded cell's L_a is back within B + 0.5 s by te + 10 s, HB fails for that receiver. Otherwise L_a at te + 10, te + 40 and te + 100 s is reported.
+
+Also reported: the receiver's output rate after te, its output's video PES after te against victim 1's, and continuity errors in its output.
+
+### Part C: the reset drain with 64 clients
+
+The arms are `r2` with light abusers: `r2x32l` (32) once, `r2x64` (64) twice, and `r2x64-rs` (64, with a reset secret) once. Each freezes for 40 s at a 30 s idle timeout, and each cell ends at 300 s. A session is _late_ if it ends more than 15 s after the SIGCONT (criterion 4's deadline for the cost arms), and the _drain_ is its last end minus the SIGCONT.
+
+**HC:** without a secret, the drain grows with the number of clients, since each keep-alive round answers one to three of them.
+
+1. Valid: `r2x32l` has at least one late session, so light abusers reproduce the hang.
+2. HC holds if both `r2x64` cells drain for longer than 60 s, the longest at 32 clients. Their late counts are reported against 2–11 of 32.
+3. The remedy holds at 64 if every session of `r2x64-rs` ends within 15 s of the SIGCONT.
+4. Victims are graded by criterion 1.
+
+### Part D: T25's killed-peer storm on main
+
+The arms are `storm` (idle timeout 10 s) twice and `storm30` (30 s) once on main, and `storm30` once on the previous stack. From 45 s, every 5 s, the rig SIGKILLs every abuser export and starts 40 new light ones. Twelve generations run, 480 sessions, and the last is killed at 105 s. The cell ends at 170 s.
+
+F is the relay's footprint, F0 its median over 39–45 s, and S the sessions it holds, read from its log (accepted minus closed). P is the largest F − F0 over 50–110 s, H the largest S − 3 over the same window, and P/H the cost per held session.
+
+**HD:** on main, a killed peer costs the relay about what a frozen one does.
+
+1. HD holds if P/H ≤ 1 MB in both main `storm` cells and the main `storm30` cell. T25's retention holds instead if P/H ≥ 5 MB. Otherwise the measured law is reported.
+2. Reported: whether F is back within 40 MB of F0 by 105 s + idle + 30 s.
+3. Victims are graded by criterion 1.
+
+### Part E: the slowed subscriber unpadded
+
+The arm is `slow-np` twice, on main, graded by criterion 3's thresholds unchanged.
+
+**HE:** the latency comes from the export's blocked writer, not from its padding. HE holds if both cells' lag exceeds 4 s (criterion 3.1 still fails) and their video share exceeds 25 % (criterion 3.2 passes), against 20 % padded.
