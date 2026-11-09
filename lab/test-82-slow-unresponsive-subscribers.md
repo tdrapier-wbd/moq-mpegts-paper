@@ -1,6 +1,6 @@
 # Test 82: slow and unresponsive subscribers on the current relay
 
-**State: run and graded: 24 matrix cells and 12 supplementary cells, on current main and the previous QUIC stack.**
+**State: run and graded: 24 matrix cells, 12 supplementary cells and 14 follow-up cells (Parts B–E), on current main and the previous QUIC stack.**
 
 ## Objective
 
@@ -227,9 +227,9 @@ A hung abuser kept reading and logging (`media skipped upstream; resuming at the
 
 **Why resumed sessions hang on main.** A client whose connection the relay dropped silently learns of it only from a stateless reset. The relay sends one in answer to a packet for a connection it no longer has. moq-quic sends at most one per `min_reset_interval` per endpoint (20 ms by default, 1 ms with a reset secret) and drops any other inciting packet unanswered.
 
-All 32 clients resume in the same millisecond, and their keep-alives (0.3 × the idle timeout, 9 s here) stay in phase. Each round therefore answers one to three of them: the hung sessions of the third `r2` cell end at 94.0, 103.1, 112.1, 121.1, 130.1 and 139.1 s. Their own idle timers did not end them within 30 s either. The likely reason, inferred rather than measured, is the RTT sample from acknowledgements buffered across the freeze, which stretches three probe timeouts past the idle timeout.
+All 32 clients resume in the same millisecond, and their keep-alives (0.3 × the idle timeout, 9 s here) stay in phase. The steps fit each round answering one to three of them: the hung sessions of the third `r2` cell end at 94.0, 103.1, 112.1, 121.1, 130.1 and 139.1 s. Their own idle timers did not end them within 30 s either. The likely reason, inferred rather than measured, is the RTT sample from acknowledgements buffered across the freeze, which stretches three probe timeouts past the idle timeout.
 
-With a secret, both `r2-rs` cells ended every session within one keep-alive round. At a 10 s idle timeout, `r1` hung none in 96, and the previous stack hung none.
+With a secret, both `r2-rs` cells ended every session within one keep-alive round. At a 10 s idle timeout, `r1` hung none in 96, and the previous stack hung none. At 64 clients none hung (Part C′), so this account is not the whole condition.
 
 **The burst after an output stall.** A `stop` subscriber's export keeps its PCR grid while its reader reads nothing, and writes every missed slot when the reader resumes. In the first 0.5 s it wrote 75.1 MB (1.2 Gb/s): 96.8 % null packets and 42 video PES, carrying PCRs that span 60.4 s. After that it ran at 10.1 Mb/s with the PCR in step with the wall clock. Unpadded (`stop-np`), the peak is 2.5× the line rate. The export's RSS rose 74–78 MB at the resume.
 
@@ -261,16 +261,16 @@ A subscriber slower than the stream cannot be served at the live edge with all i
 
 **Implementation defects, each with a measured trigger:**
 
-1. **Resumed sessions hang (main).** They hang for 18–60 s when many resume after a freeze longer than a 30 s idle timeout: 18 of 96 sessions. The cause is the 20 ms endpoint-wide stateless-reset interval against in-phase keep-alives. The previous stack does not do this. Remedy tested: `--listen-reset-secret`, with which none of 64 hung.
-2. **Padding back-fill.** The export writes a stalled output's missed padding all at once: 60 s of PCR in 0.5 s. Remedy tested: `--mux-rate 0` (a 2.5× peak). Behind a padded export, a PCR-regulating remultiplexer passes the burst on at 54× the line rate, where the groomer, which strips padding, absorbs it (Part B). Neither sits a stall behind live, as had been inferred.
-3. **Follow misreads the reconnect.** After the subscriber's own reconnect, `--follow` takes the unchanged publisher for a replacement and the export exits. `--stitch` works around it (live 2.8 s after a 30 s freeze) at the price of a flagged program switch.
+1. **Resumed sessions hang (main).** When 32 resume after a freeze longer than a 30 s idle timeout, 18 of 96 sessions hang for 18–60 s. The 20 ms endpoint-wide stateless-reset interval gates it: the hung sessions end in 9 s keep-alive steps, and the 1 ms interval a secret sets removes it. That in-phase keep-alives are what make the interval bind is inferred. The previous stack does not do this. Remedy tested: `--listen-reset-secret`, with which none of 64 hung. At 64 clients none hung even without it (Part C′), for a reason not established. Reported as [#8382](https://github.com/moq-dev/moq/issues/8382).
+2. **Padding back-fill.** The export writes a stalled output's missed padding all at once: 60 s of PCR in 0.5 s. Remedy tested: `--mux-rate 0` (a 2.5× peak). Behind a padded export, a PCR-regulating remultiplexer passes the burst on at 54× the line rate, where the groomer, which strips padding, absorbs it (Part B). Neither sits a stall behind live, as had been inferred. Reported with defect 4 as [#8383](https://github.com/moq-dev/moq/issues/8383).
+3. **Follow misreads the reconnect.** After the subscriber's own reconnect, `--follow` takes the unchanged publisher for a replacement and the export exits. `--stitch` works around it (live 2.8 s after a 30 s freeze) at the price of a flagged program switch. Reported as [#8384](https://github.com/moq-dev/moq/issues/8384).
 4. **A padded export does not shed on a slow output.** It blocks instead of shedding to the live edge, and after about 80 s at half rate exits with a clock-drift error that blames the source. Unpadded, it sheds, and its lag holds at about 4 s (Part E).
 
 **Not established:**
 
-- hundreds of stuck head-ends (N stops at 32, and the reset drain with more clients or real-network jitter is untested);
+- hundreds of stuck head-ends (N stops at 64, and real-network jitter is untested);
 - a frozen downstream relay;
-- T25's kill-and-relaunch churn on main.
+- whether the storm's victim group skips are the relay's or the laptop's, and whether the memory main keeps after a storm is a high-water mark or a leak (Part D).
 
 ## Follow-up: Parts B–E, criteria fixed before running
 
@@ -336,9 +336,23 @@ The arm is `slow-np` twice, on main, graded by criterion 3's thresholds unchange
 
 **HE:** the latency comes from the export's blocked writer, not from its padding. HE holds if both cells' lag exceeds 4 s (criterion 3.1 still fails) and their video share exceeds 25 % (criterion 3.2 passes), against 20 % padded.
 
+### Follow-up commands
+
+The counted cells, on main except the previous stack's storm, graded against the matrix's control cells:
+
+```bash
+for spec in 1:stop-tsp 2:stop-np-tsp 3:stop-pacer 4:stop-np-pacer 5:slow-np 6:slow-np 7:r2x32l \
+	11:storm 12:storm 13:storm30 14:noq:storm30 15:r2x64f 16:r2x64f 17:r2x64f-rs; do
+	i=${spec%%:*} a=${spec#*:} mq=~/bin-bad28cef-thin name="$i-$a"
+	case $a in noq:*) a=${a#noq:} mq=~/bin-3c0daa21-thin name="$i-noq-$a" ;; esac
+	MOQ=$mq lab/scripts/t82-slow-consumer.sh "$a" "/tmp/t82f/$name"
+done
+lab/scripts/t82-followup.py /tmp/t82f --controls /tmp/t82 --csv lab/results/t82-followup.csv
+```
+
 ### Follow-up results
 
-Fourteen counted cells ran, all on main except one `storm30` on the previous stack. Per-cell values are in [`results/t82-followup.csv`](results/t82-followup.csv). The victims pass criterion 1 in every cell.
+Fourteen counted cells ran, all on main except one `storm30` on the previous stack. Per-cell values are in [`results/t82-followup.csv`](results/t82-followup.csv). The victims pass criterion 1 in Parts B and E. The exceptions in Parts C′ and D are given there.
 
 **Part B.** All four cells are valid. `k1` left its band on 0.1–0.4 % of rows, never for more than 0.5 s, and no valve read a byte during the stop. No receiver's output has a continuity error.
 
@@ -359,3 +373,40 @@ The groomer strips the back-fill's 440,000 null packets and keeps its output at 
 | --- | --: | --: | --: | --: | --- |
 | `slow-np` ×2 | 3.9 and 4.3 s | 0.001 and 0.009 s/s | 47 % | 31 and 20 MB | live 0.1–0.2 s after the throttle lifts, behind a 1.5–2.1× burst |
 | `slow` ×2, padded (above) | 31.3 s | 0.48 s/s | 20 % | 23 MB | live 0.5 s after, behind a 31× burst |
+
+**Part C is void.** `r2x32l`'s light abusers did not reproduce the hang: 31 of 32 sessions ended 0.4 s after the SIGCONT and one after 9.4 s, so none was late. The relay closed 8 of the 32 silently (`transport idle timeout`), against 15 in an `r2` cell, and even those learned of it at once. Once Part C was void, its `r2x64` cells were stopped unfinished. Part C′ replaces it.
+
+**Part C′.** All three cells are valid by criterion zero.
+
+| Cell | Silent closes | Late | Drain | Clients ending on their own idle timer |
+| --- | --: | --: | --: | --: |
+| `r2x64f` | 23 of 64 | 0 | 2.3 s | 10 |
+| `r2x64f` | 32 of 64 | 0 | 9.3 s | 4 |
+| `r2x64f-rs` | 37 of 64 | 0 | 0.8 s | 3 |
+| `r2` (above), one cell | 15 of 32 | 5 | 45.5 s | 1 |
+
+At 64 clients none hung, though the relay closed more sessions silently than at 32, and every session learned of its close within 9.3 s. Why the hang did not recur is not established. The rig does not trace whether more clients' own idle deadlines expired (3–10 per cell ended on their own timer, `err=transport idle timeout`, against 1 of 32), or whether 64 resumes on a loaded host fall in fewer shared 20 ms windows. The victims' media counts and lag pass in all three cells. Each, though, had a victim skip a group, failing criterion 1's export-clock check, with about 135 processes on the laptop.
+
+**Part D.** Each cell's 480 sessions opened, and the relay held the 3 that are not abusers again within 11 s of the last kill (31 s at a 30 s idle timeout).
+
+| Cell | Build | Idle | Peak held, H | Peak footprint rise, P | P/H | After the last abandoned session closed |
+| --- | --- | --: | --: | --: | --: | --- |
+| `storm` ×2 | main | 10 s | 120 | 189 and 185 MB | 1.57 and 1.54 MB | +79 and +78 MB, flat to the end |
+| `storm30` | main | 30 s | 280 | 363 MB | 1.30 MB | +145 MB, flat |
+| `storm30` | previous stack | 30 s | 301 | 6,955 MB | 23.1 MB | +2,936 MB, falling |
+
+Main pays 1.3–1.6 MB for each abandoned session it holds: three times a frozen session's cost, and a fifteenth of the previous stack's. After the last one closes, about half the peak stays, flat to the cell's end. With one storm per cell, a high-water mark can't be told from a leak. The uncounted pilot `storm` agreed: 1.50 MB per held session, and +80 MB after.
+
+The victims' media counts and lag pass in every cell. In each counted main cell, though, a victim skipped one group, or in `storm30` two (`current group evicted`, 7 frames dropped, one gap), each about 1.5 s after a storm tick. That fails criterion 1's export-clock check; the pilot had none. This rig cannot attribute it: each tick kills and starts 40 processes on the laptop that runs the relay and the victims. On the previous stack both victims dropped frames continuously once the relay's footprint passed a few GB, with the laptop swapping 8.5 GB. By T25's own rule, that is a statement about the host.
+
+### Follow-up grading
+
+| Part | Hypothesis | Verdict |
+| --- | --- | --- |
+| B | a PCR-paced receiver sits a stall behind live | **fails** for both receivers; the remedy holds for `tsp`, not for the groomer, whose lag after a stall does not depend on padding |
+| C | the reset drain grows with clients (light abusers) | **void**: the light abusers did not reproduce the hang |
+| C′ | the same, full abusers | **fails**: none of 128 hung at 64; the remedy holds |
+| D | a killed peer costs main about what a frozen one does | **fails**: 1.3–1.6 MB per held session, three times a frozen one's, and not T25's retention, which the previous stack reproduces at 23 MB |
+| E | padding is not why a slowed export's lag grows | **fails**: unpadded, the lag holds at about 4 s |
+
+The victims were isolated in Parts B and E. Under the storm and at 64 full abusers, each main cell had a victim skip one or two groups, unattributed between relay and host.

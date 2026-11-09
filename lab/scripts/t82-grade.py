@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 """Grade a T82 matrix: the criteria of lab/test-82-slow-unresponsive-subscribers.md, cell by cell.
 
-Usage: t82-grade.py <root> [--csv summary.csv]
+Usage: t82-grade.py <root> [--csv summary.csv] [--controls <root>]
 
 <root> holds one directory per cell, as `t82-slow-consumer.sh` writes them. Criterion zero voids a
 cell; criteria 1-4 are graded. The cost per session (criterion 2) is graded across cells, because
-it needs the same build's healthy32 null. Times are seconds after the cell's t0. RSS is reported in
+it needs the same build's healthy32 null. --controls adds another root's control cells to the
+victims' reference, for a root that has none. A subscriber with no reader log (a light abuser) is
+not graded as one. Times are seconds after the cell's t0. RSS is reported in
 MB (10^6 bytes), the unit the criteria's 5.24 MB is written in.
 """
 
@@ -174,7 +176,7 @@ def grade_cell(cell, controls):
     t_end = float(m.get("t_end", T_END))
     pids = dict(line.split("\t") for line in (cell / "pids.tsv").read_text().splitlines())
     pids = {k: int(v) for k, v in pids.items()}
-    subs = {k: Sub(cell / f"{k}.csv", t0) for k in pids if k not in ("relay", "pub")}
+    subs = {k: Sub(cell / f"{k}.csv", t0) for k in pids if k not in ("relay", "pub") and (cell / f"{k}.csv").exists()}
     v1, v2 = subs["v1"], subs["v2"]
     abusers = [k for k in subs if k.startswith("a")]
     ps = ps_rows(cell)
@@ -418,7 +420,11 @@ def main():
         (c for c in root.iterdir() if (c / "meta.txt").exists() and (c / "pids.tsv").exists()),
         key=lambda c: int(c.name.split("-")[0]),
     )
-    controls = control_means(cells)
+    extra = []
+    if "--controls" in sys.argv:
+        croot = Path(sys.argv[sys.argv.index("--controls") + 1])
+        extra = [c for c in croot.iterdir() if (c / "meta.txt").exists() and (c / "pids.tsv").exists()]
+    controls = control_means(cells + extra)
     results = [grade_cell(c, controls) for c in cells]
     for r in results:
         print(f"== {r['cell']}  [{r['build']}, {r['lane']}, N={r['abusers']}, {r['event']}, idle {r['idle']}]")
