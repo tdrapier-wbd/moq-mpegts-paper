@@ -275,7 +275,7 @@ A subscriber slower than the stream cannot be served at the live edge with all i
 
 ## Follow-up: Parts B–E, criteria fixed before running
 
-The first report left four questions open. Each part below fixes its hypothesis and criteria before its first cell. The rig, builds, clip and instruments are those above, except where a part says otherwise. Parts C and D use _light_ abusers: their export writes straight to `/dev/null` with no reader, so 64 of them fit the laptop. A light abuser's fate is read from its own log, from the first `session terminated` or `session error` line, which is the instrument the hang analysis above used.
+The first report left four questions open. Each part below fixes its hypothesis and criteria before its first cell. The rig, builds, clip and instruments are those above, except where a part says otherwise. Parts C and D use _light_ abusers: their export writes straight to `/dev/null` with no reader, so 64 of them fit the laptop. A light abuser's session ends when its export exits, read from the process table every 0.5 s and checked against its log's last line (`broadcast did not return`). These are the exits the hang analysis above timed.
 
 ### Part B: a PCR-paced receiver behind a stalled export
 
@@ -301,7 +301,7 @@ Also reported: the receiver's output rate after te, its output's video PES after
 
 ### Part C: the reset drain with 64 clients
 
-The arms are `r2` with light abusers: `r2x32l` (32) once, `r2x64` (64) twice, and `r2x64-rs` (64, with a reset secret) once. Each freezes for 40 s at a 30 s idle timeout, and each cell ends at 300 s. A session is _late_ if it ends more than 15 s after the SIGCONT (criterion 4's deadline for the cost arms), and the _drain_ is its last end minus the SIGCONT.
+The arms are `r2` with light abusers: `r2x32l` (32) once, `r2x64` (64) twice, and `r2x64-rs` (64, with a reset secret) once. Each freezes for 40 s at a 30 s idle timeout, and each cell ends at 300 s. A session is _late_ if it ends more than 15 s after the SIGCONT (criterion 4's deadline for the cost arms), or not by the cell's end. The _drain_ is its last end minus the SIGCONT.
 
 **HC:** without a secret, the drain grows with the number of clients, since each keep-alive round answers one to three of them.
 
