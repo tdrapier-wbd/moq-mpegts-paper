@@ -150,9 +150,22 @@ Both nodes run moqx v0.3.7, which fixes the refused joining FETCH: the one-threa
 - **Three-thread node, both lanes:** subscribers at 1, 2, 4, 8, 16, 24, 32, 40, 48 and 56 (56 carry about 1.4 Gb/s of media), each step settled 60 s and measured 120 s, ending at the first degraded step.
 - **One-thread node, passthrough lane, for an hour:** the same schedule to 48, then 52, each step settled 120 s and measured 240 s. Its rule allows no more: 56 subscribers would reach about 1.51 Gb/s at the interface. If its own step 1 projects 52 past 1.45 Gb/s at this host's interface, the ramp ends at 48. Either end is reported as the operator's ceiling, not a knee.
 
-**Changed before the first step:** the three-thread node ends every session of `f2fca6fd2` and of `3c0daa21b` as it opens. Each client rejects a SETUP parameter value the node sends, which the one-thread node does not send, and retries; `cd560bde5e` connects. The three-thread node's ramps run `cd560bde5e`, so the threads comparison changes the client as well as the node; the one-thread node's runs `f2fca6fd2` as planned.
+**Changed before the first step:** the three-thread node ends every session of `f2fca6fd2` and of `3c0daa21b` as it opens. Each client rejects a SETUP parameter value the node sends, which the one-thread node does not send, and retries; `cd560bde5e` connects. The three-thread node's ramps run `cd560bde5e`, so the threads comparison changes the client as well as the node; the one-thread node's runs `f2fca6fd2` as planned. **Changed again, before the three-thread node's graded ramps:** with `cd560bde5e` at both ends, a subscriber that joins more than about a minute after the first receives no catalog, on either node, so that client cannot ramp (_Results_). Those ramps run `d66c892833`, the commit before that change, once it has connected to the three-thread node and passed a join three minutes after the first subscriber.
 
 The criteria above apply unchanged. **H-threads:** on three threads, the demultiplexed lane passes the one-thread node's 32. **H-join:** on v0.3.7 no passthrough subscriber fails its join, and none ends at a mid-group join, on either node. **Reported:** the passthrough lane's single-session stalls, by subscriber and time; each step's common and single skips; the node's own metrics only as its operator provides them, since this run reads none.
+
+**Results, one-thread node: the passthrough lane degrades at 24, as on v0.3.6, but by late groups rather than silent sessions.** One publisher for 58 min, reading 25.000 Mb/s in every minute without an exit.
+
+| N | Received per subscriber, of step 1's (lowest) | Host CPU | Join (s) | Skips in the measure window, common / single | Graded subscribers: continuity errors / PCR intervals over 40 ms (longest) | Step |
+| --- | --- | --- | --- | --- | --- | --- |
+| 1 | 100.0 % (25.89 Mb/s) | 1.1 % | 0.72 | 0 / 0 | 0 / 0 | pass |
+| 2, 4, 8, 16 | 99.9 % | 1.6–9.2 % | 0.43–0.86 | 0 / 0 | 0 / 0 | pass |
+| 24 | 100.0 % | 14.7 % | 0.61 | 0 / 7 | 42 / 7 (350 ms), three of four | **degraded** |
+| 32 | 100.0 % | 20.0 % | 1.11 | 0 / 14 | 10 / 0 (35 ms), one | degraded |
+| 40 | 100.2 % | 27.8 % | 0.56 | 0 / 163 | 115 / 16 (300 ms), four | degraded |
+| 48 | 100.1 %; 10 sessions ended | 27.1 % | 1.05 | 0 / 140 | 156 / 23 (372 ms), three | degraded |
+
+From step 24's settle, subscribers logged the group they were reading evicted before they had read it, a later group having arrived first, and the export resumed at the next: 5,443 skips over the run, a median of 109 ms each and at most 864 ms, all single but five, which fell in step 48's settle. No join failed, so **H-join holds on this node**, and no session ended through 40, where on v0.3.6 single sessions fell silent at 2, 4 and 24. At 48 ten subscribers that had joined at earlier steps ended 31–75 s after the step's joins, each after a run of evicted groups, when the node reset its media track (code 5); the ramp stopped there. The byte criterion cannot see this: the socket's median rate rose from 25.87 Mb/s at 2 subscribers to 26.17 at 48, at most 27.11, which fits retransmission, the repaired group arriving after its successor. The subscriber host stayed under 28 % CPU and 1.09 Gb/s, so by the criteria the knee is the relay's: the node or its path, which this run cannot separate without the node's metrics.
 
 ## Corrections
 
