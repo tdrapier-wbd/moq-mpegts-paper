@@ -336,6 +336,17 @@ The arm is `slow-np` twice, on main, graded by criterion 3's thresholds unchange
 
 **HE:** the latency comes from the export's blocked writer, not from its padding. HE holds if both cells' lag exceeds 4 s (criterion 3.1 still fails) and their video share exceeds 25 % (criterion 3.2 passes), against 20 % padded.
 
+### Part F: `--follow` after a reconnect on moq-lite-07
+
+On `moq-lite-06` the wire carries no publisher instance, so each subscriber session mints its own. After its own reconnect, the follower cannot tell the publisher unchanged and exits (defect 3). On `moq-lite-07` the publisher's instance is carried end to end. The arm is `freeze30-f-l7`, every client offering only `moq-lite-07-wip`, run twice, with `freeze30-f` once as the control. All three run on `main` at a commit that carries the instance on lite-07, a later build than the matrix's.
+
+**HF:** on `moq-lite-07`, `--follow` treats the subscriber's own reconnect as a return.
+
+1. Valid: in the `-l7` cells every `connected version=` line of the import's and the exports' logs reads `moq-lite-07-wip`, and in the control `moq-lite-06`. In every cell `a1` connects again after the SIGCONT.
+2. The control reproduces defect 3: `a1` exits within 15 s of the SIGCONT, after taking the broadcast for another publisher instance. If it does not, Part F is void.
+3. HF holds if, in both `-l7` cells, `a1` logs no replacement, its criterion 4 fate is _live_, and its capture has 0 continuity errors. The time to live is reported against `freeze30-fs`'s 2.8 s.
+4. Victims are graded by criterion 1.
+
 ### Follow-up commands
 
 The counted cells, on main except the previous stack's storm, graded against the matrix's control cells:
