@@ -687,6 +687,13 @@ These are criteria on the _experiment's deliverable_, not on the lanes — neith
 
 25. **Verdict and prediction.** Criteria 21 and 22 as above. With nothing heard during the outage, the subscriber's first packet after it brings the relay's probe forward, so criterion 22 passes and video lost falls within P1-y's _backoff_ range.
 
+**For P1-a's ladder on `moq-quic` (P1-ar), fixed before it runs.** P1-a's sustained cells on `main` `cd560bde5e` (`moq-quic`, `--quic-congestion-control delay`, BBRv3), in the matched ladder's rig with `POST_S=35`, `LANES=moq`: `export ts --delay D` for D ∈ {1, 2 s}, 5 % and 10 % loss and 5 % and 20 % reorder from 21 s to 61 s, three replicates, one control per D. SRT is not re-run: on this rig it lost nothing to any of these shapes at any D (P1-a), so its figure is 0 s whatever the MoQ lane's latency. Then one replicate of 5 % loss at D = 2 s with the relay built with `qlog` (`--quic-qlog`). [T71](test-71-long-lossy-path.md)'s 1 % loss cell at D = 1 and 2 s follows on T71's rig, graded by T71's criteria.
+
+26. **Validity.** Each control loses ≤ 0.1 s of video; its median delivered latency is the D's figure, reported beside P1-a's 2,184 and 3,931 ms.
+27. **Graded as P1-a.** Median video lost over three replicates (the hole count, as P1-a quoted it for sustained cells), with audio lost, the export's late drops, and the latency 30 s after the shape ends against the control's (criterion 8's band).
+28. **Verdict.** A cell has _moved_ from P1-a's noq row at its D if the medians differ by more than 0.5 s and the replicate ranges do not overlap; criterion 8's rule against SRT's 0 s is reported. From the qlog: packets declared lost against those netem dropped, and the congestion window and pacing rate before, during and after the shape.
+29. **The prediction it can falsify.** `moq-quic`'s BBRv3 yields to random loss as noq's did: under both loss rates and 20 % reorder the video stops for most of the 40 s (at least 20 s lost) at both D, 5 % reorder costs nothing, and the qlog shows the window falling by an order of magnitude during the shape.
+
 ## Limits, stated in advance
 
 - **P1 file egress only in v1.** Wire timing (P2) and hardware IRD merge are out of scope; outage behaviour on a hardware IRD may differ from file PCR arithmetic.

@@ -54,6 +54,11 @@
 # control arm. They are therefore detected separately: `moq_cli_detect` takes both and sets
 # `RELAY_*` from the relay binary and `MOQ_*` from the client.
 #
+# **5. Builds from #6633 on refuse to start on a `MOQ_*` variable they do not read**, so a rig knob
+# passed on the command line (`MOQ_CC=loss bash rig.sh`) stops every binary the rig starts, and
+# `moq_cli_detect`'s probe with it. Sourcing this file unexports the rig-only knobs; a new one goes
+# in the list. `MOQ_CONNECT_VERSION` and `MOQ_LISTEN_VERSION` are the binaries' own and stay.
+#
 # ## The QUIC backend is no longer selectable, and it changed under the campaign
 #
 # #3757 flipped the default from quinn to noq+iroh and #3811 deleted quinn outright, so every build
@@ -65,6 +70,8 @@
 # One consequence for GSO: the **iroh** backend cannot turn GSO off and rejects an explicit `false`.
 # `ec2-build-main.sh` builds `--no-default-features --features noq,…`, which drops iroh, so
 # `--quic-gso=false` is accepted. A build that kept the default feature set would fail on it.
+
+export -n MOQ_CC MOQ_MUX_RATE MOQ_BIN MOQ_RELAY MOQ_TREE MOQ_REPL MOQ_PT MOQ_MA MOQ_LATENCY
 
 # moq_cli_detect <moq-binary> [relay-binary]
 #
