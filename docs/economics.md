@@ -99,11 +99,11 @@ All rates are US dollars, ex-tax. One constant reconciles the pricing models: **
 | --- | --- | --- |
 | **Self-hosted** — own the egress; transit and ports, unmetered per GB | Surveyed IP transit, competitive hub, 10–100 GigE port — _bandwidth only_ | 0.00015–0.00021 |
 |  | Illustrative all-in point of presence, 40–100 % utilised _(assumed)_ | 0.0009–0.0023 |
-| **Cloud** — own software on rented compute, metered egress | AWS / Azure / GCP list egress, first tier | 0.080–0.120 |
+| **Cloud** — own software on rented compute, metered egress | AWS / Azure / GCP list egress, first tier | 0.080–0.112 |
 |  | AWS / Azure / GCP, deepest published volume tier | 0.040–0.050 |
-| **Vendor / managed** — buy delivery as an outcome | Zixi Broadcaster licence (Marketplace list) _on top of_ AWS list egress | 0.140 |
+| **Vendor / managed** — buy delivery as an outcome | Zixi Broadcaster licence (Marketplace list) _on top of_ AWS list egress | 0.134 |
 |  | Fastly CDN, list, North America | 0.120 |
-|  | CloudFront / Cloud CDN / Front Door, list, first tier, NA-EU | 0.080–0.085 |
+|  | CloudFront / Cloud CDN / Front Door, list, first tier, NA-EU | 0.075–0.083 |
 |  | AWS Elemental MediaConnect, reserved bandwidth, smallest (50 Mbps) tier | 0.052 |
 |  | Cloudflare MoQ relay, announced general-availability rate | 0.050 |
 |  | moq.pro MoQ relay, first paid tier | 0.040 |
@@ -112,11 +112,13 @@ All rates are US dollars, ex-tax. One constant reconciles the pricing models: **
 |  | **bunny.net CDN, volume network, first 500 TB** | **0.005** |
 |  | bunny.net CDN, volume network, 1–2 PB | 0.002 |
 
-"Vendor / managed" spans $0.002–$0.140; the cloud band sits in the middle, above commodity CDN and below premium managed products.
+![Price ladder: each option's cost per decimal GB, by category](../lab/charts/price_ladder.svg)
+
+"Vendor / managed" spans $0.002–$0.134; the cloud band sits in the middle, above commodity CDN and below premium managed products.
 
 Surveyed transit against list cloud egress is a **four-hundredfold** gap, and it is the figure most likely to be misquoted, because transit buys a port and a BGP session rather than a delivery service. Loaded with facilities, hardware and transit diversity, self-hosted delivery lands at **$0.001–0.004/GB — the same band as commodity CDN volume pricing** — which puts **the defensible gap between running delivery and renting it from a hyperscaler at about tenfold.** That build-up is _illustrative_ rather than a rate anyone has been quoted, so the agreement is between one published route to delivery and one modelled one. It is still the most useful thing in this table: it suggests commodity CDN rates sit near the real cost of delivery at scale, and that most of what sits above them is margin, product or positioning.
 
-Independent CDN list is nine to forty-five times below cloud egress list, published on a public price page with no negotiation; the hyperscalers' own CDNs are barely cheaper than their raw egress ($0.085 against $0.090), which says that spread is commercial positioning rather than cost. **One caveat belongs with the cheapest rate:** the volume network runs far fewer points of presence, which matters much less for a few hundred fixed professional endpoints than for a consumer audience — but it is the same reach constraint that limits leased fibre. MediaConnect reserved bandwidth reaches $0.017/GB at its largest tier, five times cheaper than first-tier data transfer out on the same cloud and a construct a self-built fleet cannot buy, so the "build it and keep the service margin" instinct is **inverted at list prices** — though a commodity CDN still undercuts it two- to threefold, making the inversion specific to staying inside one hyperscaler.
+Independent CDN list is nine to forty-five times below cloud egress list, published on a public price page with no negotiation; the hyperscalers' own CDNs are barely cheaper than their raw egress ($0.079 against $0.084 per GB on AWS), which says that spread is commercial positioning rather than cost. **One caveat belongs with the cheapest rate:** the volume network runs far fewer points of presence, which matters much less for a few hundred fixed professional endpoints than for a consumer audience — but it is the same reach constraint that limits leased fibre. MediaConnect reserved bandwidth reaches $0.017/GB at its largest tier, five times cheaper than first-tier data transfer out on the same cloud and a construct a self-built fleet cannot buy, so the "build it and keep the service margin" instinct is **inverted at list prices** — though a commodity CDN still undercuts it two- to threefold, making the inversion specific to staying inside one hyperscaler.
 
 **Procurement is the largest lever inside the cloud, and it cannot win the fan-out argument.** Even a _hypothetical_ 95 % discount off first-tier list moves parity only from ~19 to ~385 destinations. **Supplier choice, not buying power, decides whether delivery needed to be inside the cloud at all** (§4.6).
 
@@ -130,7 +132,11 @@ An open-source relay and a standardised protocol lower the cost of entry against
 
 **Against a transponder, each further destination costs thousands of dollars a year on every purchasable option, so parity is a destination count, which a better rate moves rather than removes.** Like-for-like against a 36 MHz transponder (~8 HD services at 10 Mbps, 1+1, committed capacity only, delivery cost), each further destination costs, at scale, about **$10,500 a year** on MediaConnect reserved _(published)_, **$8,700** on tiered cloud list less 70 % _(hypothetical)_, and **$6,200** and **$3,100** on a CDN relay at $0.010 and $0.005/GB _(assumed)_ ([cost model](../lab/cost-model.md) §6). Only MediaConnect is buyable at the price shown; the published MoQ relay rates are moq.pro's $0.040/GB and Cloudflare's announced $0.050/GB. **Parity** is the incumbent's space-segment cost divided by the per-destination figure. Per $1M a year of that cost it falls at **~95** destinations on committed cloud, **115** at the _hypothetical_ 70 % discount, **162** at an _assumed_ $0.010 CDN rate and **323** at an _assumed_ $0.005. Self-hosting, at ~970 per destination on _illustrative_ rates and parity ~1,000, is omitted for reach reasons (§4.3).
 
+![Destinations to parity per $1M a year of incumbent cost](../lab/charts/cost_parity.svg)
+
 **The reclamation bound follows.** Displacing the incumbent is arguable to ~95 destinations on published cloud rates, and to the high hundreds if a relay can be rented at commodity CDN rates, which is an _assumption_ and not a rate anyone has announced. A thousand or more is out of reach for anything purchasable today. The incumbent's fan-out inside its footprint is free while every option here is linear in destinations, so a better rate _moves_ the ceiling rather than removing it.
+
+![Annual cost against destination count, one channel and an eight-service multiplex](../lab/charts/cost_destinations.svg)
 
 **Transport choice moves these figures by single-digit percentages; destination count moves them by three orders of magnitude** ([cost model](../lab/cost-model.md) §10). The one economic question transport choice does raise is whether the far end needs the contribution mux back byte-for-byte.
 

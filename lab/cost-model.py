@@ -39,6 +39,8 @@ ZIXI_BROADCASTER = 0.05          # AWS Marketplace software rate, per GB, on top
 # market has commoditised well below it. List rates, NA/EU first tier, July 2026.
 CLOUDFRONT = [(10_240, 0.085), (51_200, 0.080), (153_600, 0.060), (None, 0.020)]
 FASTLY_NA = [(None, 0.12)]
+GOOGLE_CDN = [(None, 0.08)]       # first tier, billed in GiB like the rest of GCP
+AZURE_FRONT_DOOR = [(None, 0.0825)]  # first tier, decimal GB
 BUNNY_STANDARD = [(None, 0.01)]   # NA/EU flat
 BUNNY_VOLUME = [(None, 0.005)]    # NA/EU flat
 # A CDN-operated MoQ relay: ASSUMPTION, not a published rate. Only Cloudflare has
@@ -158,9 +160,14 @@ print(f"{'Option':<52}{'$/GB-equiv':>12}{'$/Mbps-yr':>12}{'x transit':>12}")
 rule()
 ladder = []
 for name, tiers, unit in [
+    ("GCP premium, first tier", [(None, GCP_PREMIUM[1][1])], GIB),
     ("AWS list, first tier", [(None, 0.09)], GIB),
     ("Azure premium backbone, first tier", [(None, 0.087)], GB),
     ("GCP premium, >10 TiB/mo", [(None, 0.08)], GIB),
+    ("Fastly CDN, North America", FASTLY_NA, GB),
+    ("AWS CloudFront, first tier", [(None, CLOUDFRONT[0][1])], GIB),
+    ("Google Cloud CDN, first tier", GOOGLE_CDN, GIB),
+    ("Azure Front Door, first tier", AZURE_FRONT_DOOR, GB),
     ("Azure transit routing, first tier", [(None, 0.08)], GB),
     ("AWS, >150 TB/mo marginal tier", [(None, 0.05)], GIB),
     ("Cloudflare MoQ, announced GA self-serve", CLOUDFLARE_MOQ, GB),
@@ -502,6 +509,7 @@ PRICE_LADDER = [
     ("Self-hosted", "IP transit, 100 GigE port", TRANSIT_100GE * 12 / gb_per_mbps_year, None, "bandwidth only"),
     ("Self-hosted", "All-in PoP, 40-100 % utilised", pop_total / (10_000 * gb_per_mbps_year),
      pop_total / (10_000 * gb_per_mbps_year * 0.4), "illustrative"),
+    ("Cloud", "GCP premium, first tier", per_gb(GCP_PREMIUM[1][1], GIB), None, "published"),
     ("Cloud", "AWS list, first tier", per_gb(AWS_DTO[1][1], GIB), None, "published"),
     ("Cloud", "Azure premium backbone, first tier", per_gb(AZURE_PREMIUM[1][1], GB), None, "published"),
     ("Cloud", "Azure transit routing, first tier", per_gb(AZURE_TRANSIT[1][1], GB), None, "published"),
@@ -514,6 +522,10 @@ PRICE_LADDER = [
     *[("Vendor / managed", f"MediaConnect reserved, {mbps} Mbps tier",
        rate * HOURS_YEAR / mbps / gb_per_mbps_year, None, "published")
       for mbps, rate in sorted(MEDIACONNECT_RESERVED.items())],
+    ("Vendor / managed", "Fastly CDN, North America", per_gb(FASTLY_NA[0][1], GB), None, "published"),
+    ("Vendor / managed", "AWS CloudFront, first tier", per_gb(CLOUDFRONT[0][1], GIB), None, "published"),
+    ("Vendor / managed", "Google Cloud CDN, first tier", per_gb(GOOGLE_CDN[0][1], GIB), None, "published"),
+    ("Vendor / managed", "Azure Front Door, first tier", per_gb(AZURE_FRONT_DOOR[0][1], GB), None, "published"),
     ("Vendor / managed", "Cloudflare MoQ, GA self-serve", per_gb(CLOUDFLARE_MOQ[0][1], GB), None, "announced"),
     ("Vendor / managed", "moq.pro MoQ relay, first paid tier", per_gb(MOQ_PRO[0][1], GB), None, "published"),
     ("Vendor / managed", "bunny.net CDN, standard network", per_gb(BUNNY_STANDARD[0][1], GB), None, "published"),

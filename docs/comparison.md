@@ -209,6 +209,8 @@ Internet-measured for segmented HTTP, media-aware MoQ and SRT ([T4](../lab/test-
 
 **Loss separates the congestion controllers, not the lanes.** Low-Latency HLS **requires** HTTP/2 or HTTP/3, so on HTTP/3 both lanes share QUIC, its per-stream loss isolation and RFC 9218 priorities; MoQ differs in the object and subscription model above it. Measured head-to-head under one shaper ([Evidence](../lab/evidence.md) §3.3):
 
+![Delivered rate against commanded loss, by lane and congestion controller](../lab/charts/loss_lane_controller.svg)
+
 - **At 10 % loss both lanes hold full rate on BBR and both collapse on CUBIC**, so "segment fetching degrades under loss" compares TCP's default controller with QUIC's tuned one. On HTTP/3, through a byte-faithful receiver, the segmented lane loses nothing up to ~20 % applied loss.
 - **Reordering ranks controllers, not lanes**: equalised for packet size, the segmented lane on HTTP/3 keeps a quarter of the stream whatever the controller, and the media-aware figure moves across the whole range on one controller flag ([T20](../lab/test-20-segmented-http3.md)).
 - **Outage recovery is the origin's retention**, not the transport: under a 30 s outage the two substrates are byte-identical.

@@ -88,7 +88,7 @@ def price_ladder(model, palette):
     gb_per_mbps_year = model["gb_per_mbps_year"]
     colours = dict(zip(CATEGORY_ORDER, palette))
 
-    fig, ax = plt.subplots(figsize=(10, 7))
+    fig, ax = plt.subplots(figsize=(10, 2 + 0.33 * len(rows)))
     for y, (category, option, low, high, basis) in enumerate(rows):
         colour = colours[category]
         if high is None:

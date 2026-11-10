@@ -95,7 +95,8 @@ What it costs to deliver one always-on unidirectional Mbps for a year, and the s
 | **Self-hosted** — own the egress, unmetered per GB | IP transit, 10 GigE port, competitive hub _(bandwidth only — see §10.1)_ | 0.00021 | 0.84 | 1× |
 |  | IP transit, 100 GigE port, competitive hub _(bandwidth only — see §10.1)_ | 0.00015 | 0.60 | 1× |
 |  | _Illustrative all-in PoP, 40–100 % utilised (§10.1)_ | _0.0009–0.0023_ | _3.5–9.1_ | _4–11×_ |
-| **Cloud** — own software on rented compute, metered egress | Azure premium backbone, first tier | 0.0870 | 343 | 408× |
+| **Cloud** — own software on rented compute, metered egress | GCP premium, first tier | 0.1118 | 441 | 524× |
+|  | Azure premium backbone, first tier | 0.0870 | 343 | 408× |
 |  | AWS list, first tier | 0.0838 | 330 | 393× |
 |  | Azure transit routing, first tier | 0.0800 | 315 | 375× |
 |  | GCP premium, >10 TiB/mo | 0.0745 | 294 | 350× |
@@ -103,6 +104,10 @@ What it costs to deliver one always-on unidirectional Mbps for a year, and the s
 |  | GCP standard tier, >150 TiB/mo | 0.0419 | 165 | 197× |
 |  | Azure transit routing, >150 TB/mo | 0.0400 | 158 | 188× |
 | **Vendor / managed** — buy delivery as an outcome | Zixi Broadcaster licence + AWS list egress | 0.1338 | 528 | 628× |
+|  | Fastly CDN, North America | 0.1200 | 473 | 563× |
+|  | Azure Front Door, first tier | 0.0825 | 325 | 387× |
+|  | AWS CloudFront, first tier | 0.0792 | 312 | 371× |
+|  | Google Cloud CDN, first tier | 0.0745 | 294 | 350× |
 |  | MediaConnect reserved, 50 Mbps tier | 0.0516 | 203 | 242× |
 |  | Cloudflare MoQ, announced GA self-serve | 0.0500 | 197 | 235× |
 |  | MediaConnect reserved, 150 Mbps tier | 0.0420 | 166 | 197× |
