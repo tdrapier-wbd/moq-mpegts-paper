@@ -1,6 +1,6 @@
 # Test 52 — Fan-out and permanence through a CDN-hosted relay
 
-**State: ramps and the demultiplexed soak done; the opener's refused join reproduced on loopback, fixed in moqx v0.3.7, and gone from both nodes on it.** The demultiplexed lane's knee is the relay's event loop, on the one thread the operator gives it: 32 subscribers of the 25 Mb/s feed at full rate, about 0.82 Gb/s, degraded at 40, where the loop is 99 % busy, with groups skipped in common from 24. The passthrough lane has none: through this node single sessions fall silent until QUIC's idle timeout at 2, 4 and 24 subscribers, on loss or a silent path between the node and the subscriber host, and joins fail in clusters (the node refuses the joining FETCH). At 16 subscribers the demultiplexed lane held for 72 h by its criteria, its one break the source's, while each subscriber lost video about twice an hour, which the criteria cannot see, and the node's memory grew without bound.
+**State: ramps on moqx v0.3.6 and v0.3.7 and the demultiplexed soak done; the opener's refused join reproduced on loopback, fixed in v0.3.7, and gone from both nodes on it.** On v0.3.6 the demultiplexed lane's knee is the relay's event loop, on the one thread the operator gives it: 32 subscribers of the 25 Mb/s feed at full rate, about 0.82 Gb/s, degraded at 40, where the loop is 99 % busy, with groups skipped in common from 24. There the passthrough lane had none, single sessions falling silent until QUIC's idle timeout at 2, 4 and 24 subscribers and joins failing in clusters. On v0.3.7 no join fails on either node. The passthrough lane degrades on the one-thread node at 24, by groups arriving late. On a second node, on three threads, the demultiplexed lane holds 40 and the passthrough lane delivers 48 in full (1.29 Gb/s), though by its join-time rule it degrades from 4. At 16 subscribers the demultiplexed lane held for 72 h by its criteria, its one break the source's, while each subscriber lost video about twice an hour, which the criteria cannot see, and the node's memory grew without bound.
 
 ## Objective
 
@@ -133,7 +133,7 @@ Both nodes now run v0.3.7: the one measured above, on one thread, and a second i
 
 **Void** unless v0.3.6 refuses all three openers on loopback and v0.3.7 none. **Pass** if neither node refuses an opener or a joiner in its ten trials: each exports payload in its window and logs no refused joining FETCH. **Reported:** each role's payload beside loopback's. Ten fresh broadcasts cannot show the mid-group failure, which came in clusters against one long-lived publisher; the ramp tests that.
 
-**Results: pass on both nodes; the mid-group case awaits the ramp.** Controls valid: v0.3.6 refused 3 openers of 3, v0.3.7 none.
+**Results: pass on both nodes, and the ramps below saw no mid-group failure.** Controls valid: v0.3.6 refused 3 openers of 3, v0.3.7 none.
 
 | Relay | Openers refused | Joiners refused | Opener payload | Joiner payload |
 | --- | --- | --- | --- | --- |
@@ -166,6 +166,34 @@ The criteria above apply unchanged. **H-threads:** on three threads, the demulti
 | 48 | 100.1 %; 10 sessions ended | 27.1 % | 1.05 | 0 / 140 | 156 / 23 (372 ms), three | degraded |
 
 From step 24's settle, subscribers logged the group they were reading evicted before they had read it, a later group having arrived first, and the export resumed at the next: 5,443 skips over the run, a median of 109 ms each and at most 864 ms, all single but five, which fell in step 48's settle. No join failed, so **H-join holds on this node**, and no session ended through 40, where on v0.3.6 single sessions fell silent at 2, 4 and 24. At 48 ten subscribers that had joined at earlier steps ended 31–75 s after the step's joins, each after a run of evicted groups, when the node reset its media track (code 5); the ramp stopped there. The byte criterion cannot see this: the socket's median rate rose from 25.87 Mb/s at 2 subscribers to 26.17 at 48, at most 27.11, which fits retransmission, the repaired group arriving after its successor. The subscriber host stayed under 28 % CPU and 1.09 Gb/s, so by the criteria the knee is the relay's: the node or its path, which this run cannot separate without the node's metrics.
+
+**Three-thread node, first on `cd560bde5e`: the ramp stopped at its second subscriber, on the client's defect.** Joining three minutes after the first, it received nothing for 190 s, nor did the step's five join probes. That client's publisher gives its catalog a cache duration of zero (`MAX_CACHE_DURATION` 0), which draft 18 applies to the newest object too, and its subscriber fetches no catalog: joiners a minute or more after the first received none on either node, while the October client on either side joined, and on loopback moqx v0.3.7 failed every joiner that `moq-relay` served. The ramps below run `d66c892833`.
+
+**Demultiplexed lane: 40 subscribers in full, degraded at 48, so H-threads holds.** One publisher for 33 min, 25.00 Mb/s in every minute without an exit; no join failed.
+
+| N | Received per subscriber, of step 1's (lowest) | Host CPU | Join (s) | Skips in the measure window, common / single | Step |
+| --- | --- | --- | --- | --- | --- |
+| 1 | 100.0 % (25.31 Mb/s) | 1.0 % | 2.16 | 0 / 0 | pass |
+| 2, 4, 8, 16, 24 | 100.0–100.2 % | 1.9–24.3 % | 1.25–2.37 | 0 / 0 | pass |
+| 32 | 99.95 % | 34.1 % | 1.66 | 0 / 1 | pass |
+| 40 | 99.9 % | 42.9 % | 2.38 | 0 / 0 | pass |
+| 48 | 99.98 % of those alive; 3 exports ended | 50.4 % | 0.63 | 3 / 9 | **degraded** |
+
+The graded subscribers recorded no continuity error and no PCR interval over 40 ms at any step, the export filling skipped spans with stuffing. At 48 the three common skips fell within one second, at 24–35 subscribers each (96 ms of MP2, 320 ms of video, 200 ms of a verbatim PID), and in that second two exports ended on a missed MP2 decode deadline. The subscribers received 1.03 Gb/s at 40 and 1.18 Gb/s at 48, the host under 51 % CPU, so the knee is the relay's by the criteria. Three threads carry 40 where one carried 32, though the release (v0.3.7) and the client changed with the threads.
+
+**Passthrough lane: degraded at 4 on join time alone; on delivery, 48 subscribers in full and degraded at 56.** One publisher for 33 min, 25.00 Mb/s in every minute without an exit; no join failed and no session ended through 48, so **H-join holds on both nodes**.
+
+| N | Received per subscriber, of step 1's (lowest) | Host CPU | Join (s) | Skips in the measure window, common / single | Graded subscribers | Step |
+| --- | --- | --- | --- | --- | --- | --- |
+| 1 | 100.0 % (25.87 Mb/s) | 1.0 % | 0.41 | 0 / 0 | clean | pass |
+| 2 | 100.0 % | 1.6 % | 0.42 | 0 / 0 | clean | pass |
+| 4 | 100.0 % | 2.8 % | **1.08** | 0 / 0 | clean | **degraded** (join) |
+| 8, 16, 24 | 99.95–100.0 % | 4.9–13.2 % | 0.33–0.78 | 0 / 0 | clean | pass |
+| 32, 40 | 99.95–100.0 % | 18.5–22.7 % | 1.03, 0.93 | 0 / 0 | clean | degraded (join) |
+| 48 | 100.0 % | 27.5 % | 0.62 | 0 / 0 | clean | pass |
+| 56 | 100.0 % of those alive; 3 sessions ended | 35.9 % | 0.66 | 0 / 59 | continuity errors at two, PCR interval up to 1.37 s | degraded |
+
+The join rule fails at 4 because step 1's join, 0.41 s, sets the bound at 0.83 s, and one probe a step ranged 0.33–1.08 s with no trend in N; on the one-thread node the same lane's ranged 0.43–1.11 s against a bound of 1.45 s. On delivery the lane held through 48, 1.29 Gb/s received with no skip, continuity error or PCR interval over 40 ms. At 56, 1.45 Gb/s, within a second of the measure window's start 49 subscribers lost the same group to eviction, and three sessions had ended by its close. The host stayed under 36 % CPU. Where the one-thread node delivered late groups from 24 subscribers, this node delivered none through 48.
 
 ## Corrections
 
