@@ -255,6 +255,23 @@ The 6 s column's SRT arm, re-run on the EC2 tertiary in the same `netns`/`cake` 
 
 The sized control is 13 ms from its setting and every capture is full length. On this host the defaults broke even the unimpaired control, which on the secondary had matched its setting; why the two hosts differ there is not traced. The 6 s column is graded above.
 
+### On `moq-quic` the sustained shapes cost as much or more, and the window collapses under loss (P1-ar)
+
+Criteria 26–29 on `main` `cd560bde5e` (`moq-quic`, relay `delay`, which is BBRv3), P1-a's rig and shapes, three replicates at D = 1 and 2 s. Median (range) video lost, against P1-a's noq row, in bold where criterion 28 finds the cell moved; SRT lost 0 s to every one of these shapes (P1-a):
+
+| Shape | D = 1 s, `moq-quic` | D = 1 s, noq | D = 2 s, `moq-quic` | D = 2 s, noq |
+| --- | --- | --- | --- | --- |
+| 5 % loss | 39.36 (37.20–40.20) | 34.16 (33.92–37.44) | **38.20** (36.24–39.80) | 33.96 (33.32–34.48) |
+| 10 % loss | **41.88** (41.52–41.92) | 40.04 (39.84–40.24) | **40.92** (40.92–41.04) | 39.16 (38.80–39.60) |
+| 5 % reorder | 0 (0–0) | 0 | 0 (0–0) | 0 |
+| 20 % reorder | **41.92** (41.76–43.40) | 40.20 (39.72–40.88) | **40.88** (39.76–43.00) | 38.52 (37.16–38.56) |
+
+- **Valid (26).** Both controls lost 0 s. They delivered at 1,271 and 2,308 ms, against P1-a's 2,184 and 3,931 ms: this build's export holds about D + 0.3 s where noq's held about 2 × D, so at one D it has 0.9–1.6 s less headroom than P1-a's lane, and an SRT leg matched to P1-a's figures is not matched to these.
+- **Graded (27).** Audio lost 0 s in every cell, and the export's late drops were 0–26 per cell (P1-a 0–28). Thirty seconds after the shape every 5 % reorder cell is back (−45 to −55 ms); after loss or 20 % reorder 16 of 18 cells settle 115–202 ms below their pre-shape latency, and two are back (−46 and −55 ms). The controls end before that window, but their 5 s medians stayed within 1,216–1,328 and 2,242–2,365 ms, above every settled cell, so the low settling is the shape's, as P1-a's 114–227 ms was.
+- **Verdict (28).** Five of eight cells moved, all toward more loss, by 1.7–4.2 s; 5 % loss at 1 s overlaps, and 5 % reorder costs nothing on either stack. Criterion 8 against SRT's 0 s is unchanged: SRT is superior on both loss rates and 20 % reorder at both D, tied at 5 % reorder. Reported, not graded: at like delivered latency, `moq-quic` at D = 2 s (2.31 s) against noq at D = 1 s (1.93 s in its control), only 10 % loss still separates (40.92 against 40.04 s, ranges apart), so part of the extra loss at one D is the export's smaller headroom.
+- **The qlog (28).** On the relay built with `qlog`, one 5 % loss cell at D = 2 s lost 37.2 s, within the replicates' range. During the shape the relay declared 686 packets lost (4.98 %; 548 by reordering threshold, 138 by time threshold) where netem dropped 682 and `cake` none ([`qdisc-drops.sh`](scripts/qdisc-drops.sh)), and nothing was lost before or after. Its congestion window fell from a median of 423 KB before the shape to 26.4 KB during it, 6.3 KB at the lowest (1.5 %), and its pacing rate from 19.1 to 2.2 Mb/s, so it sent 3.3 Mb/s against the 9.5 Mb/s it sent before; 5–30 s after, 480 KB, 20.1 Mb/s and 9.5 Mb/s ([`t28-qlog-shape.py`](scripts/t28-qlog-shape.py)).
+- **Prediction (29) holds.** Both loss rates and 20 % reorder stopped the video for 36.2–43.4 s at both D, 5 % reorder cost nothing, and the window's median fell by a factor of 16. Loss detection was exact, so the collapse is the controller's response to it: `moq-congestion`'s BBRv3 bounds its inflight when a round loses more than 2 % (BBR.LossThresh), which 5 % random loss exceeds every round. That is §_Sustained partial loss_'s mechanism on the new stack. 20 % reorder was not traced.
+
 ### The budget ladder, and the nominal budget is not a latency setting
 
 Run as the MoQ half of [P1-m](planned-experiments.md), whose purpose is a matched-buffer comparison against SRT. This pass ran the MoQ half only, on a rig with two defects since found and fixed, so **nothing in this section ranks the two architectures**; the ranking is in §_The matched ladder_. What this pass delivers is the measured result that changed how the comparison had to be set up.
@@ -693,6 +710,12 @@ These are criteria on the _experiment's deliverable_, not on the lanes — neith
 27. **Graded as P1-a.** Median video lost over three replicates (the hole count, as P1-a quoted it for sustained cells), with audio lost, the export's late drops, and the latency 30 s after the shape ends against the control's (criterion 8's band).
 28. **Verdict.** A cell has _moved_ from P1-a's noq row at its D if the medians differ by more than 0.5 s and the replicate ranges do not overlap; criterion 8's rule against SRT's 0 s is reported. From the qlog: packets declared lost against those netem dropped, and the congestion window and pacing rate before, during and after the shape.
 29. **The prediction it can falsify.** `moq-quic`'s BBRv3 yields to random loss as noq's did: under both loss rates and 20 % reorder the video stops for most of the 40 s (at least 20 s lost) at both D, 5 % reorder costs nothing, and the qlog shows the window falling by an order of magnitude during the shape.
+
+**For a controller that does not yield (P1-ar's controller cells), fixed before they run.** P1-ar's rig and build with the relay's controller off (`MOQ_CC=none`, `--quic-congestion-control none`), D = 2 s, 5 % and 10 % loss and 20 % reorder, three replicates, one control. With no controller the relay sends what the stream needs whatever the path does, so these cells isolate the controller; it is not a configuration for a shared path.
+
+30. **Valid.** The control loses ≤ 0.1 s of video and delivers within 100 ms of the `delay` control's 2,308 ms.
+31. **Verdict.** A shape is _ridden_ if its median video lost is at most 1 s, the bound quinn's BBRv1 met under 5 % loss (0.00–0.64 s, § _Sustained partial loss_), and _not ridden_ at 20 s or more; between, it is reported.
+32. **The prediction it can falsify.** With no controller to yield, `moq-quic`'s loss recovery carries the stream: 5 % and 10 % loss and 20 % reorder are all ridden.
 
 ## Limits, stated in advance
 
