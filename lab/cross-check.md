@@ -34,7 +34,7 @@
 
 ## Both ways
 
-**MSFTS carriage.** `moq-dev`'s MSF reader skips any track packaged other than LOC, CMAF or legacy, and its MSF types have no `mpeg2ts` packaging. Its whole multiplex appears only in its own catalog's `m2ts` section. Neither implementation therefore finds the other's TS through MSF (code). That is [moq-dev#3731](https://github.com/moq-dev/moq/issues/3731)'s question, open and awaiting an answer.
+**MSFTS carriage.** `moq-dev`'s MSF reader skips any track packaged other than LOC, CMAF or legacy, and its MSF types have no `mpeg2ts` packaging. Its whole multiplex appears only in its own catalog's `m2ts` section. Neither implementation therefore finds the other's TS through MSF (code). That is [moq-dev#3731](https://github.com/moq-dev/moq/issues/3731)'s question, open. Its quest, `msfts-convergence`, was pruned on 2026-11-09 for want of a named consumer, to be re-planned when one asks; `moq2ts`'s carriage is one, which a comment on #3731 could name.
 
 ## Checked, not shared
 

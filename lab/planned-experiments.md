@@ -47,10 +47,9 @@ Untaken quests on upstream `main` whose result would move an entry above, ranked
 
 | Quest | Size | Would move | Why it ranks here | Gate |
 | --- | --- | --- | --- | --- |
-| `route-health/recovery` | L | P1-b; [Architecture](../docs/architecture.md) §5 | Relays would switch from a route lagging a same-epoch standby by more than the reader's delay, before the idle timeout, without a 2022-7 receiver | Deferred upstream (m5), behind clustering, federation and P2P; its metadata-subscription and route-selection quests; epochs on every hop, which moq-transport no longer carries (#7239), so never P1-j's moqx hop |
 | `qos-publisher-timeliness` | M | P1-l | A health verdict per publisher from the relay alone; the per-subscriber verdict is on `main` | The lag histogram (L) whose type it reuses, which waits on `quic-ack-hook` (S): moq-net exposing the acknowledged offsets moq-quic already reports; neither taken |
 
-Set aside: the QoS line's lag histogram (R8 only), the E2EE line beyond P1-ae's gate (a contract option, not a requirement: [Control](../docs/control-plane.md) §7.3), `broadcast-fairness` (tenants sharing a cluster link; one operator's channels until P1-j's second hop), `perf/shard-default` (our relay's knee, which P1-j's supersedes), `auth-token-fetch` (a gate for P1-ac's moqx arm only if moqx asks a token of FETCH).
+Set aside: the QoS line's lag histogram (R8 only), the E2EE line beyond P1-ae's gate (a contract option, not a requirement: [Control](../docs/control-plane.md) §7.3), `broadcast-fairness` (tenants sharing a cluster link; one operator's channels until P1-j's second hop), `perf/shard-default` (our relay's knee, which P1-j's supersedes), `ts-padded-shed` and `quic-resume-idle` (the fixes for T82's defects, which the ledger tracks).
 
 ## Blocked on apparatus
 

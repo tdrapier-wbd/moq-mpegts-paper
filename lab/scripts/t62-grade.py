@@ -8,7 +8,9 @@ pacer-b.log, b8-a.jsonl, b8-b.jsonl, resources.txt), and primary/ and secondary/
 seg.log, guard.log, events.log, its soak resources file *-resources.txt, and access.log: the
 primary's requests not answered 200 or 304, all of the secondary's). Prints one section per
 criterion, each event with its hour into the soak, and attributes an event to a reset both
-segmenters made within ATTRIB_S before it.
+segmenters made, or damage both cut at the same K, within ATTRIB_S before it. T76 adds C7 (PTS
+against PCR, from the monitor's --pts fields) and C8 (the --peer rule's answers); a peer's
+digest reads (seg-K.sha1) are counted apart from the edges' group requests.
 """
 
 import argparse
@@ -23,6 +25,9 @@ ATTRIB_S = 180
 PAIR_S = 2.0
 C4_MB_PER_H = 1.60
 C3_MS = 450
+C7_BAND_MS = (0.0, 2000.0)
+C8_WAIT_S = 3.0
+C8_SLACK_S = 0.5
 SLOW_MS = 900
 CLK_TCK = 100
 ORIGINS = ("primary", "secondary")
@@ -45,7 +50,8 @@ def read_events(path):
 
 
 def read_seg(path):
-    resets, segs, digest = [], [], {}
+    """Resets, segments, digests by K, and the --peer rule's events (t, event, k, rest)."""
+    resets, segs, digest, rule = [], [], {}, []
     for line in open(path):
         p = line.split()
         if len(p) < 2:
@@ -57,7 +63,34 @@ def read_seg(path):
             k = int(f["k"])
             segs.append((float(p[0]), k))
             digest[k] = (float(p[0]), f.get("bytes"), f.get("sha1"))
-    return resets, segs, digest
+        elif p[1] in ("damaged", "shared", "unshared", "unverified") and len(p) > 2 and p[2].startswith("k="):
+            rule.append((float(p[0]), p[1], int(p[2][2:]), " ".join(p[3:])))
+    return resets, segs, digest, rule
+
+
+def receiver_episodes(path):
+    """Playlist-failure episodes (start, end, fetches, statuses), and media-sequence skips."""
+    episodes, skips, ep = [], [], None
+    for line in open(path):
+        try:
+            x = json.loads(line)
+        except ValueError:
+            continue
+        e = x.get("ev")
+        if e == "pl-fail":
+            if ep is None:
+                ep = [x["t"], x["t"], 0, set()]
+            ep[1], ep[2] = x["t"], ep[2] + 1
+            ep[3].add(x.get("status"))
+        elif e == "pl-recovered" and ep is not None:
+            ep[1] = x["t"]
+            episodes.append(ep)
+            ep = None
+        elif e == "msn-skip":
+            skips.append(x)
+    if ep is not None:
+        episodes.append(ep)
+    return episodes, skips
 
 
 def pacer_samples(path):
@@ -78,6 +111,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("dir")
     ap.add_argument("--duration", type=float, default=2.0, help="the segmenters' epoch D, s")
+    ap.add_argument("--c7-hourly", metavar="TSV", help="write C7's per-PID hourly minimum and maximum here")
     a = ap.parse_args()
     d = a.dir
     span = round(a.duration * 90000)
@@ -107,10 +141,20 @@ def main():
         if not any(abs(t - u) <= PAIR_S and w == v for u, v in run["primary"]):
             single.append(("secondary", t, w))
 
+    dmg = {o: {k: t for t, e, k, _ in seg[o][3] if e == "damaged" and t0 - 60 <= t <= t_end} for o in ORIGINS}
+    both_dmg = sorted(
+        (min(dmg["primary"][k], dmg["secondary"][k]), k)
+        for k in set(dmg["primary"]) & set(dmg["secondary"])
+        if abs(dmg["primary"][k] - dmg["secondary"][k]) <= PAIR_S
+    )
+
     def cause(t):
         hits = [w for u, w in common if u <= t + PAIR_S and t - u <= ATTRIB_S]
         if hits:
             return "both segmenters reset (" + ", ".join(sorted(set(hits))) + ")"
+        ks = [k for u, k in both_dmg if u <= t + PAIR_S and t - u <= ATTRIB_S]
+        if ks:
+            return "damage both segmenters cut (k " + ", ".join(map(str, ks)) + ")"
         if t - min(leg0.values()) <= 120:
             return "the legs' start"
         return "UNATTRIBUTED"
@@ -165,13 +209,36 @@ def main():
                 f"  {h(x['t']):7.3f} h  lost={x['lost']:,} mismatched={x['mismatched']} late={x['late']}"
                 f"  {cause(x['t'])}"
             )
-    print("  each leg's own losses (the other leg's copy merged):")
+    rx = {leg: receiver_episodes(os.path.join(d, "tertiary", f"b8-{leg}.jsonl")) for leg in ("a", "b")}
+
+    def own_cause(t, leg):
+        c = cause(t)
+        if c != "UNATTRIBUTED":
+            return c
+        for s0, s1, n, _ in rx[leg][0]:
+            if s0 - 60 <= t <= s1 + 120:
+                return f"leg {leg}'s playlist failures from {h(s0):.3f} h ({n} fetches)"
+        return c
+
+    print("  each leg's own losses (the other leg's copy merged), consecutive minutes as one span:")
+    spans = []
     for x in merge:
         if x["a_missing"] or x["b_missing"]:
-            print(
-                f"  {h(x['t']):7.3f} h  a_missing={x['a_missing']:,} b_missing={x['b_missing']:,}"
-                f"{'  (merge also lost)' if x['lost'] else ''}  {cause(x['t'])}"
-            )
+            if spans and x["t"] - spans[-1][1] <= 120:
+                sp = spans[-1]
+            else:
+                sp = [x["t"], x["t"], 0, 0, 0, 0]
+                spans.append(sp)
+            sp[1], sp[2] = x["t"], sp[2] + 1
+            sp[3] += x["a_missing"]
+            sp[4] += x["b_missing"]
+            sp[5] += x["lost"]
+    for s0, s1, n, am, bm, lost in spans:
+        leg = "a" if am >= bm else "b"
+        print(
+            f"  {h(s0):7.3f}-{h(s1):.3f} h  {n} min  a_missing={am:,} b_missing={bm:,}"
+            f"{f'  (merge also lost {lost:,})' if lost else ''}  {own_cause(s0, leg)}"
+        )
 
     print(f"\nC3, the skew (within {C3_MS} ms)")
     skewed = [x for x in merge if x["skew_ms"][1] is not None]
@@ -228,32 +295,17 @@ def main():
 
     print("\nC5, events: receivers")
     for leg in ("a", "b"):
-        fails, skips, ep = 0, [], None
-        episodes = []
         for line in open(os.path.join(d, "tertiary", f"b8-{leg}.jsonl")):
             try:
                 x = json.loads(line)
             except ValueError:
                 continue
-            e = x.get("ev")
-            if e == "pl-fail":
-                fails += 1
-                if ep is None:
-                    ep = [x["t"], x["t"], 0, set()]
-                ep[1], ep[2] = x["t"], ep[2] + 1
-                ep[3].add(x.get("status"))
-            elif e == "pl-recovered" and ep is not None:
-                ep[1] = x["t"]
-                episodes.append(ep)
-                ep = None
-            elif e == "msn-skip":
-                skips.append(x)
-            elif e == "seg" and x.get("status") != 200:
+            if x.get("ev") == "seg" and x.get("status") != 200:
                 print(
                     f"  leg {leg} {h(x['t']):7.3f} h  segment {x.get('name')} status {x.get('status')}  {cause(x['t'])}"
                 )
-        if ep is not None:
-            episodes.append(ep)
+        episodes, skips = rx[leg]
+        fails = sum(n for _, _, n, _ in episodes)
         print(f"  leg {leg}: {fails} playlist failures in {len(episodes)} episodes, {len(skips)} media-sequence skips")
         for s0, s1, n, st in episodes:
             print(f"    {h(s0):7.3f} h  {s1 - s0:5.1f} s, {n} fetches, status {sorted(st, key=str)}  {cause(s0)}")
@@ -326,7 +378,7 @@ def main():
         if not os.path.exists(p):
             print(f"  {o} access.log: not fetched")
             continue
-        group, refused, ep = [], 0, None
+        group, refused, peer_reads, ep = [], 0, 0, None
         for line in open(p):
             x = line.split()
             if len(x) < 3 or not t0 <= float(x[0]) <= t_end:
@@ -334,6 +386,9 @@ def main():
             t, status, path = float(x[0]), x[1], x[2]
             if not path.startswith(("/g/", "/h/")):
                 refused += status in ("400", "403")
+                continue
+            if path.endswith(".sha1"):
+                peer_reads += 1
                 continue
             if o == "primary" and status in ("200", "304"):
                 continue
@@ -343,7 +398,10 @@ def main():
             ep[1] = t
             ep[2][status] = ep[2].get(status, 0) + 1
         what = "group requests" if o == "secondary" else "group errors"
-        print(f"  {o}: {len(group)} episodes of {what}; {refused} requests outside the group refused")
+        print(
+            f"  {o}: {len(group)} episodes of {what}; {refused} requests outside the group refused;"
+            f" {peer_reads} digest reads by its peer"
+        )
         for s0, s1, st in group:
             print(f"    {h(s0):7.3f} h  {s1 - s0:5.1f} s  {st}  {failover(s0)}")
 
@@ -364,6 +422,81 @@ def main():
                     f"    wrap at {h(tb):7.3f} h: k {ka} -> {kb} {order}; resets within 5 min: {near or 'none'};"
                     f" C1 minutes within 5 min: {c1}"
                 )
+
+    print(f"\nC7, the clock: every PES's PTS {C7_BAND_MS[0]:.0f}-{C7_BAND_MS[1]:.0f} ms ahead of the PCR before it")
+    c7_bad, c7_un, hourly, minutes = 0, 0, {}, 0
+    for line in open(os.path.join(d, "tertiary", "pcr.log")):
+        if not line.startswith("t=") or "lead_min_ms=" not in line:
+            continue
+        minutes += 1
+        m = dict(re.findall(r"(\w+)=(-?[\d.]+)", line))
+        t = t0 + float(m["t"])
+        lo, hi, out = float(m["lead_min_ms"]), float(m["lead_max_ms"]), int(m["lead_out"])
+        if out or lo < C7_BAND_MS[0] or hi > C7_BAND_MS[1]:
+            c7_bad += 1
+            c = cause(t)
+            c7_un += c == "UNATTRIBUTED"
+            print(f"  {h(t):7.3f} h  lead {lo:.1f} to {hi:.1f} ms, {out} PES outside  {c}")
+        leads = re.search(r"leads=(\S+)", line)
+        for item in leads[1].split(",") if leads else []:
+            pid, span_ms = item.split(":")
+            a_ms, b_ms = (float(v) for v in span_ms.split("/"))
+            r = hourly.setdefault(pid, {}).setdefault(int(h(t)), [a_ms, b_ms])
+            r[0], r[1] = min(r[0], a_ms), max(r[1], b_ms)
+    for pid, hrs in sorted(hourly.items(), key=lambda kv: int(kv[0])):
+        lows, highs = [v[0] for v in hrs.values()], [v[1] for v in hrs.values()]
+        print(
+            f"  PID {pid}: over {len(hrs)} hours, hourly minimum {min(lows):.0f} to {max(lows):.0f} ms,"
+            f" hourly maximum {min(highs):.0f} to {max(highs):.0f} ms"
+        )
+    if a.c7_hourly:
+        with open(a.c7_hourly, "w") as f:
+            f.write("pid\thour\tmin_ms\tmax_ms\n")
+            for pid, hrs in sorted(hourly.items(), key=lambda kv: int(kv[0])):
+                for hr, (lo, hi) in sorted(hrs.items()):
+                    f.write(f"{pid}\t{hr}\t{lo:.0f}\t{hi:.0f}\n")
+    print(
+        f"  {c7_bad} of {minutes:,} minutes outside the band, {c7_un} unattributed"
+        f"  {'pass' if minutes and not c7_un else 'FAIL' if minutes else 'no --pts fields'}"
+    )
+
+    print(f"\nC8, the rule: each damaged segment answered within the {C8_WAIT_S:.0f} s wait")
+    c8_fail = 0
+    for o in ORIGINS:
+        peer = ORIGINS[1 - ORIGINS.index(o)]
+        held, answers = {}, []
+        for t, e, k, rest in seg[o][3]:
+            if not t0 - 60 <= t <= t_end:
+                continue
+            if e == "damaged":
+                held[k] = (t, rest)
+            elif k in held:
+                td, why = held.pop(k)
+                answers.append((td, t, e, k, why, rest))
+        print(f"  {o}: {len(answers) + len(held)} damaged segments, {len(answers)} answered")
+        for td, t, e, k, why, rest in answers:
+            notes = []
+            if t - td > C8_WAIT_S + C8_SLACK_S:
+                notes.append(f"LATE {t - td:.1f} s")
+            near = lambda rs: [w for u, w in rs if td - PAIR_S <= u <= t + 10]  # noqa: E731
+            if e == "shared":
+                mine, theirs = seg[o][2].get(k), seg[peer][2].get(k)
+                if not theirs or not mine or mine[1:] != theirs[1:]:
+                    notes.append("NOT the same object on both")
+                if near(run[o]) or near(run[peer]):
+                    notes.append(f"a reset beside it: {near(run[o]) + near(run[peer])}")
+            elif e == "unshared":
+                if near(run[peer]):
+                    notes.append(f"the peer reset too: {near(run[peer])}")
+                lost = sum(x["lost"] for x in merge if td <= x["t"] <= td + ATTRIB_S)
+                if lost:
+                    notes.append(f"the merge lost {lost:,}")
+            c8_fail += bool(notes)
+            print(f"    {h(td):7.3f} h  k {k} ({why}) {e} after {t - td:.3f} s {rest}  {'; '.join(notes) or 'ok'}")
+        for k, (td, why) in sorted(held.items(), key=lambda kv: kv[1][0]):
+            c8_fail += 1
+            print(f"    {h(td):7.3f} h  k {k} ({why}) UNANSWERED  {cause(td)}")
+    print(f"  {'pass' if not c8_fail else 'FAIL'}: {c8_fail} answers not as the rule requires")
 
     print("\nAlso: are the origins' segments the same objects? (same k: bytes and SHA-1)")
     da, db = ({k: v for k, v in seg[o][2].items() if t0 - 60 <= v[0] <= t_end} for o in ORIGINS)
