@@ -143,6 +143,15 @@ Both nodes now run v0.3.7: the one measured above, on one thread, and a second i
 
 Every subscriber received the catalog and media. Payloads run below loopback's because each window starts a round trip later across the internet; the two lowest, an opener and a joiner, are one broadcast's, so their common cause sits at the publisher's side of the node.
 
+### Ramps on v0.3.7 (criteria fixed before the first run)
+
+Both nodes run moqx v0.3.7, which fixes the refused joining FETCH: the one-thread node measured above, and the three-thread node. Its operator has lifted the DDoS rule that acted above 1.5 Gb/s on the three-thread node, whose ceiling is now its 5 Gb/s policer, but not on the one-thread node. The client is `f2fca6fd2`, as above, so the node is what changed. Joins get five tries and the passthrough lane is anchored, as above.
+
+- **Three-thread node, both lanes:** subscribers at 1, 2, 4, 8, 16, 24, 32, 40, 48 and 56 (56 carry about 1.4 Gb/s of media), each step settled 60 s and measured 120 s, ending at the first degraded step.
+- **One-thread node, passthrough lane, for an hour:** the same schedule to 48, then 52, each step settled 120 s and measured 240 s. Its rule allows no more: 56 subscribers would reach about 1.51 Gb/s at the interface. If the three-thread node's passthrough step 1 projects 52 past 1.45 Gb/s, the ramp ends at 48. Either end is reported as the operator's ceiling, not a knee.
+
+The criteria above apply unchanged. **H-threads:** on three threads, the demultiplexed lane passes the one-thread node's 32. **H-join:** on v0.3.7 no passthrough subscriber fails its join, and none ends at a mid-group join, on either node. **Reported:** the passthrough lane's single-session stalls, by subscriber and time; each step's common and single skips; the node's own metrics only as its operator provides them, since this run reads none.
+
 ## Corrections
 
 - **The ramp's in-flight delivery rule read output bytes.** We counted each subscriber's `wchar`, as F5 did. On the demultiplexed lane the export writes its constant rate in stuffing whatever arrives, so output held 100 % at 40 subscribers while the host received 83 % per subscriber; the demultiplexed ramp is graded from the host's received rate. `rchar`, tried next, reads zero, since a QUIC subscriber receives by `recvmsg`; the rig now counts each subscriber's socket in the firewall. Rule: a receiver that restores a constant rate cannot report delivery by what it writes ([method notes](method-notes.md) §2).
