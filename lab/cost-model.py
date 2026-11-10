@@ -32,6 +32,7 @@ AZURE_TRANSIT = [(100, 0.0), (10_100, 0.08), (50_100, 0.065), (150_100, 0.06), (
 GCP_PREMIUM = [(1, 0.0), (1_024, 0.12), (10_240, 0.11), (None, 0.08)]
 GCP_STANDARD = [(200, 0.0), (10_240, 0.085), (153_600, 0.065), (None, 0.045)]
 CLOUDFLARE_MOQ = [(None, 0.05)]  # announced GA self-serve rate; free in tech preview
+MOQ_PRO = [(None, 0.04)]         # in force, first paid tier after 400 GB/month free; inbound free
 ZIXI_BROADCASTER = 0.05          # AWS Marketplace software rate, per GB, on top of egress
 
 # CDN delivery. Hyperscaler CDNs price close to their own egress; the independent
@@ -157,18 +158,20 @@ print(f"{'Option':<52}{'$/GB-equiv':>12}{'$/Mbps-yr':>12}{'x transit':>12}")
 rule()
 ladder = []
 for name, tiers, unit in [
-    ("AWS / Azure list, first tier", [(None, 0.09)], GIB),
+    ("AWS list, first tier", [(None, 0.09)], GIB),
     ("Azure premium backbone, first tier", [(None, 0.087)], GB),
     ("GCP premium, >10 TiB/mo", [(None, 0.08)], GIB),
     ("Azure transit routing, first tier", [(None, 0.08)], GB),
     ("AWS, >150 TB/mo marginal tier", [(None, 0.05)], GIB),
     ("Cloudflare MoQ, announced GA self-serve", CLOUDFLARE_MOQ, GB),
+    ("moq.pro MoQ relay, first paid tier", MOQ_PRO, GB),
     ("GCP standard tier, >150 TiB/mo", [(None, 0.045)], GIB),
     ("Azure transit routing, >150 TB/mo", [(None, 0.04)], GB),
 ]:
     per_mbps_yr = annual_cost(1, tiers, unit)
     ladder.append((name, per_mbps_yr))
-    print(f"{name:<52}{tiers[0][1]:>12.4f}{per_mbps_yr:>12,.0f}{per_mbps_yr / (TRANSIT_10GE * 12):>11,.0f}x")
+    print(f"{name:<52}{per_mbps_yr / volume(1, GB):>12.4f}{per_mbps_yr:>12,.0f}"
+          f"{per_mbps_yr / (TRANSIT_10GE * 12):>11,.0f}x")
 
 for mbps, rate in sorted(MEDIACONNECT_RESERVED.items()):
     per_mbps_yr = rate * HOURS_YEAR / mbps
@@ -178,7 +181,7 @@ for mbps, rate in sorted(MEDIACONNECT_RESERVED.items()):
           f"{per_mbps_yr / (TRANSIT_10GE * 12):>11,.0f}x")
 
 zixi_total = annual_cost(1, [(None, ZIXI_BROADCASTER)], GB) + annual_cost(1, [(None, 0.09)], GIB)
-print(f"{'Zixi Broadcaster licence + AWS list egress':<52}{0.14:>12.4f}{zixi_total:>12,.0f}"
+print(f"{'Zixi Broadcaster licence + AWS list egress':<52}{zixi_total / volume(1, GB):>12.4f}{zixi_total:>12,.0f}"
       f"{zixi_total / (TRANSIT_10GE * 12):>11,.0f}x")
 
 for name, rate in [("IP transit, 10 GigE port, competitive hub", TRANSIT_10GE),
@@ -206,6 +209,7 @@ log_bars([
     ("AWS CloudFront, list, first tier NA/EU", 0.085),
     ("MediaConnect reserved, 50 Mbps tier", 0.052),
     ("Cloudflare MoQ relay, announced GA rate", 0.05),
+    ("moq.pro MoQ relay, first paid tier", 0.04),
     ("MediaConnect reserved, 1500 Mbps tier", 0.017),
     ("bunny.net CDN, standard network, NA/EU", 0.01),
     ("bunny.net CDN, volume network, <500 TB", 0.005),
@@ -468,3 +472,35 @@ for label, chans, dests, ts in [("1 channel, 1 destination, 10 Mbps", 1, 1, 10),
     cm, cs = annual_cost(m, AWS_DTO), annual_cost(s, AWS_DTO)
     print(f"{label:<44}{cm-cs:>13,.0f}{(cm/cs - 1):>9.1%}")
 print()
+
+# ================================================================ chart data
+# cost-model.md §4's ladder for lab/generate_charts.py: (category, option, low, high, basis),
+# in $ per decimal GB so GiB-billed rates sit on the same axis; high is set only for a range.
+def per_gb(rate, unit):
+    return rate * GB / unit
+
+
+PRICE_LADDER = [
+    ("Self-hosted", "IP transit, 10 GigE port", TRANSIT_10GE * 12 / gb_per_mbps_year, None, "bandwidth only"),
+    ("Self-hosted", "IP transit, 100 GigE port", TRANSIT_100GE * 12 / gb_per_mbps_year, None, "bandwidth only"),
+    ("Self-hosted", "All-in PoP, 40-100 % utilised", pop_total / (10_000 * gb_per_mbps_year),
+     pop_total / (10_000 * gb_per_mbps_year * 0.4), "illustrative"),
+    ("Cloud", "AWS list, first tier", per_gb(AWS_DTO[1][1], GIB), None, "published"),
+    ("Cloud", "Azure premium backbone, first tier", per_gb(AZURE_PREMIUM[1][1], GB), None, "published"),
+    ("Cloud", "Azure transit routing, first tier", per_gb(AZURE_TRANSIT[1][1], GB), None, "published"),
+    ("Cloud", "GCP premium, >10 TiB/mo", per_gb(GCP_PREMIUM[-1][1], GIB), None, "published"),
+    ("Cloud", "AWS, >150 TB/mo marginal tier", per_gb(AWS_DTO[-1][1], GIB), None, "published"),
+    ("Cloud", "GCP standard tier, >150 TiB/mo", per_gb(GCP_STANDARD[-1][1], GIB), None, "published"),
+    ("Cloud", "Azure transit routing, >150 TB/mo", per_gb(AZURE_TRANSIT[-1][1], GB), None, "published"),
+    ("Vendor / managed", "Zixi Broadcaster licence + AWS list egress", zixi_total / gb_per_mbps_year, None,
+     "published"),
+    *[("Vendor / managed", f"MediaConnect reserved, {mbps} Mbps tier",
+       rate * HOURS_YEAR / mbps / gb_per_mbps_year, None, "published")
+      for mbps, rate in sorted(MEDIACONNECT_RESERVED.items())],
+    ("Vendor / managed", "Cloudflare MoQ, GA self-serve", per_gb(CLOUDFLARE_MOQ[0][1], GB), None, "announced"),
+    ("Vendor / managed", "moq.pro MoQ relay, first paid tier", per_gb(MOQ_PRO[0][1], GB), None, "published"),
+    ("Vendor / managed", "bunny.net CDN, standard network", per_gb(BUNNY_STANDARD[0][1], GB), None, "published"),
+    ("Vendor / managed", "bunny.net CDN, volume network, <500 TB", per_gb(BUNNY_VOLUME[0][1], GB), None,
+     "published"),
+    ("Vendor / managed", "bunny.net CDN, volume network, 1-2 PB", per_gb(0.002, GB), None, "published"),
+]

@@ -4,7 +4,7 @@
 
 **State:** complete. Findings promoted to [economics](../docs/economics.md) §4.
 
-**Reproduce:** `python3 lab/cost-model.py` — prints every table below. All rates are constants at the top of that script, so re-pricing is a one-line edit per rate.
+**Reproduce:** `python3 lab/cost-model.py` — prints every table below. All rates are constants at the top of that script, so re-pricing is a one-line edit per rate. `python3 lab/generate_charts.py` redraws §4's chart from the same figures (`lab/requirements-charts.txt`).
 
 **Rates retrieved:** 2026-08-10. The AWS figures come from the machine-readable price list (`AmazonEC2` / `AWSDataTransfer` / `AWSMediaConnect` offer files, publication version `20260810185419`), not from the rendered pricing pages, so they are exact rather than transcribed.
 
@@ -95,27 +95,30 @@ What it costs to deliver one always-on unidirectional Mbps for a year, and the s
 | **Self-hosted** — own the egress, unmetered per GB | IP transit, 10 GigE port, competitive hub _(bandwidth only — see §10.1)_ | 0.00021 | 0.84 | 1× |
 |  | IP transit, 100 GigE port, competitive hub _(bandwidth only — see §10.1)_ | 0.00015 | 0.60 | 1× |
 |  | _Illustrative all-in PoP, 40–100 % utilised (§10.1)_ | _0.0009–0.0023_ | _3.5–9.1_ | _4–11×_ |
-| **Cloud** — own software on rented compute, metered egress | AWS / Azure list, first tier | 0.0900 | 330 | 393× |
-|  | Azure premium backbone, first tier | 0.0870 | 343 | 408× |
+| **Cloud** — own software on rented compute, metered egress | Azure premium backbone, first tier | 0.0870 | 343 | 408× |
+|  | AWS list, first tier | 0.0838 | 330 | 393× |
 |  | Azure transit routing, first tier | 0.0800 | 315 | 375× |
-|  | GCP premium, >10 TiB/mo | 0.0800 | 294 | 350× |
-|  | AWS, >150 TB/mo marginal tier | 0.0500 | 184 | 219× |
-|  | GCP standard tier, >150 TiB/mo | 0.0450 | 165 | 197× |
+|  | GCP premium, >10 TiB/mo | 0.0745 | 294 | 350× |
+|  | AWS, >150 TB/mo marginal tier | 0.0466 | 184 | 219× |
+|  | GCP standard tier, >150 TiB/mo | 0.0419 | 165 | 197× |
 |  | Azure transit routing, >150 TB/mo | 0.0400 | 158 | 188× |
-| **Vendor / managed** — buy delivery as an outcome | Zixi Broadcaster licence + AWS list egress | 0.1400 | 528 | 628× |
+| **Vendor / managed** — buy delivery as an outcome | Zixi Broadcaster licence + AWS list egress | 0.1338 | 528 | 628× |
 |  | MediaConnect reserved, 50 Mbps tier | 0.0516 | 203 | 242× |
 |  | Cloudflare MoQ, announced GA self-serve | 0.0500 | 197 | 235× |
 |  | MediaConnect reserved, 150 Mbps tier | 0.0420 | 166 | 197× |
+|  | moq.pro MoQ relay, first paid tier | 0.0400 | 158 | 188× |
 |  | MediaConnect reserved, 500 Mbps tier | 0.0288 | 113 | 135× |
 |  | **MediaConnect reserved, 1500 Mbps tier** | **0.0170** | **67** | **80×** |
 |  | bunny.net CDN, standard network, NA/EU | 0.0100 | 39 | 47× |
 |  | bunny.net CDN, volume network, <500 TB | 0.0050 | 20 | 23× |
 |  | bunny.net CDN, volume network, 1–2 PB | 0.0020 | 8 | 9× |
 
-The `$/Mbps-yr` column is the model's working unit and the bridge between a port rate and a per-GB rate; `$/GB-equiv` is the comparable figure and the only one the paper quotes. The two columns rank AWS and Azure differently — AWS's $0.090 is per GiB and Azure's $0.087 per GB, so AWS is the cheaper of the two once the 7.4 % unit difference is applied, which is exactly why `$/GB-equiv` is the column to compare on. Three things fall out:
+![Price Ladder](price_ladder.svg)
+
+The `$/Mbps-yr` column is the model's working unit and the bridge between a port rate and a per-GB rate; `$/GB-equiv` is the comparable figure and the only one the paper quotes. It is per decimal GB, so the GiB-billed AWS and GCP rates read 7.4 % below their list figures: AWS's $0.090 per GiB is $0.0838 per GB, cheaper than Azure's $0.087. Three things fall out:
 
 1. **The cheapest published delivery is not on cloud at all; it is on commodity CDN.** bunny.net publishes $0.005/GB, and $0.002/GB at 1–2 PB, against $0.09 first-tier cloud egress — 18× to 45× cheaper, on a public page, with no negotiation. The hyperscalers' own CDNs sit within a few percent of their raw egress, so that spread reflects commercial positioning rather than cost.
-2. **Within a single hyperscaler, the managed video product undercuts the platform it runs on.** MediaConnect reserved outbound bandwidth at the 1500 Mbps tier is $0.017/GB — 5.3× cheaper than raw EC2 data transfer out at first-tier list. A DIY relay fleet on EC2 cannot buy that rate; it is a MediaConnect-only construct. So the "build it ourselves and save the service margin" instinct is **inverted at list prices** — but only inside that hyperscaler, since a commodity CDN undercuts MediaConnect by a further 2–8×.
+2. **Within a single hyperscaler, the managed video product undercuts the platform it runs on.** MediaConnect reserved outbound bandwidth at the 1500 Mbps tier is $0.017/GB — 4.9× cheaper than raw EC2 data transfer out at first-tier list. A DIY relay fleet on EC2 cannot buy that rate; it is a MediaConnect-only construct. So the "build it ourselves and save the service margin" instinct is **inverted at list prices** — but only inside that hyperscaler, since a commodity CDN undercuts MediaConnect by a further 2–8×.
 3. **List cloud egress is two to three orders of magnitude above the cost of raw carriage, and about one order above the cost of delivery.** At $0.07/Mbps/month a Mbps-year of IP transit is $0.84 against $330 on AWS list — but transit is a port and a BGP session, not a delivery service. Loaded with facilities, hardware and diversity, self-hosted delivery lands at an _illustrative_ $0.001–0.004/GB (§10.1), which is the same band as commodity CDN list. **Two routes to delivery, one built and illustrative and one bought and published, agree on the cost; cloud egress sits ten times above both.** That is the single most important result in the model, and it says the trunk case is decided by commercial terms rather than by engineering. Quote the tenfold figure, not the four-hundredfold one — §10.1 explains why the latter is not a rate anyone can transact at.
 
 ## 5. Result — one channel, one destination, 1+1
