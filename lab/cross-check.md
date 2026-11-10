@@ -1,0 +1,49 @@
+# Cross-check: `moq-dev` and `moq2ts`
+
+**State: register opened. Answers by code at `moq-dev` `main` `cd560bde5e` and `moq2ts` `main` `5ea1c0b60`; one laptop check defined.**
+
+`moq-dev` and OpenMOQ's `moq2ts` both carry MPEG-TS over MoQ. `moq-dev` does it in Rust, on `moq-lite` and MoQT, with its own catalog beside MSF. `moq2ts` does it in C++, publishing on `moqxr` and receiving on `moq5`, on MoQT under MSF and MSFTS. A defect found or fixed in one is a hypothesis about the other. This file holds each such item, the question it puts to the other implementation, the answer with its evidence, and what follows. Whether the two exchange media is interop, which is [T11](test-11-interop.md)'s.
+
+## The loop
+
+1. **Find.** [`cross-audit.sh`](scripts/cross-audit.sh) lists every `moq2ts` issue and pull request updated since a date, and every `moq-dev` `main` commit since a given one that touches its TS path (`moq-mux`'s TS container and catalog, `moq-srt`, `moq-msf`). It marks each `new` unless this file cites it. Our own `moq-dev` posts reach it through the [upstream ledger](upstream-contributions.md). It runs in each session's tail beside the upstream and quest audits, and `STATUS.md` keeps the date and commit it last ran from.
+2. **Triage.** An item gets a row only if it names a property the other implementation could share: a clause of MOQT, MSF or MSFTS, a carriage rule, a client's behaviour. Build, packaging and UI items get none.
+3. **Answer** with the cheapest evidence that settles the question, at a named commit: _code_ (read), _check_ (a laptop command, below) or _test_ (cells in a `test-*.md`, criteria first). A row stays _open_ until one has run.
+4. **Act.** A gap with evidence becomes a draft in `lab/upstream/`, posted only with the author's go-ahead, citing the other implementation's fix where there is one. Where `moq2ts`'s contributors already have an open issue on the point, our evidence goes there as a comment, not as a new issue.
+5. **Close** a row when the answer is "not shared", or when the counterpart's fix has merged and been verified. A closed row moves to the list below it; an item we posted keeps its outcome in the ledger.
+
+## From `moq2ts`, asked of `moq-dev`
+
+| `moq2ts` | Property | `moq-dev` | Evidence | Next |
+| --- | --- | --- | --- | --- |
+| [#45](https://github.com/openmoq/moq2ts/issues/45) ([#55](https://github.com/openmoq/moq2ts/pull/55): stop on a permanent error before a first session, and fail after 10 attempts) | A permanent connect error (an unresolvable host, an untrusted certificate, no common version) is retried forever, and the process never fails | Retries forever by default, so that an outage of any length recovers; `--connect-backoff-timeout` bounds it. It stops at once only on refused credentials and protocol violations | code; check below | by the check |
+| [#21](https://github.com/openmoq/moq2ts/issues/21) | A bracketed IPv6 endpoint is rejected | — | check below | by the check |
+| [#33](https://github.com/openmoq/moq2ts/issues/33) ([#38](https://github.com/openmoq/moq2ts/pull/38)) | A PAT change: MSFTS -02 §6 asks for a new track | A new identity for the one program restarts the import. A second program added mid-stream ends an import that selected none, as a stream that starts with two does | code | test: an SPTS that becomes an MPTS mid-stream, under a supervisor |
+| [#46](https://github.com/openmoq/moq2ts/issues/46) ([#50](https://github.com/openmoq/moq2ts/pull/50)) | MSF -01 §6.1: a restarted publisher's Group IDs keep rising. Otherwise a caching relay serves the old catalog to a joining FETCH | Unknown for `moq import` publishing over MoQT through a caching relay | open | test, gated on a caching MoQT relay on the laptop |
+| [#41](https://github.com/openmoq/moq2ts/issues/41) ([#42](https://github.com/openmoq/moq2ts/pull/42)) | The wait for a first random access point is bounded in packets, so a low-rate source without random access indicators publishes nothing for minutes | Unknown | open | check: an audio-only program, its indicators cleared |
+| [#47](https://github.com/openmoq/moq2ts/issues/47) ([#52](https://github.com/openmoq/moq2ts/pull/52)) | After a restart, a source gap starts its group at the wrong packet, putting a PCR discontinuity inside a group (MSFTS -02 §5.4 forbids it) | The passthrough starts a group at a forward PCR jump. How `moq-srt` marks an SRT loss is unread | code, passthrough only | code: `moq-srt` |
+
+**The connect-error check** ([`xc-connect-errors.sh`](scripts/xc-connect-errors.sh), loopback). Each case is one `moq import ts` under a 30 s timeout. A case shows #45's behaviour if the client is still dialling at 30 s after at least three attempts. `v6` passes if it connects as the control does.
+
+## From `moq-dev`, asked of `moq2ts`
+
+| `moq-dev` | Property | `moq2ts` | Evidence | Next |
+| --- | --- | --- | --- | --- |
+| [#8382](https://github.com/moq-dev/moq/issues/8382) (quest `quic-resume-idle`) | A client resumed after a stop longer than its idle timeout waits for the relay's stateless reset, its RTT sample stretched by the stop ([T82](test-82-slow-unresponsive-subscribers.md)) | Unknown for the receiver, on `moq5` and picoquic | open | test, gated on a `moq5` build: the receiver is not packaged |
+| [#8384](https://github.com/moq-dev/moq/issues/8384) (closed) | After its own reconnect, a subscriber cannot tell the publisher unchanged on a wire with no publisher instance ([T82](test-82-slow-unresponsive-subscribers.md) Part F) | MoQT carries no instance. What a receiver has instead is MSF -01 §6.1's rising Group IDs, which [#46](https://github.com/openmoq/moq2ts/issues/46) shows the catalog track does not yet keep | code | after #46: whether the receiver reconnects at all |
+
+## Both ways
+
+**MSFTS carriage.** `moq-dev`'s MSF reader skips any track packaged other than LOC, CMAF or legacy, and its MSF types have no `mpeg2ts` packaging. Its whole multiplex appears only in its own catalog's `m2ts` section. Neither implementation therefore finds the other's TS through MSF (code). That is [moq-dev#3731](https://github.com/moq-dev/moq/issues/3731)'s question, open and awaiting an answer.
+
+## Checked, not shared
+
+- `moq2ts` [#30](https://github.com/openmoq/moq2ts/issues/30) and [#49](https://github.com/openmoq/moq2ts/issues/49) ([#53](https://github.com/openmoq/moq2ts/pull/53)), groups when the source never marks random access, and audio-only programs. `moq-dev`'s passthrough starts a group at the first PCR one second into a group without a random access point, and groups an audio-only program on its clock PID. It also caps a group at 16 MB, at 4,096 objects, or at half what the relay caches of one group (code).
+- [#32](https://github.com/openmoq/moq2ts/issues/32), reconnecting after the relay drops: `moq-dev` reconnects with backoff and follows a GOAWAY (code).
+- [#29](https://github.com/openmoq/moq2ts/issues/29), the track role, and [#31](https://github.com/openmoq/moq2ts/issues/31), [#43](https://github.com/openmoq/moq2ts/issues/43) and [#48](https://github.com/openmoq/moq2ts/issues/48) ([#51](https://github.com/openmoq/moq2ts/pull/51)), the timeline track. `moq-dev`'s MSF catalog takes each role from the rendition, video or audio, and declares no timeline track (code).
+- [#17](https://github.com/openmoq/moq2ts/pull/17) and [#18](https://github.com/openmoq/moq2ts/pull/18), each program of a multiplex as its own track: `moq import ts --program all` publishes each program as its own broadcast.
+- [#12](https://github.com/openmoq/moq2ts/pull/12), an SRT listener: `moq-srt` listens and dials out (code).
+- [#20](https://github.com/openmoq/moq2ts/issues/20) and [#19](https://github.com/openmoq/moq2ts/issues/19). `moq-dev` verifies the relay's certificate unless told not to, and its relay accepts MoQT drafts 18, 20 and 22.
+- `moq-dev` [#8383](https://github.com/moq-dev/moq/issues/8383), a padded output's back-fill after a block: `moq2ts`'s receiver writes the packets it receives, neither paced nor padded (its README).
+
+Interop, not a shared property: [#54](https://github.com/openmoq/moq2ts/pull/54) sends a relay authorization token at setup, tested against moqx. Whether `moq-relay` admits it is [T53](test-53-token-interop.md)'s question.
