@@ -30,7 +30,7 @@
 
 | `moq-dev` | Property | `moq2ts` | Evidence | Next |
 | --- | --- | --- | --- | --- |
-| [#8382](https://github.com/moq-dev/moq/issues/8382) (quest `quic-resume-idle`) | A client resumed after a stop longer than its idle timeout waits for the relay's stateless reset, its RTT sample stretched by the stop ([T82](test-82-slow-unresponsive-subscribers.md)) | Unknown for the receiver, on `moq5` and picoquic | open | test, gated on a `moq5` build: the receiver is not packaged |
+| [#8382](https://github.com/moq-dev/moq/issues/8382) (draft fix [#8442](https://github.com/moq-dev/moq/pull/8442)) | A client resumed after a stop longer than its idle timeout waits for the relay's stateless reset, its RTT sample stretched by the stop ([T82](test-82-slow-unresponsive-subscribers.md)) | Unknown for the receiver, on `moq5` and picoquic | open | test, gated on a `moq5` build: the receiver is not packaged |
 | [#8384](https://github.com/moq-dev/moq/issues/8384) (closed) | After its own reconnect, a subscriber cannot tell the publisher unchanged on a wire with no publisher instance ([T82](test-82-slow-unresponsive-subscribers.md) Part F) | MoQT carries no instance. What a receiver has instead is MSF -01 §6.1's rising Group IDs, which [#46](https://github.com/openmoq/moq2ts/issues/46) shows the catalog track does not yet keep | code | after #46: whether the receiver reconnects at all |
 
 ## Both ways
