@@ -4,7 +4,7 @@
 
 **State:** complete. Findings promoted to [economics](../docs/economics.md) §4.
 
-**Reproduce:** `python3 lab/cost-model.py` — prints every table below. All rates are constants at the top of that script, so re-pricing is a one-line edit per rate. `python3 lab/generate_charts.py` redraws §4's chart from the same figures (`lab/requirements-charts.txt`).
+**Reproduce:** `python3 lab/cost-model.py` — prints every table below. All rates are constants at the top of that script, so re-pricing is a one-line edit per rate. `python3 lab/generate_charts.py` redraws the charts in §4, §5.1 and §6 from the same figures (`lab/requirements-charts.txt`).
 
 **Rates retrieved:** 2026-08-10. The AWS figures come from the machine-readable price list (`AmazonEC2` / `AWSDataTransfer` / `AWSMediaConnect` offer files, publication version `20260810185419`), not from the rendered pricing pages, so they are exact rather than transcribed.
 
@@ -113,7 +113,7 @@ What it costs to deliver one always-on unidirectional Mbps for a year, and the s
 |  | bunny.net CDN, volume network, <500 TB | 0.0050 | 20 | 23× |
 |  | bunny.net CDN, volume network, 1–2 PB | 0.0020 | 8 | 9× |
 
-![Price Ladder](price_ladder.svg)
+![Price Ladder](charts/price_ladder.svg)
 
 The `$/Mbps-yr` column is the model's working unit and the bridge between a port rate and a per-GB rate; `$/GB-equiv` is the comparable figure and the only one the paper quotes. It is per decimal GB, so the GiB-billed AWS and GCP rates read 7.4 % below their list figures: AWS's $0.090 per GiB is $0.0838 per GB, cheaper than Azure's $0.087. Three things fall out:
 
@@ -175,6 +175,8 @@ Cost is near-linear in destinations. Unicast has no fan-out economy at the last 
 
 The linearity is structural and holds under every price regime; only the _level_ moves. The same thousand destinations cost $3.74M at cloud list and roughly $400,000 at commodity CDN rates.
 
+![Cost against destinations, one channel and the §6 multiplex](charts/cost_destinations.svg)
+
 ## 6. Result — a transponder's worth of channels
 
 Channel count derived from the incumbent, so the comparison is like-for-like. EBU Technical Review 300 (Morello & Mignone, _DVB-S2 — ready for lift-off_) gives **58.8 Mbps useful** for a 36 MHz-class transponder at DVB-S2 8PSK 2/3, 29.7 Mbaud, and counts 6 AVC HD programmes on it. Dividing by statmux averages: 9.8 Mbps → 6 services, 7.3 → 8, 5.9 → 10. **The model uses 8 HD services**, with 6–10 as the honest range.
@@ -209,6 +211,8 @@ Marginal cost of one additional destination for the whole 8-service 1+1 multiple
 | CDN MoQ relay @ $0.010/GB _(assumed)_ | 6,194 | 161.5 |
 | CDN MoQ relay @ $0.005/GB _(assumed)_ | 3,097 | 322.9 |
 | IP transit, 10 GigE _(bandwidth only, §10)_ | 132 | 7,577 |
+
+![Destinations to parity per $1M/yr](charts/cost_parity.svg)
 
 The parity column is a normaliser, not a price: divide the incumbent's real annual space-segment cost by the $/destination figure to get the destination count at which unicast IP stops being cheaper. **This is the structural asymmetry, and it is not a pricing artefact:** satellite fan-out inside the footprint is free, unicast IP is linear in destinations.
 

@@ -7,7 +7,10 @@ on:
       - lab/cost-model.py
       - lab/generate_charts.py
       - lab/requirements-charts.txt
-      - lab/price_ladder.svg
+      - lab/charts/**
+      - lab/test-8-srt-vs-moq.md
+      - lab/test-26-cross-host-fanout.md
+      - lab/test-43-fanout-current-build.md
       - .github/workflows/check-charts.yml
   pull_request:
     paths: *chart-inputs

@@ -310,12 +310,14 @@ print("\n--- One channel, 1+1, to N destinations (annual USD) ---\n")
 print(f"{'Destinations':<14}{'MoQ wire':>12}{'AWS list':>12}{'Cloudflare':>12}"
       f"{'MC reserved':>13}{'$/dest':>10}")
 rule(73)
+ONE_CHANNEL_FANOUT = []   # (destinations, AWS list, Cloudflare, MediaConnect reserved), for the charts
 for dests in (1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024):
     moq_wire = 10 * MOQ_CARRIAGE * 2 * dests
     srt_wire = 10 * SRT_CARRIAGE * 2 * dests
     aws = annual_cost(moq_wire, AWS_DTO) + 2 * EC2["c6gn.large"]["eu-west-1"]
     cf = annual_cost(moq_wire, CLOUDFLARE_MOQ, GB)
     mc = mediaconnect_egress(srt_wire) + 2 * MEDIACONNECT_FLOW_HOUR * HOURS_YEAR
+    ONE_CHANNEL_FANOUT.append((dests, aws, cf, mc))
     print(f"{dests:<14}{moq_wire:>9,.0f} Mb{aws:>12,.0f}{cf:>12,.0f}{mc:>13,.0f}{aws/dests:>10,.0f}")
 print("\nCost is near-linear in destinations: unicast has no fan-out economy at the last hop, so")
 print("'one to many' is 'one to one', N times. Per-destination cost halves over a thousandfold")
@@ -334,6 +336,7 @@ print(f"\nModelled multiplex: {CHANNELS} HD services.\n")
 print(f"{'Destinations':<14}{'Aggregate':>12}{'MC reserved':>14}{'Cloud 70% priv':>16}"
       f"{'CDN $0.010':>14}{'CDN $0.005':>14}{'Transit':>12}")
 rule(96)
+MULTIPLEX_FANOUT = []     # (destinations, MediaConnect, cloud less 70 %, CDN $0.010, CDN $0.005, transit)
 for dests in (1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024):
     moq_wire = CHANNELS * 10 * MOQ_CARRIAGE * 2 * dests
     srt_wire = CHANNELS * 10 * SRT_CARRIAGE * 2 * dests
@@ -343,6 +346,7 @@ for dests in (1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024):
     cdn = annual_cost(moq_wire, CDN_MOQ_RELAY_ASSUMED, GB)
     cdn_lo = annual_cost(moq_wire, CDN_MOQ_RELAY_FLOOR, GB)
     tr = moq_wire * TRANSIT_10GE * 12
+    MULTIPLEX_FANOUT.append((dests, mc, priv, cdn, cdn_lo, tr))
     print(f"{dests:<14}{moq_wire:>9,.0f} Mb{mc:>14,.0f}{priv:>16,.0f}"
           f"{cdn:>14,.0f}{cdn_lo:>14,.0f}{tr:>12,.0f}")
 
@@ -360,6 +364,19 @@ for name, tiers, unit in [("AWS first tier", [(None, 0.09)], GIB),
     per_dest = annual_cost(marginal_moq, tiers, unit)
     print(f"  {name:<38}{per_dest:>12,.0f} /destination-yr   "
           f"(reaches parity per $1M/yr of incumbent cost at {1_000_000/per_dest:>5.1f} destinations)")
+
+# cost-model.md §6's marginal-cost table for the charts: (price point, basis, $/destination-yr).
+PARITY = [(name, basis, annual_cost(marginal_moq, tiers, unit)) for name, basis, tiers, unit in [
+    ("AWS first tier", "published", [(None, AWS_DTO[1][1])], GIB),
+    ("Cloudflare MoQ", "announced", CLOUDFLARE_MOQ, GB),
+    ("AWS deepest tier", "published", [(None, AWS_DTO[-1][1])], GIB),
+    ("MediaConnect reserved, 1500 Mbps tier", "published",
+     [(None, MEDIACONNECT_RESERVED[1500] * HOURS_YEAR / 1500 / volume(1, GB))], GB),
+    ("AWS deepest tier less 70 %", "hypothetical", [(None, AWS_DTO[-1][1] * 0.30)], GIB),
+    ("CDN MoQ relay @ $0.010/GB", "assumed", CDN_MOQ_RELAY_ASSUMED, GB),
+    ("CDN MoQ relay @ $0.005/GB", "assumed", CDN_MOQ_RELAY_FLOOR, GB),
+    ("IP transit, 10 GigE", "bandwidth only", [(None, TRANSIT_10GE * 12 / volume(1, GB))], GB),
+]]
 
 # Enterprise procurement is the largest single lever on the dominant line, so model it
 # as a ladder of hypothetical discounts off first-tier list rather than a single guess.

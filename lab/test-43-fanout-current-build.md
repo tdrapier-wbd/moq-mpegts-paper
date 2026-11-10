@@ -96,6 +96,8 @@ Fitted over 1–75: relay CPU = 2.80 + **1.686**·N % of a core (r² = 1.0000), 
 - **The gap to T26 is not GSO.** With GSO off on both builds the current one is 49 % higher on CPU, against 56 % with it on.
 - **N = 100 is this host's knee with GSO off, measured.** The relay reached 164.2 % of a core with the box at 99.7 %, sent 726 Mb/s against the 995 Mb/s its hundred subscribers needed (73 %), and grew to 1,300.6 MB, three and a half times the line's prediction. The plain subscriber skipped 19 evicted audio groups; the two graded subscribers counted every packet they received with no continuity error, and the exporters' output rate of 109 % of N = 1 is their catch-up after stalls, not surplus delivery. The fit, with the standing load subtracted, predicts the relay's own ceiling at about 101 subscribers, which is where it failed. With GSO on, the same host held 100 at 128.4 % of a core, so on a 2-vCPU relay the offload is the difference between about 100 subscribers and, extrapolated, about 127–159.
 
+![Relay CPU against fan-out, T26's quinn build and this noq build, GSO on and off](charts/fanout_relay_cpu.svg)
+
 ### S2 — channel count at a fixed audience
 
 | Channels | relay CPU, N = 12 | relay RSS, N = 12 | relay CPU, N = 48 | relay RSS, N = 48 |
