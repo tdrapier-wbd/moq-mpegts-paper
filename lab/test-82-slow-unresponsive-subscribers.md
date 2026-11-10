@@ -1,6 +1,6 @@
 # Test 82: slow and unresponsive subscribers on the current relay
 
-**State: run and graded: 24 matrix cells, 12 supplementary cells and 14 follow-up cells (Parts B–E), on current main and the previous QUIC stack.**
+**State: run and graded: 24 matrix cells, 12 supplementary cells and 17 follow-up cells (Parts B–F), on current main and the previous QUIC stack.**
 
 ## Objective
 
@@ -255,15 +255,15 @@ On current main, a frozen session costs the relay about 0.5 MB, which does not g
 
 T25 measured the relay's price as retention at the media rate until the idle timeout. That is a property of the previous QUIC stack, and it reproduces here on that stack: 32 frozen sessions took that relay to 1.2 GB within 25 s. At that rate one frozen head-end costs about 37 MB at a 30 s idle timeout.
 
-**Architectural, and a limit.** A subscriber stuck longer than the idle timeout loses its session. With default flags the export then exits, so recovery is the head-end's supervisor's job unless it runs `--follow --stitch`.
+**Architectural, and a limit.** A subscriber stuck longer than the idle timeout loses its session. With default flags the export then exits, so recovery is the head-end's supervisor's job unless it runs `--follow --stitch`, or `--follow` on `moq-lite-07`, which the relay and every client must opt into (Part F).
 
 A subscriber slower than the stream cannot be served at the live edge with all its media: the relay holds 30 s and evicts the rest, so loss is inherent. The added latency is the export's.
 
-**Implementation defects, each with a measured trigger:**
+**Defects, each with a measured trigger.** Defects 1, 2 and 4 are the implementation's; defect 3 is the `moq-lite-06` wire's (Part F).
 
 1. **Resumed sessions hang (main).** When 32 resume after a freeze longer than a 30 s idle timeout, 18 of 96 sessions hang for 18–60 s. The 20 ms endpoint-wide stateless-reset interval gates it: the hung sessions end in 9 s keep-alive steps, and the 1 ms interval a secret sets removes it. That in-phase keep-alives are what make the interval bind is inferred. The previous stack does not do this. Remedy tested: `--listen-reset-secret`, with which none of 64 hung. At 64 clients none hung even without it (Part C′), for a reason not established. Reported as [#8382](https://github.com/moq-dev/moq/issues/8382).
 2. **Padding back-fill.** The export writes a stalled output's missed padding all at once: 60 s of PCR in 0.5 s. Remedy tested: `--mux-rate 0` (a 2.5× peak). Behind a padded export, a PCR-regulating remultiplexer passes the burst on at 54× the line rate, where the groomer, which strips padding, absorbs it (Part B). Neither sits a stall behind live, as had been inferred. Reported with defect 4 as [#8383](https://github.com/moq-dev/moq/issues/8383).
-3. **Follow misreads the reconnect.** After the subscriber's own reconnect, `--follow` takes the unchanged publisher for a replacement and the export exits. `--stitch` works around it (live 2.8 s after a 30 s freeze) at the price of a flagged program switch. Reported as [#8384](https://github.com/moq-dev/moq/issues/8384).
+3. **Follow cannot tell its own reconnect on `moq-lite-06`.** After the subscriber's own reconnect, `--follow` takes the unchanged publisher for a replacement and the export exits. `--stitch` works around it (live 2.8 s after a 30 s freeze) at the price of a flagged program switch. The cause is the wire, which carries no publisher instance, so the exit is the safe reading; closed upstream as intended ([#8384](https://github.com/moq-dev/moq/issues/8384)). On `moq-lite-07` the follow holds (Part F).
 4. **A padded export does not shed on a slow output.** It blocks instead of shedding to the live edge, and after about 80 s at half rate exits with a clock-drift error that blames the source. Unpadded, it sheds, and its lag holds at about 4 s (Part E).
 
 **Not established:**
@@ -272,7 +272,7 @@ A subscriber slower than the stream cannot be served at the live edge with all i
 - a frozen downstream relay;
 - whether the storm's victim group skips are the relay's or the laptop's, and whether the memory main keeps after a storm is a high-water mark or a leak (Part D).
 
-## Follow-up: Parts B–E, criteria fixed before running
+## Follow-up: Parts B–F, criteria fixed before running
 
 The first report left four questions open. Each part below fixes its hypothesis and criteria before its first cell. The rig, builds, clip and instruments are those above, except where a part says otherwise. Parts C and D use _light_ abusers: their export writes straight to `/dev/null` with no reader, so 64 of them fit the laptop. A light abuser's session ends when its export exits, read from the process table every 0.5 s and checked against its log's last line (`broadcast did not return`). These are the exits the hang analysis above timed.
 
@@ -361,9 +361,18 @@ done
 lab/scripts/t82-followup.py /tmp/t82f --controls /tmp/t82 --csv lab/results/t82-followup.csv
 ```
 
+Part F, on a later `main` (`~/bin-cd560bde-thin`), graded by the matrix's grader:
+
+```bash
+for spec in 1:freeze30-f 2:freeze30-f-l7 3:freeze30-f-l7; do
+	MOQ=~/bin-cd560bde-thin lab/scripts/t82-slow-consumer.sh "${spec#*:}" "/tmp/t82l7/${spec/:/-}"
+done
+lab/scripts/t82-grade.py /tmp/t82l7 --controls /tmp/t82
+```
+
 ### Follow-up results
 
-Fourteen counted cells ran, all on main except one `storm30` on the previous stack. Per-cell values are in [`results/t82-followup.csv`](results/t82-followup.csv). The victims pass criterion 1 in Parts B and E. The exceptions in Parts C′ and D are given there.
+Parts B–E ran fourteen counted cells, all on main except one `storm30` on the previous stack, and Part F three on a later main. Per-cell values for B–E are in [`results/t82-followup.csv`](results/t82-followup.csv). The victims pass criterion 1 in Parts B and E. The exceptions in Parts C′ and D are given there.
 
 **Part B.** All four cells are valid. `k1` left its band on 0.1–0.4 % of rows, never for more than 0.5 s, and no valve read a byte during the stop. No receiver's output has a continuity error.
 
@@ -410,6 +419,16 @@ Main pays 1.3–1.6 MB for each abandoned session it holds: three times a frozen
 
 The victims' media counts and lag pass in every cell. In each counted main cell, though, a victim skipped one group, or in `storm30` two (`current group evicted`, 7 frames dropped, one gap), each about 1.5 s after a storm tick. That fails criterion 1's export-clock check; the pilot had none. This rig cannot attribute it: each tick kills and starts 40 processes on the laptop that runs the relay and the victims. On the previous stack both victims dropped frames continuously once the relay's footprint passed a few GB, with the laptop swapping 8.5 GB. By T25's own rule, that is a statement about the host.
 
+**Part F.** All three cells are valid, and the victims pass criterion 1 in each. The first two `-l7` cells delivered nothing: the rig's suffix put the clients on `moq-lite-07-wip` but not the relay, which refused every session. The suffix now opts the relay in as well, and the two cells were run again; the void pair is not counted.
+
+| Cell | Version, every connection | `a1` after the SIGCONT | Live after | Peak second after, × line rate | `a1` continuity errors |
+| --- | --- | --- | --: | --: | --: |
+| `freeze30-f` | `moq-lite-06` | exits 1.0 s after: "another publisher instance replaced broadcast" | — | — | 0 |
+| `freeze30-f-l7` ×2 | `moq-lite-07-wip` | reconnects and follows the broadcast back | 2.8 and 2.7 s | 30.9 | 0 |
+| `freeze30-fs` (matrix) | `moq-lite-06` | stitched as a program switch | 2.8 s | 3.2 | 0 |
+
+The control reproduces defect 3 on the later build. On `moq-lite-07` the follower takes the return with no replacement, and its capture holds as many bytes as the victims', within 376. A followed return keeps the padded output's slot grid, so the export lays out the 30 s it missed at once, as defect 2 does: a 31× burst, against 3.2× for the stitched return, whose program switch starts a new grid.
+
 ### Follow-up grading
 
 | Part | Hypothesis | Verdict |
@@ -419,5 +438,6 @@ The victims' media counts and lag pass in every cell. In each counted main cell,
 | C′ | the same, full abusers | **fails**: none of 128 hung at 64; the remedy holds |
 | D | a killed peer costs main about what a frozen one does | **fails**: 1.3–1.6 MB per held session, three times a frozen one's, and not T25's retention, which the previous stack reproduces at 23 MB |
 | E | padding is not why a slowed export's lag grows | **fails**: unpadded, the lag holds at about 4 s |
+| F | on `moq-lite-07`, `--follow` treats the subscriber's own reconnect as a return | **holds**: live 2.7–2.8 s after, behind defect 2's back-fill |
 
 The victims were isolated in Parts B and E. Under the storm and at 64 full abusers, each main cell had a victim skip one or two groups, unattributed between relay and host.

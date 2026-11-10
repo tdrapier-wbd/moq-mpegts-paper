@@ -197,7 +197,8 @@ def grade_cell(cell, controls):
             cap, size, errs = line.split("\t")
             cc[cap] = (int(size), int(errs))
     r = {"cell": cell.name, **{k: m[k] for k in ("arm", "lane", "abusers", "event", "idle", "send_window")}}
-    r["build"] = "noq-3c0daa21" if m["noq"] else "main-bad28cef"
+    sha = m.get("build", "")[:8] or ("3c0daa21" if m["noq"] else "bad28cef")
+    r["build"] = ("noq-" if m["noq"] else "main-") + sha
     void = []
 
     # --- criterion zero ------------------------------------------------------------------------

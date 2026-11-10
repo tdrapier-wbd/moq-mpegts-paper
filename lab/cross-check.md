@@ -1,6 +1,6 @@
 # Cross-check: `moq-dev` and `moq2ts`
 
-**State: register opened. Answers by code at `moq-dev` `main` `cd560bde5e` and `moq2ts` `main` `5ea1c0b60`; one laptop check defined.**
+**State: register opened. Answers by code at `moq-dev` `main` `cd560bde5e` and `moq2ts` `main` `5ea1c0b60`, and two laptop checks run; one shared gap found, drafted for `moq-dev`.**
 
 `moq-dev` and OpenMOQ's `moq2ts` both carry MPEG-TS over MoQ. `moq-dev` does it in Rust, on `moq-lite` and MoQT, with its own catalog beside MSF. `moq2ts` does it in C++, publishing on `moqxr` and receiving on `moq5`, on MoQT under MSF and MSFTS. A defect found or fixed in one is a hypothesis about the other. This file holds each such item, the question it puts to the other implementation, the answer with its evidence, and what follows. Whether the two exchange media is interop, which is [T11](test-11-interop.md)'s.
 
@@ -16,14 +16,14 @@
 
 | `moq2ts` | Property | `moq-dev` | Evidence | Next |
 | --- | --- | --- | --- | --- |
-| [#45](https://github.com/openmoq/moq2ts/issues/45) ([#55](https://github.com/openmoq/moq2ts/pull/55): stop on a permanent error before a first session, and fail after 10 attempts) | A permanent connect error (an unresolvable host, an untrusted certificate, no common version) is retried forever, and the process never fails | Retries forever by default, so that an outage of any length recovers; `--connect-backoff-timeout` bounds it. It stops at once only on refused credentials and protocol violations | code; check below | by the check |
-| [#21](https://github.com/openmoq/moq2ts/issues/21) | A bracketed IPv6 endpoint is rejected | — | check below | by the check |
+| [#45](https://github.com/openmoq/moq2ts/issues/45) ([#55](https://github.com/openmoq/moq2ts/pull/55): stop on a permanent error before a first session, and fail after 10 attempts) | A permanent connect error (an unresolvable host, an untrusted certificate, no common version) is retried forever, and the process never fails | Shared. All three are retried for the check's 30 s, 9–10 attempts each, by default design: `--connect-backoff-timeout` bounds it. The host and the certificate log their cause on each attempt. With no common version neither side does: the client only backs off, and the relay logs `failed to read capsule e=UnexpectedEnd` | check | a `moq-dev` issue drafted, citing #55, awaiting the go-ahead |
 | [#33](https://github.com/openmoq/moq2ts/issues/33) ([#38](https://github.com/openmoq/moq2ts/pull/38)) | A PAT change: MSFTS -02 §6 asks for a new track | A new identity for the one program restarts the import. A second program added mid-stream ends an import that selected none, as a stream that starts with two does | code | test: an SPTS that becomes an MPTS mid-stream, under a supervisor |
 | [#46](https://github.com/openmoq/moq2ts/issues/46) ([#50](https://github.com/openmoq/moq2ts/pull/50)) | MSF -01 §6.1: a restarted publisher's Group IDs keep rising. Otherwise a caching relay serves the old catalog to a joining FETCH | Unknown for `moq import` publishing over MoQT through a caching relay | open | test, gated on a caching MoQT relay on the laptop |
-| [#41](https://github.com/openmoq/moq2ts/issues/41) ([#42](https://github.com/openmoq/moq2ts/pull/42)) | The wait for a first random access point is bounded in packets, so a low-rate source without random access indicators publishes nothing for minutes | Unknown | open | check: an audio-only program, its indicators cleared |
 | [#47](https://github.com/openmoq/moq2ts/issues/47) ([#52](https://github.com/openmoq/moq2ts/pull/52)) | After a restart, a source gap starts its group at the wrong packet, putting a PCR discontinuity inside a group (MSFTS -02 §5.4 forbids it) | The passthrough starts a group at a forward PCR jump. How `moq-srt` marks an SRT loss is unread | code, passthrough only | code: `moq-srt` |
 
-**The connect-error check** ([`xc-connect-errors.sh`](scripts/xc-connect-errors.sh), loopback). Each case is one `moq import ts` under a 30 s timeout. A case shows #45's behaviour if the client is still dialling at 30 s after at least three attempts. `v6` passes if it connects as the control does.
+**The connect-error check** ([`xc-connect-errors.sh`](scripts/xc-connect-errors.sh), loopback, `cd560bde5e`). Each case is one `moq import ts` under a 30 s timeout. A case shows #45's behaviour if the client is still dialling at 30 s after at least three attempts; `v6` passes if it connects as the control does. The control and `v6` connected; `dns`, `cert` and `version` were still dialling at 30 s, after 10, 10 and 9 attempts.
+
+**The audio-start check** ([`xc-audio-start.sh`](scripts/xc-audio-start.sh), loopback, `cd560bde5e`). The clip's MP2 audio is remuxed alone at 228 kb/s, with the PCR on its PID, and fed at its own rate; the control keeps the 500 random access indicators the remux writes, the treatment has none. Each lane, the demultiplexed import and `--passthrough`, is one run per fixture: a subscriber waits, then the import starts. [#41](https://github.com/openmoq/moq2ts/issues/41)'s behaviour is shared if the first audio PES reaches the subscriber more than 10 s after the import starts, the bound [#42](https://github.com/openmoq/moq2ts/pull/42) adopts. It came at 3.1 s on the import with and without indicators, and on `--passthrough` at 1.2 s with them and 2.3 s without, export's 1 s delay included.
 
 ## From `moq-dev`, asked of `moq2ts`
 
@@ -43,6 +43,8 @@
 - [#29](https://github.com/openmoq/moq2ts/issues/29), the track role, and [#31](https://github.com/openmoq/moq2ts/issues/31), [#43](https://github.com/openmoq/moq2ts/issues/43) and [#48](https://github.com/openmoq/moq2ts/issues/48) ([#51](https://github.com/openmoq/moq2ts/pull/51)), the timeline track. `moq-dev`'s MSF catalog takes each role from the rendition, video or audio, and declares no timeline track (code).
 - [#17](https://github.com/openmoq/moq2ts/pull/17) and [#18](https://github.com/openmoq/moq2ts/pull/18), each program of a multiplex as its own track: `moq import ts --program all` publishes each program as its own broadcast.
 - [#12](https://github.com/openmoq/moq2ts/pull/12), an SRT listener: `moq-srt` listens and dials out (code).
+- #41, a low-rate source without random access indicators: `moq-dev` starts it within about 3 s on both lanes, the passthrough's one-second PCR bound on a group taking the indicator's place (check above).
+- [#21](https://github.com/openmoq/moq2ts/issues/21), a bracketed IPv6 endpoint: `moq` connects to `https://[::1]:…` (check above).
 - [#20](https://github.com/openmoq/moq2ts/issues/20) and [#19](https://github.com/openmoq/moq2ts/issues/19). `moq-dev` verifies the relay's certificate unless told not to, and its relay accepts MoQT drafts 18, 20 and 22.
 - `moq-dev` [#8383](https://github.com/moq-dev/moq/issues/8383), a padded output's back-fill after a block: `moq2ts`'s receiver writes the packets it receives, neither paced nor padded (its README).
 

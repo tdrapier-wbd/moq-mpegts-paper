@@ -8,7 +8,8 @@
 #   reader drains at a fraction of the clip rate).
 # arms: control healthy32 r1 r2 r3 slow slow150 stop freeze5 freeze30 r2x64f, and r2x32l r2x64
 #   storm storm30, whose abusers are light (export to /dev/null, no reader); prefix pt- runs the
-#   passthrough lane; suffixes: -l7 offers only moq-lite-07-wip, -f exports with a 10 s follow,
+#   passthrough lane; suffixes: -l7 puts the relay and every client on moq-lite-07-wip only, -f
+#   exports with a 10 s follow,
 #   -fs the same follow with --stitch, -np with --mux-rate 0 (unpadded), -rs gives the relay a
 #   stateless-reset secret, -tsp and -pacer put a1 behind a valve and that receiver, beside a
 #   chain control k1 (PACER overrides the groomer binary).
@@ -101,6 +102,7 @@ IMPORT=(import ts)
 moq_relay_public "[::]:$PORT" localhost --log-level info --internal-listen "127.0.0.1:$MPORT" \
 	--quic-idle-timeout "$idle"
 [ -n "$win" ] && RELAY_ARGV+=(--quic-send-window "$win")
+[ -n "$ver" ] && RELAY_ARGV+=(--listen-version "$ver")
 if [ -n "$rsec" ]; then
 	(umask 077 && openssl rand -hex 32 >reset.secret)
 	RELAY_ARGV+=(--listen-reset-secret reset.secret)
