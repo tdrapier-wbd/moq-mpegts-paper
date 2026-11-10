@@ -1,6 +1,6 @@
 # Test 76 — Seven days through one origin group, with a withdrawal rule that spares shared damage (P1-aj)
 
-**State: the rule proven offline; the soak running its 168 h, its first minutes clean (no PCR interval over 40 ms, no continuity error, PTS inside the band, the merge losing nothing).**
+**State: run, 168 h, and graded: every criterion holds, C8 on its shared branch only, the unshared one never meeting the live feed; two slow first bytes have no cause in the logs.**
 
 ## Objective
 
@@ -56,9 +56,41 @@ _Predicted:_ at T62's rate about 14 contribution breaks in 168 h, each shared an
 
 ```bash
 bash lab/scripts/t76-withdraw-test.sh                                   # the offline proof
-SEG_ARGS='--pdt --peer http://<peer>:18310/g/ --peer-header X-P59-Origin:/home/ubuntu/p59/origin-secret' \
+SEG_ARGS='--pdt --peer http://<peer>:18310/g/ --peer-header X-P59-Origin:<secret file>' \
   bash ~/p59/t61-origin.sh start                                        # each origin
 sudo PACER=~/pacer-97f3a38/mpegts-pacer RELEASE_MS=1500 bash ~/p59/p1aj-soak.sh start DIR 168 \
   https://<cf-domain>/g/index.m3u8 https://<cf-domain>/h/index.m3u8     # the tertiary
 python3 lab/scripts/t62-grade.py DIR                                    # at the end
 ```
+
+## Results
+
+168.00 h, 10,080 merged minutes; both legs ended at their set hours. Neither segmenter reset, so neither pathway was ever withdrawn, and each origin cut 302,421 segments, numbered without a break and identical in bytes and SHA-1 across the two.
+
+| Criterion | Measured |
+| --- | --- |
+| C1 | No minute had a PCR interval over 40 ms (worst 30.0 ms). Continuity errors fell in two minutes only, 139 and 35, from one break in the contribution on the video PID that both segmenters cut into the same two segments |
+| C2 | The merge lost, mismatched and dropped late no datagram. Each leg's own losses, merged from the other: leg B 49,107 datagrams in its first two minutes, leg A 25,274,864 over 171 minutes (below) |
+| C3 | −0.5 to 1.8 ms; hourly medians 0.3–0.5 ms, drift +0.0004 ms/h |
+| C4 | Steepest +0.279 MB/h, a receiver going from 47.5 to 85.3 MB in 168 h; every other role +0.007 MB/h or less. Disk use under 0.5 GB on every host |
+| C5 | Leg A's receiver lost name resolution for 2.84 h: an upgrade restarted the host's network daemon, which replaced the resolver file its network namespace had bound, and the bind was restored by hand. Its groomer stalled 8 s and muted until the receiver rejoined at the live edge, past 5,116 segments it never saw. Two single playlist fetches were cut short by the edge and retried 0.3 s later. Of 1,198,138 fetches, ten took over 900 ms to a first byte: eight met the secondary answering within 3 s, the origin group failing over from a slow primary, and two (964 and 1,022 ms) left no trace at either origin. No guard withdrew a playlist |
+| C6 | Seven PTS wraps on each pathway, each consecutive, with no reset or C1 minute within 5 min |
+| C7 | No minute outside 0–2,000 ms. Hourly, the video's minimum ran 114–638 ms and its maximum 1,255–1,425 ms; both audio PIDs 29–105 ms; teletext 69–141 ms |
+| C8 | Two damaged segments, both answered _shared_ by both pathways within 2–10 ms, published and not withdrawn. No unshared case arose |
+
+_Predicted_ about 14 breaks at T62's rate; one came, in two segments.
+
+## Grading
+
+| Criterion | Verdict |
+| --- | --- |
+| Void | no: 168 h ran; the receiver's resolver loss is a fault of its host, and the merge covered it |
+| C1, C2, C3, C4, C6, C7 | hold |
+| C5 | holds; beside it, two first bytes of about 1 s, not among its events, have no cause in the logs and cost nothing |
+| C8 | holds on the shared branch; the unshared branch remains proven offline only |
+
+## Conclusions
+
+1. **Seven days through one origin group, on the live feed, cost nothing the contribution did not lack.** The damage both pathways carry is published, so a break of the kind that cost T62 54 s of withdrawals cost the merge nothing here. One break in a week is a sample of one for that rule.
+2. **The groomer's clock held for the week**: PTS in band every minute, where T62's groomer was wrong for 43 h.
+3. **The design's own faults were none.** What did happen was its hosts': one receiver lost its resolver to an upgrade, and the merge rode it. One feed, one distribution, receivers on one host and no failure injected bound the result (T61 covers the failure classes).
