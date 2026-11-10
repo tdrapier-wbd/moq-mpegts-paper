@@ -336,7 +336,7 @@ def main():
     secs = end - t0 + 30
     ref = thumbs(a.ref, secs=secs)
     print(f"reference: {len(ref)} pictures over {secs:.0f} s", file=sys.stderr)
-    faults = [(n, t) for n, t in ev if n[:4] in ("kill", "term", "outa", "ligh")
+    faults = [(n, t) for n, t in ev if n[:4] in ("kill", "term", "outa", "ligh", "cut_")
               or (n.startswith("import") and t > t0) or (a.arrive and n.startswith("arrive"))]
     out = {"run": a.run, "build": build.splitlines()[1:3], "void": void, "restarts": exits, "rows": [], "summary": []}
     if "cell select" in build:

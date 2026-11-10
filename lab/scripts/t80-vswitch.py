@@ -19,14 +19,19 @@ MARGIN before the serving input's last video packet; the serving input ends at i
 random-access point within MATCH of that one by arrival (the same picture, from one source), else
 at that instant's packet boundary. With none held that late, the other input's next one.
 
-Each decision appends `switch_<from>_<to> <unix seconds>` to the events file, as t58-event.sh does
-for tsswitch. The plan, each cut as written and, every 10 s, each input's longest gap between video
-packets go to stderr.
+SIGUSR1 commands a cut to the other input (T83), planned as a fault's is, with the serving input's
+last video packet as the instant it fell silent; it is ignored while a cut is planned or while the
+other input carries no video.
+
+Each decision appends `switch_<from>_<to> <unix seconds>` (a commanded one `cut_<from>_<to>`) to the
+events file, as t58-event.sh does for tsswitch. The plan, each cut as written and, every 10 s, each
+input's longest gap between video packets go to stderr.
 """
 import argparse
 import collections
 import os
 import queue
+import signal
 import sys
 import threading
 import time
@@ -159,10 +164,21 @@ class Switch:
             return
         if now - s.last_video <= self.silence or now - o.last_video > self.silence:
             return
+        self.decide(now, "switch", f"video silent {now - s.last_video:.3f} s")
+
+    def command(self, now):
+        s, o = self.ins[self.serving], self.ins[1 - self.serving]
+        if self.plan is not None or s.last_video is None or o.last_video is None or now - o.last_video > self.silence:
+            log("commanded cut ignored: a cut is planned or the other input carries no video")
+            return
+        self.decide(now, "cut", "commanded")
+
+    def decide(self, now, event, why):
+        s, o = self.ins[self.serving], self.ins[1 - self.serving]
         ta = s.last_video
         self.plan = {"to": o.idx, "ta": ta, "start": None, "stop": None, "after": max(now - self.lookback, ta - MARGIN)}
-        self.stamp(f"switch_{s.idx}_{o.idx}", now)
-        log(f"decide {s.idx}->{o.idx}: video silent {now - ta:.3f} s")
+        self.stamp(f"{event}_{s.idx}_{o.idx}", now)
+        log(f"decide {s.idx}->{o.idx}: {why}")
         if self.lookback > 0:
             held = [(seq, t) for seq, t, _, k in o.held if k == "r" and now - self.lookback < t <= ta - MARGIN]
             if held:
@@ -236,6 +252,8 @@ def main():
     q = queue.Queue()
     for i, path in enumerate(a.inputs):
         threading.Thread(target=reader, args=(path, i, q), daemon=True).start()
+    commanded = []
+    signal.signal(signal.SIGUSR1, lambda *_: commanded.append(True))
     log(f"silence {a.silence_ms:g} ms, lookback {a.lookback_ms:g} ms")
     ended, next_report = [False, False], time.time() + REPORT
     while not all(ended) or sw.ins[sw.serving].held:
@@ -255,6 +273,9 @@ def main():
             except queue.Empty:
                 item = None
         now = time.time()
+        if commanded:
+            commanded.clear()
+            sw.command(now)
         if sw.plan is None:
             sw.detect(now)
         if sw.plan is not None and sw.plan["start"] is None:
