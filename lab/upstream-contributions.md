@@ -491,6 +491,10 @@ With the fix to A, the byte-level result stands on draft 18. **Closed by us** on
 
 A relay limited to `moq-lite-07-wip` and a client on its defaults (`cd560bde5e`): the client retries forever, logging only its backoff, and the relay only `failed to read capsule e=UnexpectedEnd`. It voided T82 Part F's first two cells; the [cross-check](cross-check.md) found it as `moq2ts`'s #45. **Open.**
 
+### A late joiner gets no catalog through a draft-18 relay — reported as [#8465](https://github.com/moq-dev/moq/issues/8465)
+
+Since #7729 the catalog carries `MAX_CACHE_DURATION` 0, which draft 18 applies to the newest object too, and the subscriber fetches none: on moqx v0.3.7 every joiner after the first failed, on loopback and both CDN nodes, where `moq-relay` and the parent commit served them ([T52](test-52-cdn-relay-fanout.md)). **Open.**
+
 ### A refused TRACK_STATUS fails the subscription — reported as [#5954](https://github.com/moq-dev/moq/issues/5954)
 
 [T11](test-11-interop.md)'s CDN-hosted moqx relay refuses TRACK_STATUS with an undefined code, and `moq-net` falls back to SUBSCRIBE only on NOT_SUPPORTED, so the export exits. **Fixed by [#5991](https://github.com/moq-dev/moq/pull/5991), merged**: a subscribing reader registers before its demand is visible, so it sends SUBSCRIBE; only fetch- and query-only demand still uses TRACK_STATUS.
