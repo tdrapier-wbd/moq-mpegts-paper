@@ -94,7 +94,12 @@ def main():
 			if burst:
 				n += 1
 				ev("seg", t=round(last, 3), name=f"burst-{n}", bytes=burst)
-			rc = p.wait()
+			# tsp can ignore SIGTERM while its HLS input blocks, and would hold the groomer's input open.
+			try:
+				rc = p.wait(timeout=3)
+			except subprocess.TimeoutExpired:
+				os.killpg(p.pid, signal.SIGKILL)
+				rc = p.wait()
 			ev("fetcher-exit", status=rc, ran_s=round(time.time() - t0, 3))
 			if stop is not None and time.time() >= stop:
 				break
@@ -103,7 +108,7 @@ def main():
 		ev("downstream-closed")
 	finally:
 		try:
-			os.killpg(p.pid, signal.SIGTERM)
+			os.killpg(p.pid, signal.SIGKILL)
 		except (NameError, ProcessLookupError):
 			pass
 

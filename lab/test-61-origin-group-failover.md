@@ -1,6 +1,6 @@
 # Test 61 — Source protection at the CDN: interchangeable origins in one CloudFront origin group
 
-**State: run (six cells); every criterion holds in every cell. No failure confined to the primary's pathway left a hole in either receiver or the merge, and none kept a receiver waiting longer than 5.2 s.**
+**State: run (six cells); every criterion holds in every cell. No failure confined to the primary's pathway left a hole in either receiver or the merge, and none kept a receiver waiting longer than 5.2 s. With stock `tsp` receivers (P1-aq, seven cells) every criterion holds but one clause of H1: two segments the frozen primary cut differ, and no receiver got them. On its own path's 30 s cut, `tsp` rejoined at the live edge 10.2 s after the restoration.**
 
 ## Objective
 
@@ -97,3 +97,30 @@ The first runs of `seg-kill`, `seg-freeze` and `origin-down` issued their failur
 4. **`leg-cut`, the rejoin** ([`p1aq-rejoin.py`](scripts/p1aq-rejoin.py)): A's first datagram after its gap that is identical to B's under the same RTP number comes within 30 s of the restoration, so the pair is left unprotected no longer than the cut again. From it to the tail, none of A's datagrams is mismatched or unpaired against B, and the skew meets criterion 5 above. Reported: how A came back (its fetcher's exit and restart, or the connection resuming) and the content it skipped. The grader's negative control is `clean`, where it must find no gap in A over 1 s.
 
 _Predicted:_ the six cells pass as with B-8, since no failed fetch reaches a receiver behind the group. On `leg-cut`, `tsp` either exits on the stalled fetch and its restart rejoins at the live edge within seconds, or waits on the dead connection past the restoration.
+
+### P1-aq results
+
+_The environment above but for the segmenter, T76's (`--peer`: a segment cut across a continuity error is compared with the peer's and deleted if it differs), and the fetchers, TSDuck 3.44's `tsp`. Columns as in the table above._
+
+| Cell | Failure at | Failover onset | Failback | Longest wait, A / B | Skew (ms) | Mismatched; holes; merged lost, CC |
+| --- | --- | --- | --- | --- | --- | --- |
+| `clean` | — | — | — | 4.51 / 2.92 s | −139.8 (−154.7 to −124.3) | 0; 0; 0, 0 |
+| `seg-kill` | 120.1 s | 5.04 s | 7.04 s | 4.54 / 5.13 s | 448.3 (443.7 to 451.9) | 0; 0; 0, 0 |
+| `seg-freeze` | 120.1 s | 3.50 s | 8.10 s | 4.76 / 5.75 s | 20.0 (14.0 to 25.8) | 0; 0; 0, 0 |
+| `origin-down` | 120.6 s | 0.18 s | 0.00 s | 4.53 / 5.00 s | 339.3 (333.1 to 344.9) | 0; 0; 0, 0 |
+| `ngx-hang` | 120.1 s | 1.46 s | 0.00 s | 4.54 / 4.80 s | 203.9 (181.4 to 227.4) | 0; 0; 0, 0 |
+| `block` | 120.2 s | 1.33 s | 0.36 s | 4.54 / 5.03 s | 112.9 (66.1 to 158.2) | 0; 0; 0, 0 |
+| `leg-cut` | 120.2–150.1 s | — | — | 34.85 / 3.41 s | 365.0 (342.3 to 387.3) | 0; A 32.8 s, B 0; 0, 0 |
+
+No fetcher exited during any failure: each `tsp` ran from its start to the cell's stop. At the stop, leg B's `tsp` ignored SIGTERM in `seg-kill`, `seg-freeze` and `block`, and its supervisor, waiting on it, held the groomer's input open; both stayed alive, sending nothing, until killed after the last cell. Leg B's count in every capture (626,804–631,401 datagrams over 254–256 s) shows that none reached a later cell's recorder. The supervisor now kills its fetcher 3 s after SIGTERM.
+
+**Identity across hosts.** The two segmenters cut 1,228 segments in common over the matrix: 1,226 identical in duration, size and hash, written within 3 ms of each other. The other two are the primary's first after `seg-freeze`'s thaw, cut across its own freeze: 28.8 s and 1.0 MB against the secondary's 1.2 s and 3.8 MB, then 1.2 s against 2.4 s. Its peer check found both different and deleted them, and no receiver got either. The 33 segments only the secondary holds are those the primary missed while killed or frozen.
+
+**The cut.** Leg A's `tsp` ended by itself, status 0, 11.3 s into the cut, its fetch stalled. Its two restarts inside the cut exited 1 after 10.0 s each, the second 3.4 s after the restoration; the third, 4.4 s after it, ran to the end. A's first datagram identical to B's under the same number came 10.2 s after the restoration, its content stepping 32.8 s across a silence of 32.8 s: it rejoined at the live edge, skipping what it missed. From there 357,279 of A's datagrams matched B's, 0 mismatched, at a skew of 365.0 ms (364.2 to 366.1). A's last 3.0 s, 7,416 datagrams after B's last, have no partner, as `clean`'s last 3.6 s (8,874) have none: the grader's tail, 288 s, runs past B's end. Origin B answered no `/g/` request: CloudFront saw nothing. On `clean`, the grader's negative control, A has no gap over 1 s.
+
+1. **Void:** none. Every failure landed at 120.1–120.6 s, and the cut held from 120.2 to 150.1 s.
+2. **The six cells:** H2 and H3 hold in every cell: each leg 0 holes and 0 lost segments, the merge 0 lost and 0 continuity errors, the longest wait 5.75 s against 8 s. H1 holds for the receivers, 0 mismatched datagrams in every cell, but not for every segment cut: the frozen primary's two differ.
+3. **`leg-cut`, the merge, holds:** B 0 holes, the merge 0 lost and 0 continuity errors; A's hole 32.8 s.
+4. **`leg-cut`, the rejoin, holds:** 10.2 s after the restoration against 30 s, 0 mismatched after it, its skew within criterion 5. Every datagram it left unpaired comes after B's last, as in the control.
+
+As predicted, no failed fetch reached a stock receiver behind the group, and on its own path's cut `tsp` took the first branch: it exited on the stalled fetch, and its supervisor's restart rejoined at the live edge. Skew, which criterion 2 does not grade, reached 448.3 ms in `seg-kill`, and `block`'s 5th–95th percentile spread was 92 ms, past criterion 5's 50 ms; whether the cause is the one found above was not checked here.
