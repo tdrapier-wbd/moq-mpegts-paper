@@ -11,7 +11,7 @@
 #   seg-units.sh merge --dest HOST:PORT        for an IRD without ST 2022-7 input
 #   seg-units.sh uninstall | status
 #
-# Origin: seg-packager (t61-epochseg.py reading the live feed's local multicast group, which
+# Origin: seg-packager (t79-epochseg.py reading the live feed's local multicast group, which
 # srt-ingest.service writes), seg-guard (t61-guard.py, which withdraws a stale playlist so a CDN's
 # origin group fails over on the 404) and seg-origin (nginx). nginx answers a receiver only under a
 # path token, /t/ID/EXPIRY/SIG/g/..., SIG being the MD5 of "EXPIRY ID" and the host's token secret
@@ -65,7 +65,7 @@ origin() {
 	own "root:$USR" "$D$ETC/token.secret"
 	tok=$(cat "$D$ETC/token.secret")
 	[[ $tok =~ ^[0-9a-f]{32,}$ ]] || die "origin: $ETC/token.secret is not hex"
-	copy "$HERE/t61-epochseg.py" "$HERE/t61-guard.py"
+	copy "$HERE/t79-epochseg.py" "$HERE/t61-guard.py"
 	mkdir -p "$D$VAR/www/g" "$D$VAR/ngx/tmp"
 	own -R "$USR" "$D$VAR"
 	secret origin.env <<EOF
@@ -129,7 +129,7 @@ Wants=network-online.target
 User=$USR
 EnvironmentFile=$ETC/origin.env
 Nice=10
-ExecStart=/usr/bin/python3 $OPT/t61-epochseg.py \${SEG_WWW}/g --group \${SEG_GROUP} \$SEG_ARGS
+ExecStart=/usr/bin/python3 $OPT/t79-epochseg.py \${SEG_WWW}/g --group \${SEG_GROUP} \$SEG_ARGS
 Restart=always
 RestartSec=2
 

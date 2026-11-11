@@ -1,6 +1,6 @@
 # Test 82: slow and unresponsive subscribers on the current relay
 
-**State: run and graded: 24 matrix cells, 12 supplementary cells and 17 follow-up cells (Parts B–F), on current main and the previous QUIC stack.**
+**State: run and graded: 24 matrix cells, 12 supplementary cells and 17 follow-up cells (Parts B–F), on current main and the previous QUIC stack, and 9 cells on a main carrying the fixes for defects 1, 2 and 4 (Part G).**
 
 ## Objective
 
@@ -261,10 +261,10 @@ A subscriber slower than the stream cannot be served at the live edge with all i
 
 **Defects, each with a measured trigger.** Defects 1, 2 and 4 are the implementation's; defect 3 is the `moq-lite-06` wire's (Part F).
 
-1. **Resumed sessions hang (main).** When 32 resume after a freeze longer than a 30 s idle timeout, 18 of 96 sessions hang for 18–60 s. The 20 ms endpoint-wide stateless-reset interval gates it: the hung sessions end in 9 s keep-alive steps, and the 1 ms interval a secret sets removes it. That in-phase keep-alives are what make the interval bind is inferred. The previous stack does not do this. Remedy tested: `--listen-reset-secret`, with which none of 64 hung. At 64 clients none hung even without it (Part C′), for a reason not established. Reported as [#8382](https://github.com/moq-dev/moq/issues/8382).
-2. **Padding back-fill.** The export writes a stalled output's missed padding all at once: 60 s of PCR in 0.5 s. Remedy tested: `--mux-rate 0` (a 2.5× peak). Behind a padded export, a PCR-regulating remultiplexer passes the burst on at 54× the line rate, where the groomer, which strips padding, absorbs it (Part B). Neither sits a stall behind live, as had been inferred. Reported with defect 4 as [#8383](https://github.com/moq-dev/moq/issues/8383).
+1. **Resumed sessions hang (main).** When 32 resume after a freeze longer than a 30 s idle timeout, 18 of 96 sessions hang for 18–60 s. The 20 ms endpoint-wide stateless-reset interval gates it: the hung sessions end in 9 s keep-alive steps, and the 1 ms interval a secret sets removes it. That in-phase keep-alives are what make the interval bind is inferred. The previous stack does not do this. Remedy tested: `--listen-reset-secret`, with which none of 64 hung. At 64 clients none hung even without it (Part C′), for a reason not established. Reported as [#8382](https://github.com/moq-dev/moq/issues/8382); fixed by [#8442](https://github.com/moq-dev/moq/pull/8442), with which none of 96 resumed sessions was late (Part G).
+2. **Padding back-fill.** The export writes a stalled output's missed padding all at once: 60 s of PCR in 0.5 s. Remedy tested: `--mux-rate 0` (a 2.5× peak). Behind a padded export, a PCR-regulating remultiplexer passes the burst on at 54× the line rate, where the groomer, which strips padding, absorbs it (Part B). Neither sits a stall behind live, as had been inferred. Reported with defect 4 as [#8383](https://github.com/moq-dev/moq/issues/8383); fixed by [#8449](https://github.com/moq-dev/moq/pull/8449), with which no receiver's first second after a stall or a followed return exceeds the line rate (Part G).
 3. **Follow cannot tell its own reconnect on `moq-lite-06`.** After the subscriber's own reconnect, `--follow` takes the unchanged publisher for a replacement and the export exits. `--stitch` works around it (live 2.8 s after a 30 s freeze) at the price of a flagged program switch. The cause is the wire, which carries no publisher instance, so the exit is the safe reading; closed upstream as intended ([#8384](https://github.com/moq-dev/moq/issues/8384)). On `moq-lite-07` the follow holds (Part F).
-4. **A padded export does not shed on a slow output.** It blocks instead of shedding to the live edge, and after about 80 s at half rate exits with a clock-drift error that blames the source. Unpadded, it sheds, and its lag holds at about 4 s (Part E).
+4. **A padded export does not shed on a slow output.** It blocks instead of shedding to the live edge, and after about 80 s at half rate exits with a clock-drift error that blames the source. Unpadded, it sheds, and its lag holds at about 4 s (Part E). With #8449 a padded export sheds too, and its lag holds at 3.7 s, but it keeps 11–12 % of the video, against 47 % unpadded (Part G).
 
 **Not established:**
 
@@ -346,6 +346,27 @@ On `moq-lite-06` the wire carries no publisher instance, so each subscriber sess
 2. The control reproduces defect 3: `a1` exits within 15 s of the SIGCONT, after taking the broadcast for another publisher instance. If it does not, Part F is void.
 3. HF holds if, in both `-l7` cells, `a1` logs no replacement, its criterion 4 fate is _live_, and its capture has 0 continuity errors. The time to live is reported against `freeze30-fs`'s 2.8 s.
 4. Victims are graded by criterion 1.
+
+### Part G: the fixes for defects 1, 2 and 4 on main
+
+Upstream fixed defect 1 in the QUIC client: a client resumed past its idle deadline now times out on its own timer instead of waiting for the relay's reset. Defects 2 and 4 were fixed in the export: a padded export now sheds once it falls more than half its delay behind, flags one PCR discontinuity, and lays at most that budget's slots on resuming. Both fixes were tested on mock time only. Part G re-runs the arms that found them on a `main` carrying both, every setting as before, interleaved: `r2` three times, `slow` twice, `stop-tsp` and `stop-pacer` once, `freeze30-f-l7` twice. Cells are graded against the matrix's control cells.
+
+**HG:** each fix holds on the arm that found its defect.
+
+1. Valid: criterion zero in every cell; in each `r2` cell the relay closes at least one frozen session silently (`transport idle timeout`), as in the matrix.
+2. Defect 1: in all three `r2` cells no session is late (Part C's measure: ending more than 15 s after the SIGCONT, or never), and criterion 4 finds no hang. Before: 18 of 96 hung for 18–60 s, and the one cell timed had 5 late and a 45.5 s drain.
+3. Defect 4: in both `slow` cells criterion 3 holds as written, and the export does not exit with its clock-drift error. Before: lag 31.3 s, growing 0.48 s/s; 20 % of the video.
+4. Defect 2, after a stall: `stop-tsp`'s receiver carries at most 3× the line rate in its first second after `te`, against 539 Mb/s before, and `L_a` is back within `B` + 0.5 s by `te` + 10 s. `stop-pacer` is reported beside Part B's, its lag being the stall's.
+5. Defect 2, after a followed return: in both `freeze30-f-l7` cells, the peak second after the SIGCONT is at most 3× the line rate, against 30.9×, and HF's criterion 3 still holds.
+6. Victims are graded by criterion 1.
+
+```bash
+for spec in 1:r2 2:slow 3:stop-tsp 4:r2 5:freeze30-f-l7 6:slow 7:stop-pacer 8:r2 9:freeze30-f-l7; do
+	MOQ=~/bin-f190d90b-thin lab/scripts/t82-slow-consumer.sh "${spec#*:}" "/tmp/t82g/${spec/:/-}"
+done
+lab/scripts/t82-grade.py /tmp/t82g --controls /tmp/t82
+lab/scripts/t82-followup.py /tmp/t82g --controls /tmp/t82 --csv lab/results/t82-partG.csv
+```
 
 ### Follow-up commands
 
@@ -429,6 +450,18 @@ The victims' media counts and lag pass in every cell. In each counted main cell,
 
 The control reproduces defect 3 on the later build. On `moq-lite-07` the follower takes the return with no replacement, and its capture holds as many bytes as the victims', within 376. A followed return keeps the padded output's slot grid, so the export lays out the 30 s it missed at once, as defect 2 does: a 31× burst, against 3.2× for the stitched return, whose program switch starts a new grid.
 
+**Part G.** All nine cells are valid, and the victims pass criterion 1 in each, within 0.28 s of victim 1. The relay closed 12, 13 and 7 of each `r2` cell's 32 frozen sessions silently. Per-cell values for all but the `-l7` cells, which the matrix's grader grades as in Part F, are in [`results/t82-partG.csv`](results/t82-partG.csv).
+
+| Arm | Measure | Before | Part G |
+| --- | --- | --- | --- |
+| `r2` ×3 | sessions late; drain | 18 of 96 hung for 18–60 s; the timed cell 5 late, 45.5 s | 0 of 96; every session ended 0.4 s after the SIGCONT |
+| `slow` ×2 | lag max, slope; video vs victim; export RSS growth; end | 31.3 s, 0.48 s/s; 20 %; 23 MB; clock-drift exit | 3.62 and 3.72 s, flat; 12 and 11 %; 22 and 21 MB; live 0.3 s after |
+| `stop-tsp` | receiver's first second after `te`; `L_a` at `te` + 10 s | 539 Mb/s; 6.7 s, `B` 6.8 s | the line rate; 0.0 s, `B` 6.8 s |
+| `stop-pacer` | `L_a` at `te` + 10 / 40 / 100 s; back within `B` + 0.5 s | 3.7 / 2.3 / 1.3 s; 67 s | 1.1 / 1.1 / 1.3 s, `B` 1.1 s; 1.7 s |
+| `freeze30-f-l7` ×2 | peak second after the SIGCONT; live after; `a1` continuity errors | 30.9×; 2.8 and 2.7 s; 0 | 1.0×; 2.7 s each; 0 |
+
+Each `slow` cell's export shed 29 times, every 2.0–2.2 s and each time 1.00–1.06 s behind, half its delay, and dropped 3,911 frames. Unpadded, Part E's kept 47 % of the video; why the padded shed keeps a quarter of that is not traced. After `stop-tsp`'s stall the export shed the 60 s it had missed and flagged the discontinuity, and the `tsp regulate` receiver then ran 6.8 s below its pre-stall lag, as if no longer buffering, which is not traced either. In the `-l7` cells every connection read `moq-lite-07-wip` and `a1` logged no replacement; its capture is 39 MB short of the victims', the 30 s it shed instead of laying out.
+
 ### Follow-up grading
 
 | Part | Hypothesis | Verdict |
@@ -439,5 +472,6 @@ The control reproduces defect 3 on the later build. On `moq-lite-07` the followe
 | D | a killed peer costs main about what a frozen one does | **fails**: 1.3–1.6 MB per held session, three times a frozen one's, and not T25's retention, which the previous stack reproduces at 23 MB |
 | E | padding is not why a slowed export's lag grows | **fails**: unpadded, the lag holds at about 4 s |
 | F | on `moq-lite-07`, `--follow` treats the subscriber's own reconnect as a return | **holds**: live 2.7–2.8 s after, behind defect 2's back-fill |
+| G | each fix holds on the arm that found its defect | **holds** for defects 1 and 2; **fails** for defect 4 on criterion 3.2: the lag holds and the export no longer exits, but it keeps 11–12 % of the video |
 
 The victims were isolated in Parts B and E. Under the storm and at 64 full abusers, each main cell had a victim skip one or two groups, unattributed between relay and host.

@@ -5,7 +5,8 @@ Usage: t82-followup.py <root> [--controls <root>] [--csv out.csv]
 
 Each cell is graded by the matrix grader first (criterion zero and the victims' criterion 1, against
 the control cells of --controls), then by its part: a receiver chain (-tsp, -pacer), a reset drain
-(r2x32l, r2x64, r2x64f) or a storm. Part E's slow-np cells take the matrix grader's criterion 3.
+(r2x32l, r2x64, r2x64f, and Part G's r2) or a storm. Part E's slow-np cells take the matrix grader's
+criterion 3.
 """
 
 import csv
@@ -171,7 +172,7 @@ def main():
             part = part_b(cell, m)
         elif m["event"] == "storm":
             part = part_d(cell, m)
-        elif m["arm"].startswith("r2x"):
+        elif m["arm"].startswith("r2"):
             part = part_c(cell, m)
         elif m["event"] == "slow":
             keep = ("slow_lag_max_s", "slow_lag_slope", "slow_video_share", "slow_export_rss_mb", "c3", "fate")
