@@ -49,6 +49,6 @@
 - #41, a low-rate source without random access indicators: `moq-dev` starts it within about 3 s on both lanes, the passthrough's one-second PCR bound on a group taking the indicator's place (check above).
 - [#21](https://github.com/openmoq/moq2ts/issues/21), a bracketed IPv6 endpoint: `moq` connects to `https://[::1]:…` (check above).
 - [#20](https://github.com/openmoq/moq2ts/issues/20) and [#19](https://github.com/openmoq/moq2ts/issues/19). `moq-dev` verifies the relay's certificate unless told not to, and its relay accepts MoQT drafts 18, 20 and 22.
-- `moq-dev` [#8383](https://github.com/moq-dev/moq/issues/8383), a padded output's back-fill after a block: `moq2ts`'s receiver writes the packets it receives, neither paced nor padded (its README).
+- `moq-dev` [#8383](https://github.com/moq-dev/moq/issues/8383) (fixed by [#8449](https://github.com/moq-dev/moq/pull/8449)), a padded output's back-fill after a block: `moq2ts`'s receiver writes the packets it receives, neither paced nor padded (its README).
 
 Interop, not a shared property: [#54](https://github.com/openmoq/moq2ts/pull/54) sends a relay authorization token at setup, tested against moqx. Whether `moq-relay` admits it is [T53](test-53-token-interop.md)'s question.
