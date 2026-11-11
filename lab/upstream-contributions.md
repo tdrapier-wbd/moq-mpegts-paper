@@ -215,7 +215,7 @@ A quest-only PR replacing `plan-ts-alignment`: a shared `--epoch` (refusals buil
 
 ### Stateless resets: a restarted relay's ([#5861](https://github.com/moq-dev/moq/issues/5861)) and clients resuming together ([#8382](https://github.com/moq-dev/moq/issues/8382))
 
-[T28](test-28-failure-injection-matrix.md) criterion 9: a killed relay cost the MoQ lane about twice SRT's loss, because each relay process drew a random stateless-reset key, so its resets for its predecessor's connections failed validation and clients waited out the idle timeout. Another contributor's [#5910](https://github.com/moq-dev/moq/pull/5910) reads the key from a file (`--listen-reset-secret`). **Fixed by #5910, merged.** With the key kept, a restart costs 4.20 s of video, not 14.16 s (P1-z). Without a secret the endpoint still sends one reset per 20 ms: [T82](test-82-slow-unresponsive-subscribers.md)'s 32 clients resuming together after a freeze past a 30 s idle timeout left 18 of 96 waiting up to 60 s, none with the secret, and none of 128 at 64 clients. Reported as #8382: **open**, its fix in the client (a resumed client fires its own overdue idle timer) in draft [#8442](https://github.com/moq-dev/moq/pull/8442).
+[T28](test-28-failure-injection-matrix.md) criterion 9: a killed relay cost the MoQ lane about twice SRT's loss, because each relay process drew a random stateless-reset key, so its resets for its predecessor's connections failed validation and clients waited out the idle timeout. Another contributor's [#5910](https://github.com/moq-dev/moq/pull/5910) reads the key from a file (`--listen-reset-secret`). **Fixed by #5910, merged.** With the key kept, a restart costs 4.20 s of video, not 14.16 s (P1-z). Without a secret the endpoint still sends one reset per 20 ms: [T82](test-82-slow-unresponsive-subscribers.md)'s 32 clients resuming together after a freeze past a 30 s idle timeout left 18 of 96 waiting up to 60 s. Reported as #8382: **fixed in the client by [#8442](https://github.com/moq-dev/moq/pull/8442), merged** (a resumed client fires its own overdue idle timer); unverified.
 
 ### Where `--sync` legs place a group after a loss — asked as [#5864](https://github.com/moq-dev/moq/issues/5864)
 
@@ -283,7 +283,7 @@ The first three filings, each saying a design does not generalise, were **accept
 
 ### The revalidation window — closed, and folded into a rethink of the whole auth line
 
-[#3605](https://github.com/moq-dev/moq/issues/3605) reported that `max-age=0` and an omitted `Cache-Control` silently disable revalidation permanently, and that the 2× revocation window is undocumented outside the source. Closed as completed and absorbed into [#3682](https://github.com/moq-dev/moq/pull/3682), which makes `moq auth serve` the reference auth server: the behaviour was accepted as wrong, and the remedy replaces the surface rather than patching it. Whether that closes the hazard is not yet checkable; T37 measured a component being redesigned.
+[#3605](https://github.com/moq-dev/moq/issues/3605) reported that `max-age=0` and an omitted `Cache-Control` silently disable revalidation permanently, and that the 2× revocation window is undocumented outside the source. Closed as completed and absorbed into [#3682](https://github.com/moq-dev/moq/pull/3682), which makes `moq auth serve` the reference auth server: the behaviour was accepted as wrong, and the remedy replaces the surface rather than patching it. Whether that closes the hazard is P1-ax's question; T37 measured the relay before its redesign.
 
 ### Token interoperability — [#6566](https://github.com/moq-dev/moq/issues/6566) and [#6567](https://github.com/moq-dev/moq/issues/6567) fixed, [moqx#786](https://github.com/openmoq/moqx/issues/786#issuecomment-6370364516) open, [moqxr#83](https://github.com/openmoq/moqxr/issues/83) fixed
 
@@ -489,11 +489,11 @@ With the fix to A, the byte-level result stands on draft 18. **Closed by us** on
 
 ### No common version, no cause logged — reported as [#8451](https://github.com/moq-dev/moq/issues/8451)
 
-A relay limited to `moq-lite-07-wip` and a client on its defaults (`cd560bde5e`): the client retries forever, logging only its backoff, and the relay only `failed to read capsule e=UnexpectedEnd`. It voided T82 Part F's first two cells; the [cross-check](cross-check.md) found it as `moq2ts`'s #45. **Open.**
+A relay limited to `moq-lite-07-wip` and a client on its defaults (`cd560bde5e`): the client retries forever, logging only its backoff, and the relay only `failed to read capsule e=UnexpectedEnd`. It voided T82 Part F's first two cells; the [cross-check](cross-check.md) found it as `moq2ts`'s #45. **Fixed by [#8478](https://github.com/moq-dev/moq/pull/8478), merged**: a first dial fails fast, both sides logging the versions; unverified.
 
 ### A late joiner gets no catalog through a draft-18 relay — reported as [#8465](https://github.com/moq-dev/moq/issues/8465)
 
-Since #7729 the catalog carries `MAX_CACHE_DURATION` 0, which draft 18 applies to the newest object too, and the subscriber fetches none: on moqx v0.3.7 every joiner after the first failed, on loopback and both CDN nodes, where `moq-relay` and the parent commit served them ([T52](test-52-cdn-relay-fanout.md)). **Open: draft [#8474](https://github.com/moq-dev/moq/pull/8474) stops sending the max age.**
+Since #7729 the catalog carries `MAX_CACHE_DURATION` 0, which draft 18 applies to the newest object too, and the subscriber fetches none: on moqx v0.3.7 every joiner after the first failed, on loopback and both CDN nodes, where `moq-relay` and the parent commit served them ([T52](test-52-cdn-relay-fanout.md)). **Open: [#8474](https://github.com/moq-dev/moq/pull/8474) stops sending the max age.**
 
 ### A refused TRACK_STATUS fails the subscription — reported as [#5954](https://github.com/moq-dev/moq/issues/5954)
 

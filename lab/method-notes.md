@@ -232,6 +232,8 @@ A rule belongs here only if it would change how a future experiment is designed,
 
 **A run measures the machine it runs on, so what else the machine does is part of the cell.** _(T9, T21, T26, T76.)_ Give soaks, memory arms and timing rigs a host window of their own, never beside a build; run a deliberate saturation (the segmented fan-out) last in a session, and keep a segmented origin off any box carrying a MoQ relay. Cheap namespace cells fill a window whose main item is posting, reviewing or building. The host's own maintenance is in the window too: a nightly unattended upgrade restarted `systemd-networkd`, which replaced the resolver stub and silently dropped a running namespaced receiver's `resolv.conf` bind, so one leg of a 1+1 soak lost DNS for 2 h 51 min while its partner, pinned in the namespace's `hosts`, carried on. Hold the upgrade timers for a soak's length, pin every name a namespaced leg dials, and check a running leg's resolver from its process (`nsenter -t <pid> -m cat /etc/resolv.conf`).
 
+**Every resource of a load generator bounds the step it carries, memory as much as CPU.** _(T52.)_ A fan-out ramp voided a step on its subscriber host's CPU and network alone. Each subscriber held about 250 MB, and at 48 and 56 subscribers the host's free memory went from over 1.3 GB to under 15 MB within the step, the kernel killing subscribers, so two knees read as the node's or the path's were the harness's; its memory stop, checked between steps, never fired. Read the generator's memory beside its CPU and network over each window, check the kernel log for kills, and size the next step before spawning it.
+
 **Every statistic the experiment reports is an output the cell prints, and no cleanup job runs against a live results tree.** _(T8b C3.)_ A mid-matrix janitor deleted four of six captures C3 needed summed. Sum at grade time and print the aggregate; a number recovered later from surviving files is a salvage.
 
 **When arms run back to back against a service that caches an admission decision, the cache carries the last arm's answer.** _(T37, T38.)_ Wait out or clear the relay's `max-age` cache between arms, rule it out before reading "no media" as a publisher fault, and hold one keepalive subscriber on every channel for the matrix.
@@ -283,6 +285,8 @@ A rule belongs here only if it would change how a future experiment is designed,
 **Sort on the key, not the record.** _(T12.)_ Sorting whole tuples ordered tied datagrams by payload and made 207 phantom continuity errors.
 
 **Any redundancy test whose sources are started independently measures its own clock skew, and its merge window is the union of the legs' activity.** _(T6, T12.)_ Independent replays lag by the join delay, so "same file" is not "same stream": fan one regulated source into both legs, and let the surviving leg define the end of the window.
+
+**A merge that holds in its control says nothing of each leg alone.** _(T83.)_ A segmented leg groomed at its partner's 1.5 s cushion, below the 3 s floor T70 had measured for its lane, fell silent for 1.26 s in every run; the controls merged cleanly, and only with the other leg dark did the merge lose datagrams. Size each leg's groomer from its own lane's measured floor, and read each leg's largest silence in the control before running a fault.
 
 **On a lane that two sources can serve at once, the failure is repeated time, and neither a continuity nor a PCR-interval check sees it.** _(T6.)_ Add a rate-ratio or PCR-decrease count wherever two publishers, packagers or origins can be live.
 
