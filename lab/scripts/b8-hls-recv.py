@@ -51,9 +51,15 @@ other PID's first packet if it carries an adaptation field. Nothing else in the 
 and nothing at all without the tag. A PID whose first packet has no adaptation field cannot be
 marked without re-packetising, and the log names it.
 
+With --strip-tables, a segment that opens with a PAT and a PMT that PAT lists loses those two
+packets, the pair a packager adds, so the hand-off carries only the source's packets (T83). TSDuck's
+packager also advances those two PIDs' continuity counters by one for each pair it adds, which this
+does not undo; its --slice-only adds no pair.
+
 Usage:
   b8-hls-recv.py URL OUT [--seconds N, 0 for no end] [--poll MS] [--edge N] [--timeout S]
-                 [--give-up-ms MS] [--release-ms MS] [--header 'Name: value']... [--log FILE.jsonl]
+                 [--give-up-ms MS] [--release-ms MS] [--strip-tables] [--header 'Name: value']...
+                 [--log FILE.jsonl]
                  [--cmcd headers|query] [--cmcd-cid ID] [--cmcd-collector URL] [--cmcd-interval S]
                  [--ts-counters PORT] [--ts-counters-forward URL] [--cmcd-ts-prefix PREFIX]
 """
@@ -334,6 +340,26 @@ def mark_discontinuity(data):
 	return bytes(data), sorted(p for p, ok in first.items() if ok), sorted(p for p, ok in first.items() if not ok)
 
 
+def strip_added_tables(data):
+	"""Drop a segment's first two packets when they are a PAT and a PMT that PAT lists: the pair a
+	packager puts at the head of each segment (TSDuck's `-O hls` puts one on every segment after
+	its first). Returns (data, whether a pair was dropped)."""
+	if len(data) < 376 or data[0] != 0x47 or data[188] != 0x47:
+		return data, False
+	if (data[1] & 0x1F) << 8 | data[2] != 0 or not data[1] & 0x40:
+		return data, False
+	o = 4 + (1 + data[4] if data[3] & 0x20 else 0)
+	s = o + 1 + data[o]
+	length = (data[s + 1] & 0x0F) << 8 | data[s + 2]
+	pmts = set()
+	for e in range(s + 8, min(s + 3 + length - 4, 188), 4):
+		if data[e] << 8 | data[e + 1]:
+			pmts.add((data[e + 2] & 0x1F) << 8 | data[e + 3])
+	if (data[189] & 0x1F) << 8 | data[190] not in pmts or not data[189] & 0x40:
+		return data, False
+	return data[376:], True
+
+
 def pcr_span(data):
 	"""Seconds from a segment's first PCR to its last; None without two. PCRs are read from the
 	first PID that carries one."""
@@ -368,6 +394,8 @@ def main():
 	ap.add_argument("--release-ms", type=float, default=None,
 					help="hold each dated segment until its last PCR's time plus this")
 	ap.add_argument("--header", action="append", default=[])
+	ap.add_argument("--strip-tables", action="store_true",
+					help="drop the PAT and PMT a packager adds at the head of each segment")
 	ap.add_argument("--log", default=None)
 	ap.add_argument("--cmcd", choices=["headers", "query"], default=None,
 					help="send request-mode CMCD v2 on every fetch")
@@ -511,6 +539,8 @@ def main():
 						meta["held_ms"] = round(wait * 1000, 1)
 					else:
 						meta["late_ms"] = round(-wait * 1000, 1)
+				if args.strip_tables:
+					data, meta["stripped"] = strip_added_tables(data)
 				if u in disc and n_seg:
 					data, marked, unmarked = mark_discontinuity(data)
 					log("discontinuity", name=u, marked=marked, unmarked=unmarked)

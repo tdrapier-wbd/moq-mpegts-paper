@@ -28,7 +28,8 @@
 #      (239.255.0.1:5000), RCVBUF (16777216), SETTLE (60), MEASURE (120), NCAP (4), MIN_KEEP (0.98),
 #      BOX_LIMIT (70), NIC_BPS (the NIC's rate, for the half-rate rule; 0 skips it), MIN_AVAIL_MB
 #      (1024), ANCHOR (0; 1 opens the subscription with an uncounted subscriber first), JOIN_S (10),
-#      JOIN_TRIES (3)
+#      JOIN_TRIES (3), CONTINUE (0; 1 carries a ramp through degraded steps, ending it only past a
+#      quarter of its subscribers ended or at the host's limits)
 set -uo pipefail
 
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
@@ -154,6 +155,22 @@ ramp)
 		sleep 1
 	done) >"$OUT/host-$LANE.log" &
 	PIDS+=($!)
+	# This host's own drops, each second: UDP receive-buffer and input errors, softnet drops, and the
+	# Nitro NIC's allowance counters (bandwidth in, packets per second, conntrack), so a loss on the
+	# path to this host can be told from one inside it.
+	allow() { ethtool -S "$NIC" 2>/dev/null | awk -v k="$1:" '$1==k{print $2}'; }
+	softnet() {
+		local s=0 d
+		while read -r _ d _; do s=$((s + 16#$d)); done </proc/net/softnet_stat
+		echo "$s"
+	}
+	(echo "t udp_rcvbuf_errors udp_in_errors softnet_dropped bw_in_allowance_exceeded pps_allowance_exceeded conntrack_allowance_exceeded"
+		while :; do
+			echo "$(now) $(awk '/^Udp:/ && ++n == 2 {print $6, $4}' /proc/net/snmp) $(softnet)" \
+				"$(allow bw_in_allowance_exceeded) $(allow pps_allowance_exceeded) $(allow conntrack_allowance_exceeded)"
+			sleep 1
+		done) >"$OUT/drops-$LANE.log" &
+	PIDS+=($!)
 	JOIN_S=${JOIN_S:-10}
 	JOIN_TRIES=${JOIN_TRIES:-3}
 	SUBS=()
@@ -267,10 +284,15 @@ print("first_byte_s=%s first_rap_s=%s" % (first and round(first, 3), rap and rou
 			END{db=b1-b0; di=i1-i0; printf "%.1f %.0f", (db+di>0? db/(db+di)*100 : 0), (s1>s0? (r1-r0)*8/(s1-s0) : 0)}' "$OUT/host-$LANE.log")
 		read -r BOX RXBPS <<<"$BUSY"
 		echo "$(now) n=$N host_busy=$BOX% rx_bps=$RXBPS" >>"$OUT/phases-$LANE.log"
-		if [ "$ALIVE" -lt "$N" ]; then
+		if [ "${CONTINUE:-0}" = 1 ]; then
+			[ $((ALIVE * 4)) -lt $((N * 3)) ] && STOP="more than a quarter of the subscribers had ended at n=$N"
+		elif [ "$ALIVE" -lt "$N" ]; then
 			STOP="a subscriber exited at n=$N"
 		elif awk -v f="$FRAC" -v m="$MIN_KEEP" 'BEGIN{exit !(f<m)}'; then
 			STOP="a subscriber fell to $FRAC of step 1's rate at n=$N"
+		fi
+		if [ -n "$STOP" ]; then
+			:
 		elif awk -v b="$BOX" -v l="$BOX_LIMIT" 'BEGIN{exit !(b>l)}'; then
 			STOP="this host reached $BOX% busy at n=$N: the harness's limit"
 		elif [ "$NIC_BPS" -gt 0 ] && awk -v r="$RXBPS" -v n="$NIC_BPS" 'BEGIN{exit !(r>n/2)}'; then

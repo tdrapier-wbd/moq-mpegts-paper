@@ -8,8 +8,8 @@
 #
 # Env: LATS (SRT latencies, ms: "1000"), CELLS ("none outage-a outage-b kill-a kill-b cut"), REPS (3),
 #      CONTROLS (1: first T80's lookback kill cell on T58's rig, and the commanded cut on two
-#      media-aware legs, REPS each), OUT (/home/ubuntu/t83b) holds one directory per run and the
-#      summary.
+#      media-aware legs, REPS each), LEGB and SRT_INIT (t83-mixed-switch.sh's), OUT
+#      (/home/ubuntu/t83b) holds one directory per run and the summary.
 set -uo pipefail
 
 LABEL=${1:?label}
@@ -21,6 +21,8 @@ LATS=${LATS:-1000}
 CELLS=${CELLS:-"none outage-a outage-b kill-a kill-b cut"}
 REPS=${REPS:-3}
 CONTROLS=${CONTROLS:-1}
+LEGB=${LEGB:-moq}
+SRT_INIT=${SRT_INIT:-}
 OUT=${OUT:-/home/ubuntu/t83b}
 U=${SUDO_USER:-ubuntu}
 SUM=$OUT/$LABEL.summary.csv
@@ -80,9 +82,9 @@ PY
 mixed() { # $1 run name, $2 lega, $3 srt_ms, $4 cell (none | outage-a ... | cut), $5 rep
 	local c=${4%-*} s=a
 	case $4 in *-b) s=b ;; esac
-	CELL=$c SERVE=$s LEGA=$2 SRT_LAT=$3 BIN=$BIN PACER=$PACER SRC=$SRC OUT=$OUT/$LABEL \
+	CELL=$c SERVE=$s LEGA=$2 LEGB=$LEGB SRT_LAT=$3 SRT_INIT=$SRT_INIT BIN=$BIN PACER=$PACER SRC=$SRC OUT=$OUT/$LABEL \
 		bash "$H/t83-mixed-switch.sh" "$1" >"$OUT/$LABEL.$1.log" 2>&1
-	grade "$OUT/$LABEL/$1" "$1" t83 "$2" "$3" "$c" "$s" "$5"
+	grade "$OUT/$LABEL/$1" "$1" "t83$([ "$LEGB" = seg ] && echo -seg)" "$2" "$3" "$c" "$s" "$5"
 }
 
 echo "=== $(date -u) t83b-batch $LABEL: LATS=$LATS CELLS=$CELLS REPS=$REPS ==="

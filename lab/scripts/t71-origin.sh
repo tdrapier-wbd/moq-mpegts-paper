@@ -16,7 +16,8 @@
 # bounds each stage; an inner one would move its children out of the recorded group.
 #
 # Env: BIN (~/bin-66af7231), CLIP (~/contrib-10m.ts), RELAY_PORT (4711), SRT_PORT (9711),
-# RIST_PORT (9712), CLOCK_PORT (9710), CC (delay), BUFMS (1000), VPID (111), CLOCK_LIFETIME (14400 s), SEG_PORT
+# RIST_PORT (9712), CLOCK_PORT (9710), CC (delay), QLOG (unset; a directory for the relay's qlog traces,
+# on a build with the `qlog` feature), BUFMS (1000), VPID (111), CLOCK_LIFETIME (14400 s), SEG_PORT
 # (18731), SEG_GROUP (239.255.0.73:5073)
 set -euo pipefail
 
@@ -76,9 +77,10 @@ halt() {
 
 case "$ACTION" in
 relay-up)
-	echo "relay: $(head -n 1 "$BIN.sha" 2>/dev/null || echo 'no sidecar'), controller $CC" >"$DIR/relay-build.txt"
+	echo "relay: $(head -n 1 "$BIN.sha" 2>/dev/null || echo 'no sidecar'); $("$BIN/moq-relay" --version 2>&1 | head -n 1); $BIN; controller $CC" >"$DIR/relay-build.txt"
 	launch relay timeout "${CLOCK_LIFETIME:-14400}" "$BIN/moq-relay" --listen "0.0.0.0:$RELAY_PORT" \
-		--listen-tls-generate localhost --auth-public "**" --quic-congestion-control "$CC"
+		--listen-tls-generate localhost --auth-public "**" --quic-congestion-control "$CC" \
+		${QLOG:+--quic-qlog "$QLOG"}
 	;;
 relay-down) halt relay ;;
 clock-up)
