@@ -1,6 +1,6 @@
 # Test 83: an SRT leg beside a MoQ or segmented-HTTP leg, merged or switched
 
-**State: Parts A and B run on the MoQ legs; criteria 1–3, 5, 6 and 8 hold, and 7 is reported.** An SRT leg and an opaque leg merge without loss through every fault, inside an ST 2022-7 class only with SRT's latency matched; matched, a switch between SRT and the media-aware leg costs the background's hole, and unmatched skips 2.3–2.5 s toward the leading leg. The segmented arms of A and B are next, Part C after them, Part D on the author's approval, Part E with the IRDs of B-6.
+**State: Parts A and B run on the MoQ and segmented legs; criteria 1, 2, 5, 6 and 8 hold, 4 and 7 are reported, and 3 holds except on TSDuck's segments with their added pair removed, where it fails as predicted.** An SRT leg merges with an opaque leg or the `seg` lane's slices without loss through every fault, inside an ST 2022-7 class only with SRT's latency matched; matched, a switch between SRT and the media-aware leg or the lane's slices costs the background's hole, and unmatched skips toward the leading leg, 2.3–2.5 s against a 1.2 s lag and 5.3–5.7 s against 5.3 s. Part C is next, Part D on the author's approval, Part E with the IRDs of B-6.
 
 ## Objective
 
@@ -148,6 +148,29 @@ At 1,000 ms every run's skew lay between 3,770 and 3,778 ms, and 2,559–2,564 m
 - **The B prediction holds matched and fails unmatched.** Matched, the switch costs T80's result with nothing repeated. Unmatched, it is not the lag as predicted: the hold absorbs it one way and doubles it the other. The table change is the one predicted, and FFmpeg decodes through it.
 - **Output latency drifts, from the rig's SRT sender.** In the four runs read whole that start on the SRT leg, of 18, the recording's latency falls by about 0.047 s per second from the first cut to the media-aware leg, about 2 s by the run's end. The sender reads the tap through a pipe, so `tsp` withholds its first 8 MB (half its buffer, 6.7 s of this clip) and sends them as one burst: the SRT leg's first byte reaches the switch at 8.8 s (10.0 s at 2,215 ms), the media-aware leg's at 4.7 s. The groomer, arrival-clocked, primes on that burst holding 7.6 s against its 1 s target, and sheds the excess at its rate servo's 5 % limit for about 2 min, longer than a run. All 21 runs of 39 that start on the SRT leg prime 6.8 s ahead, the 18 that start on the media-aware leg 29–31 ms, and the fall runs with no cut too. With the sender's initial load set to 7 packets (`SRT_INIT=7`) the groomer primes 78 ms ahead and holds 1.00 ± 0.05 s through a whole run with no cut, and through a cut to the media-aware leg; at the cut back toward the leading SRT leg, unmatched, it gains 0.9 s, the switch's skip arriving as a burst, which it sheds the same way. The drift is the rig's and the groomer's servo, not the switch or a leg; no criterion grades it.
 - **Two grader limits.** Where a cut's hole is no larger than the background's gaps, `t56-grade.py` resumes at the largest gap in the next 15–20 s, so its latency step there reads the drift and the next event gets no background. Its single bad pictures, at returns where the switch did not cut and once in the same-plane control, are not stable: the control's did not recur when its run was graded again, and seven runs read whole showed isolated bad pictures 9–31 s from any event, consistent with FFmpeg concealing the recordings' 8–10 continuity errors outside any switch differently between decodes.
+
+### Part B, segmented: matched, the switch cuts between SRT and the lane's slices at the background's cost with no table changed; unmatched, it repeats or skips the 5.3 s lag
+
+`main` `cd560bde5e`, one host, loopback, `contrib-10m.ts`, `SRT_INIT=7`; 36 runs, all valid. The matched SRT latency is 6,286 ms: 1,000 ms plus the 5,286 ms by which the lane's slices trailed the SRT leg in a 75 s control at 1,000 ms. Read as the media-aware arm's table; a fault's background is 0.60 on the SRT leg at 6,286 ms, 0.21 at 1,000 ms, and 0.15 on the segmented leg.
+
+| Event, three runs each | Detection | Hole (background) | Programme lost | Bad pictures |
+| --- | --- | --- | --- | --- |
+| Matched, 6,286 ms (run medians within 2 ms) |  |  |  |  |
+| SRT leg's outage or kill | 5.31–5.32 | 0.22 (0.60) | 0 | 0 |
+| segmented leg's outage or kill | 5.35 | 0.22 (0.15) | 0 | 0 |
+| commanded cut, SRT → segmented | — | 0.22 (0.60) | 0 | 0 |
+| commanded cut, segmented → SRT | — | 0.22 (0.21) | 0 | 1, 1, 0 |
+| Unmatched, 1,000 ms (leg B 5.28–5.29 s behind) |  |  |  |  |
+| SRT leg's outage or kill | 1.21 | 0.22 (0.21) | −5.20 | 0 |
+| segmented leg's outage or kill | 5.35–5.36 | 0.44 (0.15) | **5.72** | 1 |
+| commanded cut, SRT → segmented | — | 0.31 (0.21) | −5.12 | 7 |
+| commanded cut, segmented → SRT | — | 0.30 (0.22) | **5.28** | 7 |
+
+- **Criterion 6 holds.** In all 18 matched events the hole was within its background plus 0.1 s, nothing was lost or repeated, and the latency stepped at most 0.04 s. The two single bad pictures at the cut back to SRT are the grader's limit above: one did not recur when its run was graded again, the other recurred on a second grading and not on a third, and a run with no continuity error at all lost its single bad picture, at a return, on a second grading. These recordings' only continuity errors are two on the PAT's PID after each cut toward the segmented leg, an earlier PAT packet repeated.
+- **Criterion 7, reported:** the lag, 5.3 s, is beyond the 2 s hold. Toward the lagging leg the switch repeats 5.12–5.20 s, toward the leading leg it skips 5.28 s at a cut and 5.72 s at a fault, and each cut costs 7 bad pictures in every run, with continuity errors on ten PIDs in the run read for them. In every run each of the segmented leg's faults shows one bad picture, and the SCTE-35 cadence misses two slots there and one at each cut.
+- **Criterion 8 holds.** No table, version or PID differs across any cut, both ways and at both latencies, and no SCTE-35 section was lost.
+- **Detection follows the faulted leg's buffer**: 1.21 s on SRT at 1,000 ms, and 5.31–5.36 s on either leg when it holds 6.3 s, the SRT receiver's latency or the lane's held slices and cushion.
+- **The segmented prediction holds.** Matched, the switch costs T80's result on this leg too, with nothing repeated and no table change, since the lane carries the source's tables. Unmatched, it is the lag as predicted, repeated one way and skipped the other, where on the media-aware leg the hold absorbed it one way and doubled it the other.
 
 ## Corrections
 
