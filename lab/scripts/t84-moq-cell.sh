@@ -14,25 +14,31 @@
 # gateways. The cell's clock starts at the impaired leg's first output: SETTLE s clean, then the
 # shape, then the rest of the window, as t72-cdn-cell.sh's.
 #
-# Usage: t84-moq-cell.sh <out-dir> none|outage|loss<P>|reorder<P>      (as root)
+# Usage: t84-moq-cell.sh <out-dir> <shape>      (as root)
+#   shapes: none | outage | loss<P> | reorder<P> | step<Mbit> (the path's cake at that rate) |
+#           shallow<Mbit> (the cake replaced by a token bucket of TBF_BURST and TBF_LIMIT bytes)
 # Env:   RELAY (node | local), URL (node), VER (moq-transport-18), LANE (demux | passthrough),
-#        DELAY_MS, MOQ (~/bin-d66c8928/moq), QLOG_MOQ (a moq built with qlog: the impaired leg's
-#        client, its traces in qlog/), CLIP (~/fixture-10m.ts), SCRIPTS (~/t84/scripts), PREFIX
-#        (moq-test/p1ao), PORT (18443), SETTLE, OUTAGE, HELD, WINDOW, PATH_DELAY_MS,
-#        REORDER_DELAY_MS, KEEP_TS
+#        DELAY_MS, MOQ (~/bin-d66c8928/moq), RELAY_BIN (moq-relay beside MOQ), RELAY_ARGS (more
+#        flags for the local relay), QLOG_MOQ (a moq built with qlog: the impaired leg's client, its
+#        traces in qlog/), CLIP (~/fixture-10m.ts), SCRIPTS (~/t84/scripts), PREFIX (moq-test/p1ao),
+#        PORT (18443), SETTLE, OUTAGE, HELD, WINDOW, PATH_DELAY_MS, REORDER_DELAY_MS, RATE_MBIT (the
+#        path's cake, 20, restored after a step or shallow shape), TBF_BURST (3000), TBF_LIMIT
+#        (15000), KEEP_TS
 # Output: events.log, src.csv, eg.csv, sub.log, pub.log, anchor.log, relay.log (local), the same leg
 #        files in ctl/ for the control leg, qdisc-before.txt and qdisc.txt (the impaired netem's
-#        counters), grade.json in each leg (t84-moq-grade.py); out.ts deleted unless KEEP_TS.
+#        counters), bottleneck.txt (step and shallow: the path's queues as the shape ends), grade.json in each leg (t84-moq-grade.py); out.ts deleted unless KEEP_TS.
 set -uo pipefail
 
 OUT=${1:?usage: t84-moq-cell.sh <out-dir> <shape>}
-SHAPE=${2:?shape: none|outage|loss<P>|reorder<P>}
+SHAPE=${2:?shape: none|outage|loss<P>|reorder<P>|step<Mbit>|shallow<Mbit>}
 UHOME=$(getent passwd "${SUDO_USER:-ubuntu}" | cut -d: -f6)
 RELAY=${RELAY:?set RELAY, node or local}
 VER=${VER:-moq-transport-18}
 LANE=${LANE:?set LANE, demux or passthrough}
 DELAY_MS=${DELAY_MS:?set DELAY_MS, the export delay}
 MOQ=${MOQ:-$UHOME/bin-d66c8928/moq}
+RELAY_BIN=${RELAY_BIN:-$(dirname "$MOQ")/moq-relay}
+read -r -a RARGS <<<"${RELAY_ARGS:-}"
 QLOG_MOQ=${QLOG_MOQ:-}
 CLIP=${CLIP:-$UHOME/fixture-10m.ts}
 SCRIPTS=${SCRIPTS:-$UHOME/t84/scripts}
@@ -43,11 +49,14 @@ OUTAGE=${OUTAGE:-5}
 HELD=${HELD:-40}
 case "$SHAPE" in
 none | outage) WINDOW=${WINDOW:-60} ;;
-loss* | reorder*) WINDOW=${WINDOW:-95} ;;
+loss* | reorder* | step* | shallow*) WINDOW=${WINDOW:-95} ;;
 *) echo "unknown shape $SHAPE" >&2; exit 2 ;;
 esac
 PATH_DELAY_MS=${PATH_DELAY_MS:-50}
 REORDER_DELAY_MS=${REORDER_DELAY_MS:-50}
+RATE_MBIT=${RATE_MBIT:-20}
+TBF_BURST=${TBF_BURST:-3000}
+TBF_LIMIT=${TBF_LIMIT:-15000}
 VPID=111
 TAP_S=$((60 + 2 * DELAY_MS / 1000 + WINDOW))
 
@@ -77,7 +86,7 @@ node)
 	CONN_C=("${CONN_H[@]}")
 	;;
 local)
-	[ -x "$(dirname "$MOQ")/moq-relay" ] || { echo "missing: $(dirname "$MOQ")/moq-relay" >&2; exit 2; }
+	[ -x "$RELAY_BIN" ] || { echo "missing: $RELAY_BIN" >&2; exit 2; }
 	if ss -lnu "sport = :$PORT" | grep -q ":$PORT"; then
 		echo "port $PORT in use" >&2
 		exit 2
@@ -95,7 +104,10 @@ OUT=$(cd "$OUT" && pwd)
 BC="$PREFIX/$(basename "$OUT")-$(date +%s)"
 ev() { echo "$EPOCHREALTIME $*" >>"$OUT/events.log"; }
 netem() { tc qdisc change dev v72i root handle 1: netem "$@" limit 100000; }
-ev "start shape=$SHAPE relay=$RELAY lane=$LANE delay_ms=$DELAY_MS ver=$VER window=$WINDOW settle=$SETTLE path_delay_ms=$PATH_DELAY_MS qlog=${QLOG_MOQ:+1}"
+# A replace keeps a handle's kind: the token bucket takes its own handle, so each swap is a graft.
+bottleneck() { tc qdisc replace dev v72i parent 1:1 "$@"; }
+restore_cake() { bottleneck handle 10: cake bandwidth "${RATE_MBIT}mbit"; }
+ev "start shape=$SHAPE relay=$RELAY lane=$LANE delay_ms=$DELAY_MS ver=$VER window=$WINDOW settle=$SETTLE path_delay_ms=$PATH_DELAY_MS qlog=${QLOG_MOQ:+1} relay_bin=$RELAY_BIN relay_args=$(IFS=,; echo "${RARGS[*]}")"
 
 GROUPS_=()
 RELAY_PID=
@@ -110,6 +122,7 @@ cleanup() {
 	local g
 	stop_legs
 	netem delay "${PATH_DELAY_MS}ms" 2>/dev/null
+	case "$SHAPE" in step* | shallow*) restore_cake 2>/dev/null ;; esac
 	for g in "${GROUPS_[@]:-}"; do [ -n "$g" ] && kill -TERM -- "-$g" 2>/dev/null; done
 	sleep 1
 	for g in "${LEGS[@]:-}" "${GROUPS_[@]:-}"; do [ -n "$g" ] && kill -KILL -- "-$g" 2>/dev/null; done
@@ -128,8 +141,8 @@ udp t72i "$OUT/udp-before.txt"
 udp t72c "$OUT/ctl/udp-before.txt"
 
 if [ "$RELAY" = local ]; then
-	"$(dirname "$MOQ")/moq-relay" --listen "0.0.0.0:$PORT" --listen-tls-generate localhost \
-		--auth-public '**' --quic-gso=false --log-level warn >"$OUT/relay.log" 2>&1 &
+	"$RELAY_BIN" --listen "0.0.0.0:$PORT" --listen-tls-generate localhost \
+		--auth-public '**' --quic-gso=false "${RARGS[@]}" --log-level warn >"$OUT/relay.log" 2>&1 &
 	RELAY_PID=$!
 	for _ in $(seq 50); do ss -lnu "sport = :$PORT" | grep -q ":$PORT" && break; sleep 0.1; done
 	kill -0 "$RELAY_PID" 2>/dev/null || { echo "relay did not start: $(tail -1 "$OUT/relay.log")" >&2; exit 1; }
@@ -200,6 +213,24 @@ reorder*)
 	ev "impair-start reorder=${SHAPE#reorder}"
 	at "$((SETTLE + HELD))"
 	netem delay "${PATH_DELAY_MS}ms"
+	ev "impair-end"
+	;;
+step*)
+	at "$SETTLE"
+	bottleneck handle 10: cake bandwidth "${SHAPE#step}mbit" || exit 1
+	ev "impair-start rate=${SHAPE#step}"
+	at "$((SETTLE + HELD))"
+	tc -s qdisc show dev v72i >"$OUT/bottleneck.txt" 2>&1
+	restore_cake
+	ev "impair-end"
+	;;
+shallow*)
+	at "$SETTLE"
+	bottleneck handle 20: tbf rate "${SHAPE#shallow}mbit" burst "$TBF_BURST" limit "$TBF_LIMIT" || exit 1
+	ev "impair-start shallow=${SHAPE#shallow} burst=$TBF_BURST limit=$TBF_LIMIT"
+	at "$((SETTLE + HELD))"
+	tc -s qdisc show dev v72i >"$OUT/bottleneck.txt" 2>&1
+	restore_cake
 	ev "impair-end"
 	;;
 esac

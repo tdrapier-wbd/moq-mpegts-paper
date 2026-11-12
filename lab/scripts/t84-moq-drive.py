@@ -6,6 +6,7 @@
                    [--env K=V ...]
   t84-moq-drive.py summarize <root>/<arm>
   t84-moq-drive.py compare <root>
+  t84-moq-drive.py compare-arms <root> <base-arm>     (T85: every arm against one, per shape)
 
 As t72-cdn-drive.py: an arm brings T72's two paths up (t72-net.sh), runs its control and then each
 shape's replicates in turn, replicate-major, and takes the paths down. A control whose median
@@ -29,6 +30,7 @@ import csv
 import importlib.util
 import json
 import os
+import re
 import shutil
 import socket
 import statistics
@@ -86,6 +88,23 @@ def run_cell(arm_dir, name, shape, delay_ms, a, extra=None):
 	return g
 
 
+def bottleneck(cell_dir):
+	"""Packets the path's bottleneck sent and dropped from the cell's start to its shape's end (step,
+	shallow). The cake's counters run from the paths' start; a token bucket's from its shape's."""
+	def counts(name):
+		try:
+			text = open(os.path.join(cell_dir, name)).read()
+		except OSError:
+			return {}
+		pat = r"qdisc (\w+ \d+:) parent 1:1 .*\n\s*Sent \d+ bytes (\d+) pkt \(dropped (\d+)"
+		return {q: (int(p), int(d)) for q, p, d in re.findall(pat, text)}
+	before = counts("qdisc-before.txt")
+	for q, (pkt, dropped) in counts("bottleneck.txt").items():
+		b = before.get(q, (0, 0))
+		return dict(qdisc=q, sent_pkt=pkt - b[0], dropped=dropped - b[1])
+	return None
+
+
 def conserve(arm_dir, cells):
 	cdir = os.path.join(arm_dir, "cons")
 	shutil.rmtree(cdir, ignore_errors=True)
@@ -122,7 +141,7 @@ def summarize(arm_dir):
 				sub_warn=g["subscriber"].get("warn"), udp_errors=g.get("udp_errors"),
 				ctl_ok=g["ctl"]["ok"], ctl_holes_s=g["ctl"].get("holes_s"),
 				netem_mean_packet_b=g.get("netem_mean_packet_b"), day=g["day"], window_utc=g["window_utc"],
-				shape_utc=g.get("shape_utc"))
+				shape_utc=g.get("shape_utc"), bottleneck=bottleneck(os.path.join(arm_dir, g["cell"])))
 		rows.append(r)
 		counted = g["cell"] != "control" and not g["cell"].startswith("control-") and not g.get("qlog")
 		if counted and r["ctl_ok"]:
@@ -136,8 +155,44 @@ def summarize(arm_dir):
 				return round(statistics.median(xs), 2) if xs else None
 			m = dict(shape=shape, n=len(rs), median_missing_s=med("missing_s"), median_holes_s=med("holes_s"),
 					median_audio_missing_s=med("audio_missing_s"), missing_s=[x["missing_s"] for x in rs])
+			if any(x["bottleneck"] for x in rs):
+				m["bottleneck_dropped"] = [(x["bottleneck"] or {}).get("dropped") for x in rs]
+				m["bottleneck_sent_pkt"] = [(x["bottleneck"] or {}).get("sent_pkt") for x in rs]
 			f.write(json.dumps(m) + "\n")
 			print(json.dumps(m))
+
+
+def differs(x, y):
+	"""Criterion 5's rule: two medians differ by more than 2 s and by more than a quarter of the larger."""
+	d = abs(x - y)
+	return d > 2 and d > max(abs(x), abs(y)) / 4
+
+
+def medians(root):
+	"""{(arm, shape): the shape's median line} for every arm under root."""
+	med = {}
+	for arm in sorted(os.listdir(root)):
+		path = os.path.join(root, arm, "summary.jsonl")
+		if os.path.exists(path):
+			for line in open(path):
+				r = json.loads(line)
+				if "median_missing_s" in r:
+					med[(arm, r["shape"])] = r
+	return med
+
+
+def compare_arms(root, base):
+	"""T85: each arm's medians beside BASE's, per shape, by criterion 5's rule."""
+	med = medians(root)
+	for (arm, shape), r in sorted(med.items(), key=lambda kv: (kv[0][1], kv[0][0])):
+		b = med.get((base, shape))
+		row = dict(shape=shape, arm=arm, missing_s=r["missing_s"], median_s=r["median_missing_s"])
+		if "bottleneck_dropped" in r:
+			row["dropped"] = r["bottleneck_dropped"]
+		if b and arm != base and None not in (r["median_missing_s"], b["median_missing_s"]):
+			x, y = r["median_missing_s"], b["median_missing_s"]
+			row["vs_" + base] = ("less" if x < y else "more") if differs(x, y) else "as " + base
+		print(json.dumps(row))
 
 
 def compare(root):
@@ -158,8 +213,7 @@ def compare(root):
 		row = dict(lane=lane, arm=part, shape=shape, node=n and n["missing_s"], local=loc and loc["missing_s"])
 		if n and loc and None not in (n["median_missing_s"], loc["median_missing_s"]):
 			x, y = n["median_missing_s"], loc["median_missing_s"]
-			d = abs(x - y)
-			row["verdict"] = "the relay's" if d > 2 and d > max(abs(x), abs(y)) / 4 else "as local"
+			row["verdict"] = "the relay's" if differs(x, y) else "as local"
 		print(json.dumps(row))
 
 
@@ -194,12 +248,18 @@ def main():
 	s.add_argument("arm_dir")
 	c = sp.add_parser("compare")
 	c.add_argument("root")
+	ca = sp.add_parser("compare-arms")
+	ca.add_argument("root")
+	ca.add_argument("base")
 	a = ap.parse_args()
 	if a.cmd == "summarize":
 		summarize(a.arm_dir)
 		return
 	if a.cmd == "compare":
 		compare(a.root)
+		return
+	if a.cmd == "compare-arms":
+		compare_arms(a.root, a.base)
 		return
 	if os.geteuid() != 0:
 		sys.exit("run as root")
