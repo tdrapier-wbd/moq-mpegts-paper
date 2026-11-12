@@ -3,6 +3,8 @@
 
     t52-soak-grade.py <subscriber run dir> <publisher run dir> [lane]
 
+A run still going (no `finished=` in its meta) is graded to its last sample.
+
 Against the soak's criteria: each subscriber's received bytes (its QUIC socket, summed over its
 restarts) against the publisher's input, over the run and per hour; every exit, the publisher's and
 the subscribers', with its cause, and each restarted subscriber's time to resubscribe and to report
@@ -55,10 +57,14 @@ def main():
 
     meta_text = open(s(f"meta-soak-{lane}.txt")).read()
     started = re.search(r"started=(\S+)Z", meta_text).group(1)
-    finished = re.search(r"finished=(\S+)Z", meta_text).group(1)
     build = re.search(r"moq=(.*)", meta_text).group(1)
-    t_start, t_end = epoch(started + ".0"), epoch(finished + ".0")
-    print(f"soak {started}Z to {finished}Z, {(t_end - t_start) / 3600:.2f} h, {build}")
+    t_start = epoch(started + ".0")
+    if m := re.search(r"finished=(\S+)Z", meta_text):
+        t_end = epoch(m.group(1) + ".0")
+        print(f"soak {started}Z to {m.group(1)}Z, {(t_end - t_start) / 3600:.2f} h, {build}")
+    else:
+        t_end = max(float(line.split()[0]) for line in open(s(f"io-{lane}.log")) if line.strip())
+        print(f"soak {started}Z, running: graded to {utc(t_end)}, {(t_end - t_start) / 3600:.2f} h, {build}")
 
     # The publisher's input: rchar per process, summed over its restarts.
     pub, base, last, pid = [], 0, {}, None
@@ -77,7 +83,7 @@ def main():
         return pub[max(bisect.bisect_right(pt, t) - 1, 0)][1]
 
     print(f"publisher: {pub[-1][1] * 8 / (pub[-1][0] - pub[0][0]) / 1e6:.4f} Mb/s over the run")
-    for line in open(os.path.join(pub_dir, f"pub-{lane}.exits")):
+    for line in lines(os.path.join(pub_dir, f"pub-{lane}.exits")):
         t = float(line.split()[0])
         print(f"  publisher exit {utc(t)} {line.split()[2]}")
     for t, level, msg in log_lines(os.path.join(pub_dir, f"pub-{lane}.log")):
@@ -89,7 +95,7 @@ def main():
 
     # Subscriber exits and restarts.
     exits = []
-    for line in open(s(f"exits-{lane}.log")):
+    for line in lines(s(f"exits-{lane}.log")):
         f = line.split(" ", 4)
         exits.append((float(f[0]), int(f[1][2:]), f[2], f[4].split("last=", 1)[-1].strip()))
     starts = collections.defaultdict(lambda: [t_start])
@@ -205,7 +211,7 @@ def main():
         f"  fewer: {len(rest)} spans, by how many subscribers {dict(sorted(sizes.items()))},"
         f" by track {dict(collections.Counter(k[0] for k in rest))}"
     )
-    per_sub = collections.defaultdict(lambda: [0, 0.0])
+    per_sub = {int(path.rsplit(".", 2)[-2]): [0, 0.0] for path in paths}
     per_hour = collections.Counter()
     for (track, _), v in later.items():
         for t, i, span, joining in v:
@@ -224,14 +230,15 @@ def main():
             max(v[1] for v in per_sub.values()),
         )
     )
-    print(
-        "  all spans per hour: median %d, max %d (hour %d)"
-        % (
-            statistics.median(per_hour.get(h, 0) for h in range(int((t_end - t_start) // 3600))),
-            max(per_hour.values()),
-            max(per_hour, key=per_hour.get),
+    if per_hour:
+        print(
+            "  all spans per hour: median %d, max %d (hour %d)"
+            % (
+                statistics.median(per_hour.get(h, 0) for h in range(max(int((t_end - t_start) // 3600), 1))),
+                max(per_hour.values()),
+                max(per_hour, key=per_hour.get),
+            )
         )
-    )
     print(
         f"  evicted groups per subscriber {min(evicts.values())}-{max(evicts.values())};"
         f" dropped frames {min(dropped.values())}-{max(dropped.values())};"
@@ -258,6 +265,15 @@ def main():
     host = [tuple(map(float, line.split()[:3])) for line in open(s(f"host-{lane}.log")) if line.strip()]
     busy = [(b1 - b0) / max((b1 - b0) + (i1 - i0), 1) * 100 for (_, b0, i0), (_, b1, i1) in zip(host, host[1:])]
     print(f"host CPU over 10 s: mean {statistics.mean(busy):.1f} %, max {max(busy):.1f} %")
+
+
+def lines(path):
+    """A log the soak writes only on its first event: absent means none."""
+    try:
+        with open(path) as f:
+            return f.readlines()
+    except FileNotFoundError:
+        return []
 
 
 def log_lines(path):
