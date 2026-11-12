@@ -151,7 +151,7 @@ _The latency column is source-to-groomed-egress over the public internet from a 
 
 ### 4.5 Last-mile egress
 
-**Relay fan-out does not reduce last-mile egress.** Measured, 150 subscribers each receive **9.84 Mb/s, a full copy** ([Evidence](../lab/evidence.md) §3.6). What is nearly free is _state_: 2.62 MB and 1.258 % of a core per subscriber on `moq-relay` 0.15.1, and 1.39 MB and 0.806 % on `moq-relay` 0.14.15. Where receivers cluster, the relay economises upstream backhaul instead, ~$11,500 a year flat against $185,000 for sixteen destinations without a relay on the eight-service model, which is the same topology an HTTP cache exploits (§4.6). **Carriage overhead is not where the money is**: the wire saving, at most the source's stuffing, is real, but supplier choice dwarfs it (§3).
+**Relay fan-out does not reduce last-mile egress.** Measured, each subscriber costs the relay **one full stream copy** ([Evidence](../lab/evidence.md) §3.6). What is nearly free is _state_: 2.62 MB and 1.258 % of a core per subscriber on `moq-relay` 0.15.1, and 1.39 MB and 0.806 % on `moq-relay` 0.14.15. Where receivers cluster, the relay economises upstream backhaul instead, ~$11,500 a year flat against $185,000 for sixteen destinations without a relay on the eight-service model, which is the same topology an HTTP cache exploits (§4.6). **Carriage overhead is not where the money is**: the wire saving, at most the source's stuffing, is real, but supplier choice dwarfs it (§3).
 
 ### 4.6 Market structure
 

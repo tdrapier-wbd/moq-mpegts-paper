@@ -493,7 +493,7 @@ A relay limited to `moq-lite-07-wip` and a client on its defaults (`cd560bde5e`)
 
 ### A late joiner gets no catalog through a draft-18 relay — reported as [#8465](https://github.com/moq-dev/moq/issues/8465)
 
-Since #7729 the catalog carries `MAX_CACHE_DURATION` 0, which draft 18 applies to the newest object too, and the subscriber fetches none: on moqx v0.3.7 every joiner after the first failed, on loopback and both CDN nodes, where `moq-relay` and the parent commit served them ([T52](test-52-cdn-relay-fanout.md)). **Open: [#8474](https://github.com/moq-dev/moq/pull/8474) stops sending the max age.**
+Since #7729 the catalog carries `MAX_CACHE_DURATION` 0, which draft 18 applies to the newest object too, and the subscriber fetches none: on moqx v0.3.7 every joiner after the first failed, on loopback and both CDN nodes, where `moq-relay` and the parent commit served them ([T52](test-52-cdn-relay-fanout.md)). **Merged: [#8474](https://github.com/moq-dev/moq/pull/8474) stops sending the max age; unverified through moqx.**
 
 ### A refused TRACK_STATUS fails the subscription — reported as [#5954](https://github.com/moq-dev/moq/issues/5954)
 
