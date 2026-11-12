@@ -258,7 +258,7 @@ A rule belongs here only if it would change how a future experiment is designed,
 
 **Loopback is not a small network path, and `netem slot` without allowances is a rate cap.** _(T5.)_ A 65,536-byte MTU makes each drop far larger; pin it to 1,500. Bare `slot` releases one packet per slot; set `packets` and `bytes` allowances.
 
-**Cancel a safety watchdog at teardown, or it fires into somebody else's cell.** _(T5.)_ A stray `sleep 1800; tc qdisc del` removed later cells' shapers. Fail a cell that finds no shaper where one was armed.
+**Cancel a safety watchdog at teardown, or it fires into somebody else's cell.** _(T5, T85.)_ A stray `sleep 1800; tc qdisc del` removed later cells' shapers; a `tc qdisc replace` refused a new kind at an existing handle, and its cell ran unshaped with the shape logged. Fail a cell whose shaper command fails, or that finds no shaper where one was armed.
 
 **A workaround flag records the platform it works around and is re-tested when the platform changes.** _(T26.)_ `--quic-gso=false`, for macOS loopback, cost Linux relays 29 % CPU and half the fan-out ceiling.
 
