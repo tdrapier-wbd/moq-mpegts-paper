@@ -1,6 +1,6 @@
 # Test 52 — Fan-out and permanence through a CDN-hosted relay
 
-**State: ramps on moqx v0.3.6 and v0.3.7, the agreed slot and the demultiplexed soak done; the opener's refused join reproduced on loopback, fixed in v0.3.7, and gone from both nodes on it.** On v0.3.6 the demultiplexed lane's knee is the relay's event loop, on the one thread the operator gives it: 32 subscribers of the 25 Mb/s feed at full rate, about 0.82 Gb/s, degraded at 40, where the loop is 99 % busy, with groups skipped in common from 24. There the passthrough lane had none, single sessions falling silent until QUIC's idle timeout at 2, 4 and 24 subscribers and joins failing in clusters. On v0.3.7 no join fails on either node. The passthrough lane degrades on the one-thread node at 24, by groups arriving late. On a second node, on three threads, the passthrough lane delivers 80 in full (2.16 Gb/s) and degrades at 96, its loops 84 % busy, and the demultiplexed lane 64 (1.68 Gb/s), where the subscriber host's CPU ends the ramp. At 16 subscribers the demultiplexed lane held for 72 h by its criteria, its one break the source's, while each subscriber lost video about twice an hour, which the criteria cannot see, and the node's memory grew without bound.
+**State: ramps on moqx v0.3.6 and v0.3.7, the agreed slot and the demultiplexed soak done; the opener's refused join reproduced on loopback, fixed in v0.3.7, and gone from both nodes on it; both lanes' soaks on v0.3.7 running.** On v0.3.6 the demultiplexed lane's knee is the relay's event loop, on the one thread the operator gives it: 32 subscribers of the 25 Mb/s feed at full rate, about 0.82 Gb/s, degraded at 40, where the loop is 99 % busy, with groups skipped in common from 24. There the passthrough lane had none, single sessions falling silent until QUIC's idle timeout at 2, 4 and 24 subscribers and joins failing in clusters. On v0.3.7 no join fails on either node. The passthrough lane degrades on the one-thread node at 24, by groups arriving late. On a second node, on three threads, the passthrough lane delivers 80 in full (2.16 Gb/s) and degrades at 96, its loops 84 % busy, and the demultiplexed lane 64 (1.68 Gb/s), where the subscriber host's CPU ends the ramp. At 16 subscribers the demultiplexed lane held for 72 h by its criteria, its one break the source's, while each subscriber lost video about twice an hour, which the criteria cannot see, and the node's memory grew without bound.
 
 ## Objective
 
@@ -261,6 +261,15 @@ On the same host. A first run ended at 2 subscribers on the source: the feed's t
 The graded subscribers recorded no continuity error and no PCR interval over 40 ms at any step; no session ended, no join failed, the subscriber host dropped nothing and the publisher held 25.00–25.05 Mb/s in every minute. At 72 two video groups were skipped in common, at 65 and 38 subscribers, with the host 76.9 % busy, past the 70 % its knee rule allows, so the ramp ended at the harness's limit and the lane's knee on three threads lies beyond 64. On the way the node's real losses rose from about 100 a second through 56 to 422 at 64, its RTT from 11 to 18 ms and the single skips from 3 to 28, its loops under half busy; at 48 the passthrough lane cost it 12 real losses and 0.1 pacer lags a second, this lane 95 and 6,521.
 
 - **H-knee fails.** The lane passes 48 and 56, where it was to degrade again: its degradation at 48 in the pre-test was the subscriber host's memory (_Corrections_).
+
+### The soaks on v0.3.7 (criteria fixed before the first run)
+
+Both lanes at once, 72 h each, 16 subscribers on a host of their own, the client `d66c892833` at both ends: the demultiplexed lane again on the one-thread node, which now carries [moqx#874](https://github.com/openmoq/moqx/issues/874)'s fix, and the passthrough lane, never soaked, on the three-thread node, opened by an uncounted subscriber ([moqx#795](https://github.com/openmoq/moqx/issues/795)). Each soak probes its own node's last answering hop. One source and one publishing host feed both, so a source break reaches both lanes at once.
+
+The soak criteria above apply to each lane unchanged, with two that the first soak could not grade:
+
+- **H-skip:** outside logged events and each start's first 15 s, no subscriber's export skips video. The count and span per subscriber, and the skips shared by at least half, are reported against the first soak's 116–169 per subscriber.
+- **H-mem:** the one-thread node's used memory (`MemTotal` less `MemAvailable`, its own exporter, per hour) grows under 5.7 MiB an hour over the last 48 h, a tenth of v0.3.6's rate. The three-thread node's memory is reported.
 
 ## Corrections
 
