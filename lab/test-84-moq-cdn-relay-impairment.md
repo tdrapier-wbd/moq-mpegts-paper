@@ -32,7 +32,7 @@ Cells, per relay and lane: **5.91 s**, control and all five shapes; **11.87 s**,
 
 ## Results
 
-The impaired leg's missing video, in seconds: the median of three, the range beside it where the replicates differ by more than 0.1 s. The verdict is criterion 5's, demultiplexed lane first; T28's MoQ row and T72's edge row are at the same column.
+The impaired leg's missing video, in seconds: the median of three, the range beside it where the replicates differ by more than 0.1 s. The verdict is criterion 5's (`t84-moq-drive.py compare`), demultiplexed lane first; T28's MoQ row and T72's edge row are at the same column.
 
 | Column | Shape | Demux, node | Demux, local | Passthrough, node | Passthrough, local | Verdict | T28 MoQ | T72 edge |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |

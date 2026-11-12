@@ -5,20 +5,23 @@
                    --target-ms T [--shapes outage,loss5,...] [--reps 3] [--qlog SHAPE --qlog-moq PATH]
                    [--env K=V ...]
   t84-moq-drive.py summarize <root>/<arm>
+  t84-moq-drive.py compare <root>
 
 As t72-cdn-drive.py: an arm brings T72's two paths up (t72-net.sh), runs its control and then each
 shape's replicates in turn, replicate-major, and takes the paths down. A control whose median
 latency is more than 100 ms from the target is re-run with the export's delay moved by the miss,
-up to five times (criterion 2); an arm still unmatched runs on the last delay, recorded as
+up to five times (criterion 1); an arm still unmatched runs on the last delay, recorded as
 unmatched in column.json. The arm stops before its shapes if its control loses content or ends
-early. A cell whose control leg has a hole or ends early is void (criterion 3) and is run once more. With
+early. A cell whose control leg has a hole or ends early is void (criterion 2) and is run once more. With
 --qlog, one more cell of that shape runs last with the impaired leg on a qlog build; it is graded
 but not counted in the medians. RELAY=node takes URL from the environment, and pins its name in both
 paths to the address it resolves to when the arm starts.
 
 Every cell is conserved against the arm's control at the export's output (t2831-conservation.py,
 each cell's own window). summary.jsonl holds one line per cell, with the control leg's verdict and
-the impaired netem's mean packet (criterion 4), and one per shape: medians over the valid replicates.
+the impaired netem's mean packet (criterion 3), and one per shape: medians over the valid replicates.
+compare prints criterion 5 for a root's arms, named <node|local>-<lane>-<a|b>: per lane, column and
+shape, both relays' replicates and the verdict on their medians.
 """
 
 import argparse
@@ -137,6 +140,29 @@ def summarize(arm_dir):
 			print(json.dumps(m))
 
 
+def compare(root):
+	"""Criterion 5: "the relay's" where the node's and the local relay's medians differ by more
+	than 2 s and by more than a quarter of the larger, "as local" otherwise."""
+	med = {}
+	for arm in sorted(os.listdir(root)):
+		path = os.path.join(root, arm, "summary.jsonl")
+		if not os.path.exists(path):
+			continue
+		relay, lane, part = arm.split("-")
+		for line in open(path):
+			r = json.loads(line)
+			if "median_missing_s" in r:
+				med[(lane, part, r["shape"], relay)] = r
+	for lane, part, shape in sorted({k[:3] for k in med}):
+		n, loc = med.get((lane, part, shape, "node")), med.get((lane, part, shape, "local"))
+		row = dict(lane=lane, arm=part, shape=shape, node=n and n["missing_s"], local=loc and loc["missing_s"])
+		if n and loc and None not in (n["median_missing_s"], loc["median_missing_s"]):
+			x, y = n["median_missing_s"], loc["median_missing_s"]
+			d = abs(x - y)
+			row["verdict"] = "the relay's" if d > 2 and d > max(abs(x), abs(y)) / 4 else "as local"
+		print(json.dumps(row))
+
+
 def next_delay(tried, target):
 	"""The next control's delay: the export runs at its delay plus an offset each session sets at
 	its join, so the delay moves by the whole miss, or along the last two controls' slope where
@@ -166,9 +192,14 @@ def main():
 	r.add_argument("--env", action="append", default=[])
 	s = sp.add_parser("summarize")
 	s.add_argument("arm_dir")
+	c = sp.add_parser("compare")
+	c.add_argument("root")
 	a = ap.parse_args()
 	if a.cmd == "summarize":
 		summarize(a.arm_dir)
+		return
+	if a.cmd == "compare":
+		compare(a.root)
 		return
 	if os.geteuid() != 0:
 		sys.exit("run as root")
@@ -200,10 +231,10 @@ def main():
 		matched = abs((g.get("latency", {}).get("lat_median") or 1e9) - a.target_ms) <= 100
 		json.dump(dict(delay_ms=delay, controls=n, matched=matched), open(os.path.join(arm_dir, "column.json"), "w"))
 		if not (leg_ok(g) and g["ctl"]["ok"]):
-			print(json.dumps(dict(arm=a.arm, stop="control fails criterion 3", delay_ms=delay)), flush=True)
+			print(json.dumps(dict(arm=a.arm, stop="control fails criterion 1", delay_ms=delay)), flush=True)
 			return
 		if not matched:
-			print(json.dumps(dict(arm=a.arm, unmatched="criterion 2", delay_ms=delay)), flush=True)
+			print(json.dumps(dict(arm=a.arm, unmatched="criterion 1", delay_ms=delay)), flush=True)
 		shapes = [x for x in a.shapes.split(",") if x]
 		for rep in range(1, a.reps + 1):
 			for shape in shapes:
