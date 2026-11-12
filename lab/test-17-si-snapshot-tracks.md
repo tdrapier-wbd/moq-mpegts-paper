@@ -147,11 +147,11 @@ Scaled by service count, which is what a multi-programme primary-distribution mu
 | 10 services | 299,120              | 40              |
 | 40 services | 1,196,480 (1.14 MiB) | 160             |
 
-A 40-service MPTS is the relevant shape, and there an exporter resolves 160 tracks and pulls ~1.1 MiB before its first TS packet — on the order of a couple of hundred milliseconds at 50 Mbps. Bounded and acceptable, but bounded by the EPG's size, and nothing in the gate distinguishes an EPG from a table the stream cannot start without.
+A 40-service MPTS is the relevant shape, and there an exporter resolves 160 tracks and pulls ~1.1 MiB, on the order of a couple of hundred milliseconds at 50 Mbps. Under the PR's gate that came before its first TS packet; since the gate's removal (conclusion 4) it no longer holds the media back.
 
 ### 5. The same fidelity question, asked of the segmented lane
 
-The four measurements above are all about a mechanism — snapshot tracks, a cycle-wrap commit rule, an export gate — that exists because the media-aware lane takes the mux apart. The other data plane does not take it apart, so the same pass criteria can be put to it and the answer should be uninteresting. It is worth taking anyway, for two reasons: [`docs/comparison.md`](../docs/comparison.md) has been claiming EIT survives the segmented lane on the strength of _other_ SI surviving it, which is an inference and not a measurement; and the HLS packager is not the pass-through it is easy to assume it is ([T11](test-11-interop.md) — it re-multiplexes, regenerates PSI and chooses segment boundaries by picture type).
+The segmented lane does not take the mux apart, so the same pass criteria are put to it; its HLS packager is still no pass-through ([T11](test-11-interop.md): it re-multiplexes, regenerates PSI and chooses segment boundaries by picture type).
 
 Same fixture, same pass criteria, [T3](test-3-opaque-transparency.md)'s segmented rig unchanged (`tsp -O hls` → HTTP origin → `tsp -I hls --live`, 2 s segments, a 60 s equal-media window against an offset-aligned source cut), graded with [`eit-section-diff.py`](scripts/eit-section-diff.py):
 
@@ -171,7 +171,7 @@ The sets are equal by SHA-256 over the section bytes, not merely equal in count.
 
 ## Observations
 
-**The export gate has no deadline, and an auxiliary table can now hold a programme dark.** Export opens its output when every SI entry either has a snapshot or has reached a terminal state. Terminal failure is handled deliberately and well — a failed or ended track logs and keeps its last snapshot rather than killing the mux. What is not handled is a track that neither succeeds nor fails: one that resolves and never delivers a complete group, or never resolves at all, leaves the gate shut, and the exporter emits **no TS at all — media included — indefinitely**, with nothing logged past the subscribe attempt. The common path is safe, because a snapshot group is finished synchronously and an entry is advertised only after its first cut. The exposure is a stale announce, where the catalog names an SI track that will not resolve. Before this design SI lived in the catalog and could not independently gate media; now it can.
+**On the PR head the export gate had no deadline, so an auxiliary table could hold a programme dark.** Export opened its output once every SI entry had a snapshot or had failed or ended (a failed track kept its last snapshot). A track that neither delivered a complete group nor failed, such as a stale announce naming an SI track that will not resolve, kept the gate shut: **no TS, media included, indefinitely**, with nothing logged past the subscribe attempt. Upstream has since removed the gate (conclusion 4).
 
 **The wrap rule cannot distinguish a skipped section number from a lost one.** In a sparse table both are holes, and `last_section_number` does not betray the difference. A section lost or CRC-failed before the cycle wraps yields a committed generation quietly missing a segment. Nothing in the algorithm can do better — that is what sparseness costs — but it bounds how strong a fidelity guarantee this carriage can claim.
 
