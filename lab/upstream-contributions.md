@@ -489,7 +489,7 @@ With the fix to A, the byte-level result stands on draft 18. **Closed by us** on
 
 ### No common version, no cause logged — reported as [#8451](https://github.com/moq-dev/moq/issues/8451)
 
-A relay limited to `moq-lite-07-wip` and a client on its defaults (`cd560bde5e`): the client retries forever, logging only its backoff, and the relay only `failed to read capsule e=UnexpectedEnd`. It voided T82 Part F's first two cells; the [cross-check](cross-check.md) found it as `moq2ts`'s #45. **Fixed by [#8478](https://github.com/moq-dev/moq/pull/8478), merged**: a first dial fails fast, both sides logging the versions; unverified.
+A relay limited to `moq-lite-07-wip` and a client on its defaults (`cd560bde5e`): the client retries forever, logging only its backoff, and the relay only `failed to read capsule e=UnexpectedEnd`. The [cross-check](cross-check.md) found it as `moq2ts`'s #45. **Fixed by [#8478](https://github.com/moq-dev/moq/pull/8478), merged, and verified at `f190d90b34`**: a first dial fails at once, both sides logging the versions.
 
 ### A late joiner gets no catalog through a draft-18 relay — reported as [#8465](https://github.com/moq-dev/moq/issues/8465)
 
