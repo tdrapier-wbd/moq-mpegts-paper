@@ -29,16 +29,16 @@ drop removes whole PES at known places, for the negative control: every --every-
 and audio PID, and every packet for --blackout seconds each --blackout-every seconds of wall time,
 with the rest of each PES that starts inside it. It cuts units from what it reads as units does, and
 logs "T FATE PID KEY KIND" for each video or audio unit it touched: removed (a PES, or a frame whose
-header it removed), damaged (one that lost other bytes) or swallowed (a frame whose header falls
-inside the bytes a damaged frame before it spans on the cut stream).
+header it removed) or damaged (one that lost other bytes). An audio frame counts only once the next
+one's header follows it, so none runs over the next one's header across a hole.
 
-match runs each leg's command (its stdout units' lines, restarted 2 s after it exits) or reads a
-FIFO (held open for writing too, so a writer's restart is no EOF), and holds each unit --hold s from
-its first sighting on any leg. A video, audio or other unit joins one up to --pts-slack 90 kHz ticks
-from its PTS (from the reference's, once the reference has it). Then, for every leg against the
-reference: matched (same digest), altered (same key, other digest), missing (the reference has it,
-the leg not) or extra (the leg has it, the reference not). Units first seen in the first --warmup s
-or the last --hold s are not graded. TSDuck's
+match runs each leg's command (its stdout units' lines, restarted 2 s after it exits or after
+--stall s with no output) or reads a FIFO (held open for writing too, so a writer's restart is no
+EOF), and holds each unit --hold s from its first sighting on any leg. A video, audio or other unit
+joins one up to --pts-slack 90 kHz ticks from its PTS (from the reference's, once the reference has
+it). Then, for every leg against the reference: matched (same digest), altered (same key, other
+digest), missing (the reference has it, the leg not) or extra (the leg has it, the reference not).
+Units first seen in the first --warmup s or the last --hold s are not graded. TSDuck's
 `-P influx --tr-101-290 --bucket LEG --host-url http://127.0.0.1:PORT` posts reach --influx, and
 the rise of each priority 1 to 3 counter is taken per leg and per hour. Writes DIR/hours.csv (a row per
 leg per hour), DIR/events.jsonl (each run of missing, altered or extra units, every such unit of the
@@ -46,7 +46,7 @@ leg per hour), DIR/events.jsonl (each run of missing, altered or extra units, ev
 the legs are files; nothing restarts, and everything is graded when every leg has ended.
 
 controls grades criterion 9: the copy has no unit unmatched; the cut lacks every unit the dropper
-removed or swallowed inside the graded window and lacks or alters every one it damaged there, and
+removed inside the graded window and lacks or alters every one it damaged there, and
 names no unit the dropper did not touch.
 """
 import argparse
@@ -175,23 +175,22 @@ class Framer:
 		self.codec = None
 		self.prev = None  # (PTS, duration, length) of the last frame
 		self.resync = True
+		self.held = []  # frames after a resync inside a PES: [forward PTS, duration, unit]
 		self.pes = False
-		self.dmg = collections.deque()  # stream ranges with a continuity error
+		self.dmg = collections.deque()  # stream offsets of a continuity error, as empty ranges
 		self.cut = collections.deque()  # stream ranges the dropper removed
-		self.cut_before = 0
-		self.overrun = -1  # cut-stream offset the last damaged frame spans to
 
 	def add(self, es, pts, damaged, cuts=(), fate=None):
 		if self.pes:
 			if pts is None:
 				return []
-			return [(pts, hashlib.blake2b(es, digest_size=8).hexdigest(), len(es), damaged, fate)]
+			return [(pts, hashlib.blake2b(es, digest_size=8).hexdigest(), len(es), bool(damaged), fate)]
 		start = self.base + len(self.buf)
 		if pts is not None:
 			self.marks.append([start, pts, None])
 		self.buf += es
-		if damaged:
-			self.dmg.append((start, start + len(es)))
+		for g in damaged:
+			self.dmg.append((start + g, start + g))
 		for s, e in cuts:
 			s, e = start + s, start + e
 			if self.cut and self.cut[-1][1] == s:
@@ -221,11 +220,15 @@ class Framer:
 			ok = h is not None and h[0] == (self.codec or h[0])
 			if ok and len(b) < i + h[1]:
 				break
-			if ok and (self.resync or self.prev is None or abs(h[1] - self.prev[2]) > 1):
+			# Any frame may run across a hole, which a run of 16 packets hides from the continuity
+			# count: a frame counts only once the next one's header follows it, or a counted hole
+			# starts where it ends.
+			if ok:
 				nxt = frame_head(b, i + h[1])
 				if nxt is False:
 					break
-				ok = nxt is not None and nxt[0] == h[0]
+				end = self.pos + h[1]
+				ok = nxt is not None and nxt[0] == h[0] or any(end <= g < end + 8 for g, _ in self.dmg)
 			if not ok:
 				j = self.sync(b, i + 1)
 				self.pos = self.base + (j if j >= 0 else max(i + 1, len(b) - 1))
@@ -236,16 +239,40 @@ class Framer:
 			codec, n, dur = h
 			self.codec = codec
 			o = self.pos
-			pts = self.stamp(o, n, dur)
-			fate = self.fate(o, n)
-			if pts is not None:
-				out.append((int(round(pts)) % PTS_WRAP, hashlib.blake2b(b[i:i + n], digest_size=8).hexdigest(), n,
-							self.damaged(o, n), fate))
+			resync, pts = self.resync, self.stamp(o, n, dur)
+			unit = (hashlib.blake2b(b[i:i + n], digest_size=8).hexdigest(), n, self.damaged(o, n), self.fate(o, n))
+			out += self.place(o, pts, dur, unit, resync)
 			self.pos = o + n
 		if self.pos > self.base:
 			del b[:self.pos - self.base]
 			self.base = self.pos
 		return out
+
+	def flush(self):
+		"""At the end of the stream, the frames still held, as counted forward."""
+		out, self.held = [(int(round(f)) % PTS_WRAP, *u) for f, _, u in self.held if f is not None], []
+		return out
+
+	def place(self, o, pts, dur, unit, resync):
+		"""The frames to emit. Counting forward from a PES's PTS across a hole inside it names the
+		first frame after the hole by the first frame lost, since the cut stream lacks the removed
+		bytes, even where the hole ends before the PES's first whole frame. So every frame from a
+		resync is held, and keyed back from the next PES's first frame, whose PTS is its own; a
+		second hole first emits the held ones as counted forward."""
+		m = self.marks[0] if self.marks and self.marks[0][0] <= o else None
+		first = m is not None and m[2] == o
+		out = []
+		if self.held and (first or resync):
+			if first and not resync:
+				out = [(pts - j * d, u) for j, (_, d, u) in enumerate(reversed(self.held), 1)][::-1]
+			else:
+				out = [(f, u) for f, _, u in self.held]
+			self.held = []
+		if pts is not None and (resync or (self.held and not first)):
+			self.held.append([pts, dur, unit])
+		elif pts is not None:
+			out.append((pts, unit))
+		return [(int(round(t)) % PTS_WRAP, *u) for t, u in out if t is not None]
 
 	def stamp(self, o, n, dur):
 		marks = self.marks
@@ -274,16 +301,13 @@ class Framer:
 	def fate(self, o, n):
 		cut = self.cut
 		while cut and cut[0][1] <= o:
-			s, e = cut.popleft()
-			self.cut_before += e - s
-		c = o - self.cut_before - sum(min(e, o) - s for s, e in cut if s < o)
+			cut.popleft()
 		hl = 4 if self.codec == "mpa" else 7
 		if any(s < o + hl and e > o for s, e in cut):
 			return "removed"
 		if any(s < o + n and e > o for s, e in cut):
-			self.overrun = c + n
 			return "damaged"
-		return "swallowed" if c < self.overrun else None
+		return None
 
 
 class Demux:
@@ -370,13 +394,16 @@ class Demux:
 		elif isinstance(u[1], bytearray):
 			if u[0] is not None:
 				skip = NAL_SKIP.get(self.stype.get(pid), (False, ()))
-				self.on_unit(pid, u[0], nal_digest(u[1], *skip), u[2], kind, u[3], fate)
+				self.on_unit(pid, u[0], nal_digest(u[1], *skip), u[2], kind, bool(u[3]), fate)
 		elif u[0] is not None:
-			self.on_unit(pid, u[0], u[1].hexdigest(), u[2], kind, u[3], fate)
+			self.on_unit(pid, u[0], u[1].hexdigest(), u[2], kind, bool(u[3]), fate)
 
 	def flush(self):
 		for pid in list(self.cur):
 			self.finish(pid)
+		for pid, fr in self.framers.items():
+			for key, digest, length, damaged, f in fr.flush():
+				self.on_unit(pid, key, digest, length, "audio", damaged, f)
 
 	def packet(self, p, dropped=False):
 		self.packets += 1
@@ -395,7 +422,7 @@ class Demux:
 				self.dups += 1
 				return
 			if cc != (last[0] + 1) & 0x0F and pid in self.cur and not (afc & 2 and p[4] and p[5] & 0x80):
-				self.cur[pid][3] = True
+				self.cur[pid][3].append(self.cur[pid][2])
 		if off >= 188:
 			return
 		if pid == 0:
@@ -429,7 +456,7 @@ class Demux:
 				rem -= len(es)
 			whole = kind == "audio" or (kind == "video" and self.stype.get(pid) in NAL_SKIP)
 			acc = bytearray(es) if whole else hashlib.blake2b(es, digest_size=8)
-			self.cur[pid] = [pts, acc, len(es), False, rem, [(0, len(es))] if dropped else [], 1, int(dropped)]
+			self.cur[pid] = [pts, acc, len(es), [], rem, [(0, len(es))] if dropped else [], 1, int(dropped)]
 			return
 		u = self.cur.get(pid)
 		if u is None:
@@ -582,6 +609,7 @@ class Leg:
 		self.ended = False
 		self.restart_at = 0.0
 		self.starts = 0
+		self.last_data = 0.0
 
 	def open(self):
 		if self.spec.startswith("@"):
@@ -593,6 +621,7 @@ class Leg:
 			os.set_blocking(self.f.fileno(), False)
 		self.sel.register(self.f, selectors.EVENT_READ, self)
 		self.starts += 1
+		self.last_data = time.time()
 
 	def close(self):
 		try:
@@ -816,6 +845,7 @@ class Matcher:
 			else:
 				leg.restart_at = now + 2
 			return
+		leg.last_data = now
 		lines = (leg.buf + chunk).split(b"\n")
 		leg.buf = lines.pop()
 		with self.lock:
@@ -838,6 +868,15 @@ class Matcher:
 				self.read(key.data)
 			now = time.time()
 			for leg in self.legs.values():
+				# A command that hangs without closing its pipe (tsp with an influx plugin, after a
+				# failed SRT connect) is no exit: one silent past --stall is ended and restarted.
+				if self.a.stall and leg.proc and leg.f is not None and now - leg.last_data > self.a.stall:
+					rc = leg.close()
+					self.ev(ev="leg-stalled", leg=leg.name, rc=rc, silent_s=round(now - leg.last_data, 1))
+					if self.a.once:
+						leg.ended = True
+					else:
+						leg.restart_at = now + 2
 				if leg.f is None and not leg.ended and leg.restart_at and now >= leg.restart_at:
 					leg.restart_at = 0
 					leg.open()
@@ -921,6 +960,7 @@ def main():
 	m.add_argument("--pts-slack", type=int, default=2)
 	m.add_argument("--log-units", default="")
 	m.add_argument("--once", action="store_true")
+	m.add_argument("--stall", type=float, default=15, help="restart a command leg silent this long (0: never)")
 	c = sub.add_parser("controls")
 	c.add_argument("dir")
 	c.add_argument("--copy", default="rxcopy")

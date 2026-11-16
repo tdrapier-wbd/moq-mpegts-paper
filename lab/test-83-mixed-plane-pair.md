@@ -1,6 +1,6 @@
 # Test 83: an SRT leg beside a MoQ or segmented-HTTP leg, merged or switched
 
-**State: Parts A and B run on the MoQ and segmented legs; criteria 1, 2, 5, 6 and 8 hold, 4 and 7 are reported, and 3 holds except on TSDuck's segments with their added pair removed, where it fails as predicted.** An SRT leg merges with an opaque leg or the `seg` lane's slices without loss through every fault, inside an ST 2022-7 class only with SRT's latency matched; matched, a switch between SRT and the media-aware leg or the lane's slices costs the background's hole, and unmatched skips toward the leading leg, 2.3–2.5 s against a 1.2 s lag and 5.3–5.7 s against 5.3 s. Over 72 h of the live feed (Part C) the new-plane legs delivered what SRT delivered, unit for unit, outside three events: two hosts' unattended upgrades and the source's clock step, which cost the MoQ legs 6–12 s that SRT passed; the grader's negative control misnames one frame at a few blackouts (criterion 9 fails on the grader). Part D waits on the author's approval, Part E on the IRDs of B-6.
+**State: Parts A and B run on the MoQ and segmented legs; criteria 1, 2, 5, 6 and 8 hold, 4 and 7 are reported, and 3 holds except on TSDuck's segments with their added pair removed, where it fails as predicted.** An SRT leg merges with an opaque leg or the `seg` lane's slices without loss through every fault, inside an ST 2022-7 class only with SRT's latency matched; matched, a switch between SRT and the media-aware leg or the lane's slices costs the background's hole, and unmatched skips toward the leading leg, 2.3–2.5 s against a 1.2 s lag and 5.3–5.7 s against 5.3 s. Over 72 h of the live feed (Part C) the new-plane legs delivered what SRT delivered, unit for unit, outside three events: two hosts' unattended upgrades and the source's clock step, which cost the MoQ legs 6–12 s that SRT passed; the grader's negative control misnames one frame at a few blackouts (criterion 9 fails on the grader). Part D repeats B and C across a path to another region, TSDuck's SRT beside the MoQ legs; Part E waits on the IRDs of B-6.
 
 ## Objective
 
@@ -9,7 +9,7 @@
 - **Part A, merge:** do an SRT leg and an opaque MoQ leg of one source, each through its own stream-clocked groomer, emit the same RTP datagrams, and does an ST 2022-7 receiver merge them hitlessly through each leg's faults? The same for an SRT leg and a segmented leg, as packaged and with the packager's added tables removed.
 - **Part B, switch:** across an SRT leg and a media-aware MoQ leg, and an SRT leg and a segmented leg, what does [T80](test-80-video-aware-receiver-switch.md)'s switch cost at a fault and at a commanded cut, with SRT's latency matched to the other leg's and not, and what changes in the tables at the cut?
 - **Part C, shadow:** over 72 h of the live feed, does each new-plane leg deliver what the SRT leg delivers?
-- **Part D:** Part B's matched cells and 24 h of Part C with a MediaConnect flow as the SRT leg.
+- **Part D, across a path:** Part B's matched cells and 24 h of Part C with every leg crossing a real path to a receiver in another region.
 - **Part E:** an IRD's own input switch between the SRT and a new-plane send of [`srt-send.sh`](scripts/srt-send.sh), and a hardware ST 2022-7 merge of Part A's pair.
 
 ## Predictions, stated before running
@@ -59,7 +59,7 @@ Fixed before the first graded run: the rig is [`t83c-run.sh`](scripts/t83c-run.s
 
 The positive control is `rx` parsed a second time; the negative is `rx` through the grader's dropper, which removes one PES in 997 on each video and audio PID and a 2 s blackout every 30 min, and logs each unit it touches from the bytes it removed: removed, damaged, or swallowed (a frame whose header a damaged frame before it overruns). Criterion 9 holds when the copy matches throughout, and the cut lacks every removed or swallowed unit inside the graded window, lacks or alters every damaged one, and names none the dropper did not touch. In the second pilot, with one PES in 97 and a blackout every 90 s, it held exactly: 1,021 removed or swallowed, 25 damaged. **Predicted:** `pt` and `seg` match `rx` unit for unit, as they did in both pilots; `ma` matches on every unit under these rules; every difference falls in a lane's or the source's interruption.
 
-**Part D.** The source sent once into a MediaConnect flow, whose SRT output replaces leg A; Part B's matched cells, then 24 h of Part C. Its cost is priced and approved before anything is created.
+**Part D.** Parts B and C on one host compared the legs on loopback, where no leg meets loss or delay. Part D moves the receiver to a host in another region: the SRT leg is TSDuck's sender and receiver as in Part C, `tsp -O srt` on the publishing host called by `tsp -I srt` across the path at a latency matched to the MoQ legs, and each MoQ leg subscribes across the same path through its relay. Part B's matched cells, then 24 h of Part C's shadow with the grader on the receiving host. The path's RTT and loss are logged beside it, and the leg lag measured first as in Part B.
 
 **Part E.** The IRD's two inputs on `srt-send.sh`'s `rx` and `ma` lanes: a cut it is commanded to make, and a lane stopped with `srt-send.sh stop ma`. If a hardware ST 2022-7 receiver is available, Part A's opaque pair into it.
 
@@ -75,14 +75,14 @@ The positive control is `rx` parsed a second time; the negative is `rx` through 
 8. **Tables (B).** Every table, version and PID that differs across each cut listed; no SCTE-35 section lost across a cut.
 9. **Valid (C).** The grader names every unit removed from the negative control and none from the positive.
 10. **Shadow (C).** Every content difference between a new-plane leg and `rx` attributed to one leg and a cause; none left unexplained.
-11. **MediaConnect (D).** Criteria 6, 8 and 10 with the flow as the SRT leg.
+11. **Across a path (D).** Criteria 6, 8 and 10 with every leg crossing the path, each difference attributed to a leg, the path or the source.
 12. **Hardware (E).** Reported: the IRD's picture, sound, alarms and re-lock time at each cut, with the analyser's P1/P2 across it; the hardware merge against criterion 3.
 
 ## Limits, fixed in advance
 
 - A software decoder and a reference merge until Part E; whether an IRD rides a cut whose tables change is Part E's alone.
 - One clip, one host first; the cross-host repeat is one path.
-- Until Part D the SRT leg is TSDuck's sender, and MediaConnect's may handle latency and loss differently.
+- The SRT leg is TSDuck's throughout; a managed service's, such as MediaConnect's, may handle latency and loss differently, and is not measured.
 - Within its plane the opaque pair leaves its importer single ([Architecture](../docs/architecture.md) §5.2); here the SRT leg, with its own ingest, covers that importer, so Part A cannot show what the importer's loss costs a same-plane pair.
 
 ## Results
@@ -184,7 +184,7 @@ At 1,000 ms every run's skew lay between 3,770 and 3,778 ms, and 2,559–2,564 m
 
 _Measured, 72 h of the live feed, `ma` and `pt` graded throughout and `seg` for its first 31.7 h._
 
-- **Criterion 9 fails, on the grader.** The positive control matched throughout. On the negative, of 57,858 units removed, 1,237 swallowed and 2,139 damaged in the graded window, the grader named all but seven: at six of the 144 blackouts an AC-3 frame removed was named altered and the untouched frame after the run missing, and one damaged video PES at a blackout's start was not named. The audio pairs are the grader's: a resync inside a PES keys a frame from the bytes left, which lack the removed ones, so the first frame after a hole takes the key of the first one lost; a 5 ms blackout every 50 ms on a capture reproduces it in ten passes of ten. A real leg's loss carries the same error, at most one frame per burst, so it moves no attribution below.
+- **Criterion 9 fails, on the grader.** The positive control matched throughout. On the negative, of 57,858 units removed, 1,237 swallowed and 2,139 damaged in the graded window, the grader named all but seven: at six of the 144 blackouts an AC-3 frame removed was named altered and the untouched frame after the run missing, and one damaged video PES at a blackout's start was not named. The audio pairs are the grader's: a resync inside a PES keys a frame from the bytes left, which lack the removed ones, so the first frame after a hole takes the key of the first one lost; a 5 ms blackout every 50 ms on a capture reproduces it in ten passes of ten. A real leg's loss carries the same error, at most one frame per burst, so it moves no attribution below. For Part D the grader keys every frame after a hole back from the next PES, and counts a frame only once the next one's header follows it, since a hole of 16 packets breaks no continuity count. On the capture the offline control then holds in ten passes of ten with a 5 ms blackout every 0.5 s, and in six of ten every 50 ms, where two holes inside one 0.3 s PES leave 1–5 of about 5,300 touched units misnamed.
 - **Criterion 10 holds on the graded span.** In 70 of the 72 hours no leg lacked, altered or added a unit against `rx`. Every difference falls in one of three events:
 
 | Event | `ma` | `pt` | `seg` | Cause |
@@ -193,7 +193,7 @@ _Measured, 72 h of the live feed, `ma` and `pt` graded throughout and `seg` for 
 | Day 2, the receiving host's unattended upgrade, 7 min later | 574, 4.8 s | 243, 2.0 s | 1,486, 11.8 s | the same upgrade restarted every lane and the grader's legs, `rx` with them; the 179 and 239 units added are `rx`'s own gap |
 | Day 3, the source's clock stepped back 16,845 s without a discontinuity indicator | 1,382, 12.3 s | 595, 5.6 s | not graded | both imports republish on the step ([T52](test-52-cdn-relay-fanout.md) saw it at the same second); SRT carries the bytes verbatim |
 
-- **`seg` was not graded after the second event.** The grader's SRT caller reconnected while the lane's listener was restarting, logged a connect timeout and hung without exiting, so the grader never restarted it; the lane itself ran on. A leg that delivers nothing is not yet restarted.
+- **`seg` was not graded after the second event.** The grader's SRT caller reconnected while the lane's listener was restarting, logged a connect timeout and hung without exiting, so the grader never restarted it; the lane itself ran on. TSDuck's `tsp` with its `influx` plugin does not exit after a failed SRT connect. The grader now restarts a leg silent for 15 s.
 - **The prediction holds outside the events**: `pt` and `seg` matched `rx` unit for unit, and `ma` on every unit under the three rules. The TR 101 290 counts are as the pilots reported: `ma`'s PAT, PMT, SDT and NIT intervals are the export's.
 - **The one difference that is the new plane's own** is the clock step: the source's break, which an SRT leg forwards to the decoder and a MoQ import ends and restarts at, costs the MoQ legs 6–12 s of content.
 
