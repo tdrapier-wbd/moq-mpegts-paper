@@ -520,6 +520,10 @@ Building [T20](test-20-segmented-http3.md)'s HTTP/3 path surfaced a defect that 
 
 **The report** ([tsduck/tsduck#1752](https://github.com/tsduck/tsduck/issues/1752)), from [T65](test-65-ird-hls-profile.md): with `--intra-close`, `--max-extra-duration` never forces a close, so a stream on which no I-frame is found becomes one segment; `EXTINF` exceeds `TARGETDURATION`, an RFC 8216 MUST; and `EXT-X-INDEPENDENT-SEGMENTS` is written whether or not segments are independent. **Verification:** on 3.45-4798, a public FFmpeg reproducer gives one 29.64 s segment, segments of 2.56–2.63 s under a target of 2, and validator errors -50061 and 535038; `master` has each defect, by reading. **State:** open.
 
+## 6d. TSDuck: `tsp` that never exits when its input fails with `-P influx`
+
+**The report** ([tsduck/tsduck#1772](https://github.com/tsduck/tsduck/issues/1772)), from [T83](test-83-mixed-plane-pair.md) Part C, where a supervised `tsp -I srt --caller … -P influx` never restarted after a failed connect and one leg went ungraded: with the `influx` plugin in the chain, an input that fails at start leaves `tsp` running instead of exiting. **Verification:** `tsp -I file /nonexistent.ts -P influx … -O drop` hangs on 3.44-4676 and 3.45-4798, the InfluxDB endpoint listening or not; without the plugin, or with `-P count`, it exits 1. Our grader restarts a leg silent 15 s. **State:** open.
+
 ---
 
 ## 7. The carriage specification: MSFTS
