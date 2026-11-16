@@ -1,6 +1,6 @@
 # Test 83: an SRT leg beside a MoQ or segmented-HTTP leg, merged or switched
 
-**State: Parts A and B run on the MoQ and segmented legs; criteria 1, 2, 5, 6 and 8 hold, 4 and 7 are reported, and 3 holds except on TSDuck's segments with their added pair removed, where it fails as predicted.** An SRT leg merges with an opaque leg or the `seg` lane's slices without loss through every fault, inside an ST 2022-7 class only with SRT's latency matched; matched, a switch between SRT and the media-aware leg or the lane's slices costs the background's hole, and unmatched skips toward the leading leg, 2.3–2.5 s against a 1.2 s lag and 5.3–5.7 s against 5.3 s. Part C is running, 72 h on the live feed; Part D waits on the author's approval, Part E on the IRDs of B-6.
+**State: Parts A and B run on the MoQ and segmented legs; criteria 1, 2, 5, 6 and 8 hold, 4 and 7 are reported, and 3 holds except on TSDuck's segments with their added pair removed, where it fails as predicted.** An SRT leg merges with an opaque leg or the `seg` lane's slices without loss through every fault, inside an ST 2022-7 class only with SRT's latency matched; matched, a switch between SRT and the media-aware leg or the lane's slices costs the background's hole, and unmatched skips toward the leading leg, 2.3–2.5 s against a 1.2 s lag and 5.3–5.7 s against 5.3 s. Over 72 h of the live feed (Part C) the new-plane legs delivered what SRT delivered, unit for unit, outside three events: two hosts' unattended upgrades and the source's clock step, which cost the MoQ legs 6–12 s that SRT passed; the grader's negative control misnames one frame at a few blackouts (criterion 9 fails on the grader). Part D waits on the author's approval, Part E on the IRDs of B-6.
 
 ## Objective
 
@@ -179,6 +179,23 @@ At 1,000 ms every run's skew lay between 3,770 and 3,778 ms, and 2,559–2,564 m
 - **Criterion 8 holds.** No table, version or PID differs across any cut, both ways and at both latencies, and no SCTE-35 section was lost.
 - **Detection follows the faulted leg's buffer**: 1.21 s on SRT at 1,000 ms, and 5.31–5.36 s on either leg when it holds 6.3 s, the SRT receiver's latency or the lane's held slices and cushion.
 - **The segmented prediction holds.** Matched, the switch costs T80's result on this leg too, with nothing repeated and no table change, since the lane carries the source's tables. Unmatched, it is the lag as predicted, repeated one way and skipped the other, where on the media-aware leg the hold absorbed it one way and doubled it the other.
+
+### Part C: outside three events every new-plane leg delivered what SRT delivered, unit for unit; at the source's clock step the MoQ legs lost 6–12 s that SRT passed
+
+_Measured, 72 h of the live feed, `ma` and `pt` graded throughout and `seg` for its first 31.7 h._
+
+- **Criterion 9 fails, on the grader.** The positive control matched throughout. On the negative, of 57,858 units removed, 1,237 swallowed and 2,139 damaged in the graded window, the grader named all but seven: at six of the 144 blackouts an AC-3 frame removed was named altered and the untouched frame after the run missing, and one damaged video PES at a blackout's start was not named. The audio pairs are the grader's: a resync inside a PES keys a frame from the bytes left, which lack the removed ones, so the first frame after a hole takes the key of the first one lost; a 5 ms blackout every 50 ms on a capture reproduces it in ten passes of ten. A real leg's loss carries the same error, at most one frame per burst, so it moves no attribution below.
+- **Criterion 10 holds on the graded span.** In 70 of the 72 hours no leg lacked, altered or added a unit against `rx`. Every difference falls in one of three events:
+
+| Event | `ma` | `pt` | `seg` | Cause |
+| --- | --- | --- | --- | --- |
+| Day 2, the publishing host's unattended upgrade | none | 479 units, 3.9 s | 1,205 units, 9.4 s | a `libc` upgrade restarted the host's services, the relay `pt` publishes to among them; `pt`'s lane exited on its GOAWAY and restarted in 2 s, and `seg`'s receiver stalled 10.6 s |
+| Day 2, the receiving host's unattended upgrade, 7 min later | 574, 4.8 s | 243, 2.0 s | 1,486, 11.8 s | the same upgrade restarted every lane and the grader's legs, `rx` with them; the 179 and 239 units added are `rx`'s own gap |
+| Day 3, the source's clock stepped back 16,845 s without a discontinuity indicator | 1,382, 12.3 s | 595, 5.6 s | not graded | both imports republish on the step ([T52](test-52-cdn-relay-fanout.md) saw it at the same second); SRT carries the bytes verbatim |
+
+- **`seg` was not graded after the second event.** The grader's SRT caller reconnected while the lane's listener was restarting, logged a connect timeout and hung without exiting, so the grader never restarted it; the lane itself ran on. A leg that delivers nothing is not yet restarted.
+- **The prediction holds outside the events**: `pt` and `seg` matched `rx` unit for unit, and `ma` on every unit under the three rules. The TR 101 290 counts are as the pilots reported: `ma`'s PAT, PMT, SDT and NIT intervals are the export's.
+- **The one difference that is the new plane's own** is the clock step: the source's break, which an SRT leg forwards to the decoder and a MoQ import ends and restarts at, costs the MoQ legs 6–12 s of content.
 
 ## Corrections
 
