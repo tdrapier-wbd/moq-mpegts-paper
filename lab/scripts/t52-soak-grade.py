@@ -33,7 +33,7 @@ SKIP = re.compile(r'media skipped upstream; resuming at the next group track="([
 EVICT = re.compile(r"current group evicted")
 DEADLINE = re.compile(r"missed a decode deadline")
 LATE = re.compile(r"frame missed its deadline; dropped")
-RELEASE = re.compile(r"TS export release clock dropped=(\d+)")
+RELEASE = re.compile(r"TS (?:export|passthrough) release clock dropped=(\d+)")
 MON = re.compile(r"t=(\d+) .*?gt40=(\d+) .*?cc=(\d+) .*?gap_ms=(\d+)")
 PING = re.compile(r"^\[([0-9.]+)\] .* icmp_seq=(\d+) .* time=([0-9.]+) ms")
 
@@ -123,11 +123,14 @@ def main():
         mine = sorted(t for t, j, _, _ in exits if j == i)
         evicts[i] = deadlines[i] = 0
         drop_total, drop_last = 0, None
-        pending = list(mine)
+        # An exit while the node is still unreachable continues the outage that the first began.
+        pending = [t for k, t in enumerate(mine) if k == 0 or t - mine[k - 1] > 60]
         resub = None
         for t, level, msg in log_lines(path):
             if pending and t > pending[0] + 0.5:
-                if resub is None and "subscribe started" in msg and "catalog" in msg:
+                if resub is None and (
+                    ("subscribe started" in msg and "catalog" in msg) or msg.startswith("moq_tokio::client: connected")
+                ):
                     resub = t
                 elif resub is not None and RELEASE.search(msg):
                     back.append((i, pending[0], resub - pending[0], t - pending[0]))
@@ -148,10 +151,20 @@ def main():
                     drop_total += drop_last
                 drop_last = d
         dropped[i] = drop_total + (drop_last or 0)
-    if back:
+    by_event = collections.defaultdict(list)
+    for b in back:
+        by_event[int(b[1] // 60)].append(b)
+    for minute, bs in sorted(by_event.items()):
         print(
-            "  restarted subscribers: resubscribed after %.2f-%.2f s, output reported by %.2f-%.2f s"
-            % (min(b[2] for b in back), max(b[2] for b in back), min(b[3] for b in back), max(b[3] for b in back))
+            "  restarted at %s: %d resubscribed after %.2f-%.2f s, output reported by %.2f-%.2f s"
+            % (
+                utc(minute * 60)[:-7],
+                len(bs),
+                min(b[2] for b in bs),
+                max(b[2] for b in bs),
+                min(b[3] for b in bs),
+                max(b[3] for b in bs),
+            )
         )
 
     # Received bytes against the publisher's input.

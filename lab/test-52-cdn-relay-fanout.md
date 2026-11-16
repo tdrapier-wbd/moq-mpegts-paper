@@ -271,6 +271,24 @@ The soak criteria above apply to each lane unchanged, with two that the first so
 - **H-skip:** outside logged events and each start's first 15 s, no subscriber's export skips video. The count and span per subscriber, and the skips shared by at least half, are reported against the first soak's 116–169 per subscriber.
 - **H-mem:** the one-thread node's used memory (`MemTotal` less `MemAvailable`, its own exporter, per hour) grows under 5.7 MiB an hour over the last 48 h, a tenth of v0.3.6's rate. The three-thread node's memory is reported.
 
+### The soaks on v0.3.7: the passthrough lane holds on every criterion; the demultiplexed lane still skips and its node still leaks
+
+_Measured, 72.0 h each, both nodes on v0.3.7._
+
+| Criterion | Demultiplexed, one thread | Passthrough, three threads |
+| --- | --- | --- |
+| No continuity error or PCR interval over 40 ms outside logged events | none in 4,322 windows on each graded subscriber | none in 4,321 |
+| Delivered bytes at least 99.9 % of the publisher's | 101.90–102.23 % over the run, at least 101.32 % in any subscriber-hour | 103.64–103.71 %, at least 103.50 % |
+| Every reconnect counted, with its gap and cause | three breaks, all 16 sessions each (below) | one break, the source's: output again in 6.7–6.8 s |
+| H-skip | **fails**: 39–131 video skips a subscriber, 18.3–71.6 s in all | **passes**: none |
+| H-mem | **fails**: +78, +97 and +91 MiB an hour (below) | +4.0 MiB an hour, 1.0 of 7.8 GiB at the end |
+
+The demultiplexed lane's breaks were the operator's two restarts of the node before it ran out of memory (output again in 15.5–15.7 s and in 5.3–5.4 s) and the source's backward step, 16,845 s, as in the first soak; there the publisher republished in place and each subscriber, refusing the new instance without stitching, restarted and reported output in 2.1–3.7 s. The passthrough publisher exited on the same step, as the import refuses a PCR going back without a discontinuity indicator.
+
+**The skips.** Of the distinct spans, 12 reached at least half the subscribers, all video, and 973 fewer, 905 of those one subscriber alone; 22–92 groups evicted and 655–5,770 frames dropped late a subscriber, in 587 minutes, 27 of them at half the subscribers; no deadline exit. The first soak's subscribers had 116–169 skips but 30.6–44.0 s, and late frames in 141 minutes. The probes lost nothing (RTT median 10.3 ms on lon-1, 10.5 ms on lon-2), and the subscriber hosts' CPU peaked at 38 % and 26 %. The node and the lane are confounded: the one-thread node declared about 300 losses a second, its pacer timer lagging about 1,600 times a second at 37 % loop busy, against 0.1 and none at 16 % on lon-2, while sending 43 times the streams.
+
+**The memory.** Measured from 2 h after each start, lon-1's used memory grew by 78, 97 and 91 MiB an hour in its three segments, its anonymous pages by 75, 95 and 85, with slab and shared memory flat: above v0.3.6's 57 at the same 74 groups a second, so [moqx#874](https://github.com/openmoq/moqx/issues/874)'s fix does not bound this growth. The operator restarted the node at 3.49 and 3.34 GiB of its 3.82. Near the top the growth bent, as the operator also reports: the first segment held 3.38–3.43 GiB for its last five hours while the page cache was reclaimed from 2.3 GiB to 0.25 GiB, and the second slowed from about 105 to 42 MiB an hour over its last six.
+
 ## Corrections
 
 - **The ramp's in-flight delivery rule read output bytes.** We counted each subscriber's `wchar`, as F5 did. On the demultiplexed lane the export writes its constant rate in stuffing whatever arrives, so output held 100 % at 40 subscribers while the host received 83 % per subscriber; the demultiplexed ramp is graded from the host's received rate. `rchar`, tried next, reads zero, since a QUIC subscriber receives by `recvmsg`; the rig now counts each subscriber's socket in the firewall. Rule: a receiver that restores a constant rate cannot report delivery by what it writes ([method notes](method-notes.md) §2).
