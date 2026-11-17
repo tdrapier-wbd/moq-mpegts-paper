@@ -1,6 +1,6 @@
 # Test 83: an SRT leg beside a MoQ or segmented-HTTP leg, merged or switched
 
-**State: Parts A and B run on the MoQ and segmented legs; criteria 1, 2, 5, 6 and 8 hold, 4 and 7 are reported, and 3 holds except on TSDuck's segments with their added pair removed, where it fails as predicted.** An SRT leg merges with an opaque leg or the `seg` lane's slices without loss through every fault, inside an ST 2022-7 class only with SRT's latency matched; matched, a switch between SRT and the media-aware leg or the lane's slices costs the background's hole, and unmatched skips toward the leading leg, 2.3–2.5 s against a 1.2 s lag and 5.3–5.7 s against 5.3 s. Over 72 h of the live feed (Part C) the new-plane legs delivered what SRT delivered, unit for unit, outside three events: two hosts' unattended upgrades and the source's clock step, which cost the MoQ legs 6–12 s that SRT passed; the grader's negative control misnames one frame at a few blackouts (criterion 9 fails on the grader). Part D repeats B and C across a path to another region, TSDuck's SRT beside the MoQ legs; Part E waits on the IRDs of B-6.
+**State: Parts A and B run on the MoQ and segmented legs; criteria 1, 2, 5, 6 and 8 hold, 4 and 7 are reported, and 3 holds except on TSDuck's segments with their added pair removed, where it fails as predicted.** An SRT leg merges with an opaque leg or the `seg` lane's slices without loss through every fault, inside an ST 2022-7 class only with SRT's latency matched; matched, a switch between SRT and the media-aware leg or the lane's slices costs the background's hole, and unmatched skips toward the leading leg, 2.3–2.5 s against a 1.2 s lag and 5.3–5.7 s against 5.3 s. Over 72 h of the live feed (Part C) the new-plane legs delivered what SRT delivered, unit for unit, outside three events: two hosts' unattended upgrades and the source's clock step, which cost the MoQ legs 6–12 s that SRT passed; the grader's negative control misnames one frame at a few blackouts (criterion 9 fails on the grader). Across a 117 ms path to another region (Part D, 24 h, the grader fixed) the shadow held the same outside the receiving host's upgrade, but for one video group the media-aware leg skipped; Part B's cells across the path are still to run, and Part E waits on the IRDs of B-6.
 
 ## Objective
 
@@ -198,6 +198,23 @@ _Measured, 72 h of the live feed, `ma` and `pt` graded throughout and `seg` for 
 - **`seg` was not graded after the second event.** The grader's SRT caller reconnected while the lane's listener was restarting, logged a connect timeout and hung without exiting, so the grader never restarted it; the lane itself ran on. TSDuck's `tsp` with its `influx` plugin does not exit after a failed SRT connect. The grader now restarts a leg silent for 15 s.
 - **The prediction holds outside the events**: `pt` and `seg` matched `rx` unit for unit, and `ma` on every unit under the three rules. The TR 101 290 counts are as the pilots reported: `ma`'s PAT, PMT, SDT and NIT intervals are the export's.
 - **The one difference that is the new plane's own** is the clock step: the source's break, which an SRT leg forwards to the decoder and a MoQ import ends and restarts at, costs the MoQ legs 6–12 s of content.
+
+### Part D, the shadow across a path: outside the receiving host's upgrade every leg delivered what SRT delivered, but for one group the media-aware leg skipped
+
+_Measured, 24 h of the live feed from the primary in eu-west-1 to a receiving host in us-west-2; Part B's cells across the path not yet run._
+
+- **The path** (SRT's statistics on `rx`, every 10 s): RTT 116.7 ms at the median and 118.1 ms at most; 64 packets lost in 37 of 8,640 intervals, every one retransmitted in time, none dropped. Against `rx`, at the median of the hourly medians, `ma` trails by 0.02 s (matched by design), `pt` leads by 2.83 s and `seg` trails by 6.90 s.
+- **Criterion 9 holds.** The positive control matched all 11,322,096 units. In the graded window the dropper removed 19,011 units and damaged 717, and the grader named every one (19,681 missing, 47 altered) and none it had not touched.
+- **Criterion 10 holds across the path.** In 22 of the 24 hours no leg lacked, altered or added a unit against `rx`. Every difference falls in one of two events:
+
+| Event | `ma` | `pt` | `seg` | Cause |
+| --- | --- | --- | --- | --- |
+| Hour 4 | 29 video units, under 1 s | none | none | the media-aware export skipped a video group its subscriber had evicted (`current group evicted; skipping to next buffered group`); SRT lost and recovered one packet in the same 10 s, and the primary logged nothing |
+| Hour 17, the receiving host's unattended upgrade | 2,694 units, 21.1 s | 581, 4.6 s | 2,813, 21.6 s | a `libc` upgrade's service restarts stopped every lane; the grader, run outside systemd, ran on, `rx` with it, and its `ma` and `seg` callers, connecting while those lanes' listeners restarted, hung as in Part C until the 15 s watchdog restarted them, so up to 15 s of each is the grader's |
+
+- **Hour 4 is the one difference outside a host's event**: the media-aware leg alone, on the same path as `pt` and `seg`, lost a group, once in 24 h. Why the subscriber evicted a group within the export's 2 s delay, and whether the path's lost packet caused it, is not established.
+- **Criterion 11 is graded on its shadow half.** Criterion 10 holds across the path; criteria 6 and 8 wait on Part B's cells, whose rig is one host's and is split across two hosts before they run.
+- The upgrade timers were held on the publishing host but not on the receiving one, an on-demand host started for the run; `t83c-run.sh` refuses to start on a host whose upgrade timer is enabled.
 
 ## Corrections
 

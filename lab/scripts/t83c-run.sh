@@ -10,7 +10,7 @@
 # Env: INFLUX (18390), LAT_MS (1000, each caller's SRT latency), RX_ADDR (127.0.0.1:9190, rx's listener;
 #   across a path, the source host's), RX_LAT_MS (LAT_MS), RX_OPTS (more tsp -I srt options for rx, such
 #   as --rcvbuf and --ffs for a latency whose bytes exceed SRT's default buffer), EVERY (997), BLACKOUT_EVERY (1800),
-#   BLACKOUT (2), HOLD (60).
+#   BLACKOUT (2), HOLD (60), ALLOW_APT (0; 1 starts with the host's upgrade timer enabled).
 set -euo pipefail
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 OUT=${1:?OUT}
@@ -25,6 +25,11 @@ EVERY=${EVERY:-997}
 BLACKOUT_EVERY=${BLACKOUT_EVERY:-1800}
 BLACKOUT=${BLACKOUT:-2}
 HOLD=${HOLD:-60}
+if [ "${ALLOW_APT:-0}" != 1 ] && systemctl is-enabled --quiet apt-daily-upgrade.timer 2>/dev/null; then
+	echo "t83c-run: apt-daily-upgrade.timer is enabled; its upgrades restart the lanes mid-run." >&2
+	echo "  sudo systemctl disable --now apt-daily.timer apt-daily-upgrade.timer, or ALLOW_APT=1" >&2
+	exit 1
+fi
 S="python3 $HERE/t83c-shadow.py"
 mkdir -p "$OUT"
 for f in rxcopy rxcut; do
