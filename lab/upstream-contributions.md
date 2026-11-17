@@ -522,7 +522,7 @@ Building [T20](test-20-segmented-http3.md)'s HTTP/3 path surfaced a defect that 
 
 ## 6d. TSDuck: `tsp` that never exits when its input fails with `-P influx`
 
-**The report** ([tsduck/tsduck#1772](https://github.com/tsduck/tsduck/issues/1772)), from [T83](test-83-mixed-plane-pair.md) Part C, where a supervised `tsp -I srt --caller … -P influx` never restarted after a failed connect and one leg went ungraded: with the `influx` plugin in the chain, an input that fails at start leaves `tsp` running instead of exiting. **Verification:** `tsp -I file /nonexistent.ts -P influx … -O drop` hangs on 3.44-4676 and 3.45-4798, the InfluxDB endpoint listening or not; without the plugin, or with `-P count`, it exits 1. Our grader restarts a leg silent 15 s. **State:** open.
+**The report** ([tsduck/tsduck#1772](https://github.com/tsduck/tsduck/issues/1772)), from [T83](test-83-mixed-plane-pair.md) Part C, where a supervised SRT leg never restarted after a failed connect: with `influx` in the chain, an input that fails at start leaves `tsp` running. **Verification:** `tsp -I file /nonexistent.ts -P influx … -O drop` hangs on 3.44-4676 and 3.45-4798; without the plugin it exits 1. The fix (`9e85bef2b`, the plugin's thread stopped on destruction) exits 1 at once on nightly 3.46-4955, which we ran; a normal run with `-P influx` ends 0. **State:** fixed on `master`, not yet in a tagged release; the issue is open until it is. Our grader's 15 s restart stays as a fallback.
 
 ---
 
