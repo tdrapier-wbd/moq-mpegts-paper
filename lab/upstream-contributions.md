@@ -262,7 +262,7 @@ Under inbound blackouts across a 117 ms path, `moq-relay` resets a subscriber's 
 
 ## 5. Relay memory
 
-The relay retained memory in proportion to content carried — ~27–31 MB/hour on a 9.3 Mbps channel — bounded by neither documented cache control. Reported as [#2745](https://github.com/moq-dev/moq/issues/2745) with a controlled GOP pair confirming causation (at identical bitrate and content, doubling the group rate doubled the slope: +31.22 → +62.30 MB/h, ratio 1.995 against 2.000).
+The relay retained memory in proportion to content carried — ~27–31 MB/hour on a 9.3 Mbps channel — bounded by neither documented cache control. Reported as [#2745](https://github.com/moq-dev/moq/issues/2745) with a controlled GOP pair confirming causation: doubling the group rate doubled the slope.
 
 **Root-caused upstream**: it is `quinn-proto` recycling one receive-stream state, with its assembler chunk heap, per stream the connection has ever accepted — **not moq state at all**. And it **plateaus** once every slot is filled, at ~100 MB above baseline per publisher connection, reached after ~10,000 ingested groups. Confirmed: baseline +108 MB against +97 MB predicted, and capping streams cuts the ceiling only 3.3× for a 9.8× slot reduction (20–30 MB is slot-independent). **No released version of the QUIC library removes it**, so plan for the overhead.
 
@@ -270,7 +270,7 @@ The relay retained memory in proportion to content carried — ~27–31 MB/hour 
 
 ### The relay's plateau is confirmed at 24 h — and the publisher is the role that actually leaks
 
-[T21](test-21-permanence-soak.md)'s 24 h soak shows C6's soft second term converging: relay growth past warm-up follows a **logarithm**, its quarterly slopes halving. The run reaches baseline +242.6 MB at 24 h, past C6's +200.5 MB asymptote; log extrapolation ~519 MB at a year. Posted on #2745 as a data point: the asymptote is extrapolated, not observed, and both legs are single runs on one topology.
+[T21](test-21-permanence-soak.md)'s 24 h soak shows C6's soft second term converging: relay growth past warm-up follows a **logarithm**, its quarterly slopes halving. The run reaches baseline +242.6 MB at 24 h, past C6's +200.5 MB asymptote; log extrapolation ~519 MB at a year. Posted on #2745 as a data point; the asymptote is extrapolated, from single runs on one topology.
 
 **The same run found growth that is not the relay's:** over 24 h the relay grew 243 MB and **`moq import ts` grew 137 MB**, so end-point totals make the relay look worse when it is the better process. The publisher fits a **line** at +2.83 MB/h (~24 GB/year) — it ratchets rather than caching. For permanent primary distribution the publisher is the process never meant to restart. **No upstream issue describes publisher RSS over long runs** (#2745 and #3128 are relay-side).
 
@@ -482,7 +482,11 @@ With the fix to A, the byte-level result stands on draft 18. **Closed by us** on
 
 ### `moq2ts`'s paced publisher and its final group — reported as [openmoq/moq2ts#8](https://github.com/openmoq/moq2ts/issues/8)
 
-[T11d](test-11-interop.md#t11d--moq2ts-headless-publisher-and-receiver-criteria-fixed-before-the-first-run): `moq2ts-cli --paced` sends a segment's bytes per fragment duration rather than at the source's rate, and its receiver gets the final group twice; otherwise the loop is byte-exact. Draft-22 interop with `moq-dev` waits on both adopting the framing moq-wg/moq-transport#2015 merged. Verified on `4717ce3`: pacing follows the PCR, closing `--paced`. Verified on `a734a91` with moqxr v0.4.8: interrupts exit cleanly, and the final group repeats with the receiver on moq5 `main` but not with [openmoq/moq5#54](https://github.com/openmoq/moq5/pull/54). **Closed fixed: #54 merged.**
+[T11d](test-11-interop.md#t11d--moq2ts-headless-publisher-and-receiver-criteria-fixed-before-the-first-run): `moq2ts-cli --paced` sends a segment's bytes per fragment duration rather than at the source's rate, and its receiver gets the final group twice; otherwise the loop is byte-exact. Verified: pacing follows the PCR (`4717ce3`), and the final group no longer repeats with [openmoq/moq5#54](https://github.com/openmoq/moq5/pull/54) (`a734a91`). **Closed fixed: #54 merged.**
+
+### A multiplex program that fails to open stops every program — reported as [openmoq/moq2ts#62](https://github.com/openmoq/moq2ts/issues/62)
+
+The [cross-check](cross-check.md) of `moq-dev`'s [#8828](https://github.com/moq-dev/moq/pull/8828): at start-up `moq2ts` fails the whole pipeline when any configured program fails to open (`MptsPipeline.cpp`, `5e7b72e`), where `moq-dev` now publishes the others. Found by code; open.
 
 ### moq5's relay and a late subscriber — reported as [openmoq/moq5#51](https://github.com/openmoq/moq5/issues/51)
 
