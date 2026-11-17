@@ -1,6 +1,6 @@
 # Test 83: an SRT leg beside a MoQ or segmented-HTTP leg, merged or switched
 
-**State: Parts A and B run on the MoQ and segmented legs; criteria 1, 2, 5, 6 and 8 hold, 4 and 7 are reported, and 3 holds except on TSDuck's segments with their added pair removed, where it fails as predicted.** An SRT leg merges with an opaque leg or the `seg` lane's slices without loss through every fault, inside an ST 2022-7 class only with SRT's latency matched; matched, a switch between SRT and the media-aware leg or the lane's slices costs the background's hole, and unmatched skips toward the leading leg, 2.3–2.5 s against a 1.2 s lag and 5.3–5.7 s against 5.3 s. Over 72 h of the live feed (Part C) the new-plane legs delivered what SRT delivered, unit for unit, outside three events: two hosts' unattended upgrades and the source's clock step, which cost the MoQ legs 6–12 s that SRT passed; the grader's negative control misnames one frame at a few blackouts (criterion 9 fails on the grader). Across a 117 ms path to another region (Part D, 24 h, the grader fixed) the shadow held the same outside the receiving host's upgrade, but for one video group the media-aware leg skipped; Part B's cells across the path are still to run, and Part E waits on the IRDs of B-6.
+**State: Parts A and B run on the MoQ and segmented legs; criteria 1, 2, 5, 6 and 8 hold, 4 and 7 are reported, and 3 holds except on TSDuck's segments with their added pair removed, where it fails as predicted.** An SRT leg merges with an opaque leg or the `seg` lane's slices without loss through every fault, inside an ST 2022-7 class only with SRT's latency matched; matched, a switch between SRT and the media-aware leg or the lane's slices costs the background's hole, and unmatched skips toward the leading leg, 2.3–2.5 s against a 1.2 s lag and 5.3–5.7 s against 5.3 s. Over 72 h of the live feed (Part C) the new-plane legs delivered what SRT delivered, unit for unit, outside three events: two hosts' unattended upgrades and the source's clock step, which cost the MoQ legs 6–12 s that SRT passed; the grader's negative control misnames one frame at a few blackouts (criterion 9 fails on the grader). Across a 117 ms path to another region (Part D, the grader fixed) 24 h of the shadow held the same outside the receiving host's upgrade, but for one video group the media-aware leg skipped, and Part B's matched cells held as on one host (criterion 11 holds); Part E waits on the IRDs of B-6.
 
 ## Objective
 
@@ -62,6 +62,8 @@ The positive control is `rx` parsed a second time; the negative is `rx` through 
 **Part D.** Parts B and C on one host compared the legs on loopback, where no leg meets loss or delay. Part D moves the receiver to a host in another region: the SRT leg is TSDuck's sender and receiver as in Part C, `tsp -O srt` on the publishing host called by `tsp -I srt` across the path at a latency matched to the MoQ legs, and each MoQ leg subscribes across the same path through its relay. Part B's matched cells, then 24 h of Part C's shadow with the grader on the receiving host. The path's RTT and loss are logged beside it, and the leg lag measured first as in Part B.
 
 Fixed before the first graded run: the publishing host is the primary, whose standing relay, passthrough lane relay and HLS edge the receiving host in us-west-2 reaches across the path; there `srt-send.sh` runs the `ma`, `pt` and `seg` lanes with the primary as their source, each handing on over loopback SRT as in Part C, and the primary's `rx` lane is the SRT sender. The builds, groomer and lane settings are Part C's. The shadow runs first, since Part B's rig is one host's and is split across two before its cells run. In a 10 min pilot at 1,000 ms every leg matched `rx` on all 72,115 units, trailing it by 4.82 s (`ma`), 2.01 s (`pt`) and 11.70 s (`seg`) at the median; `rx` is therefore called at 5,822 ms, matched to the media-aware leg as Part B matched it, with a receive buffer and flight window (`--rcvbuf 40000000 --ffs 40000`) that hold that latency at the feed's rate. The path's RTT and loss are SRT's own statistics on `rx`, every 10 s.
+
+Fixed before the switch cells' first graded run: the rig is [`t83d-switch.sh`](scripts/t83d-switch.sh), Part B's split in two halves started on one shared instant by [`t83d-batch.sh`](scripts/t83d-batch.sh). The primary paces and taps the clip and runs the SRT sender, the relay and importer or the packager and origin; the receiving host runs the SRT receiver, the export or the segment receiver and pacer, the switch, groomer and recorder, and grades each run with Part B's grader on the two halves' events merged in time order (both hosts' clocks within 2 µs of the same time source). The receiving host's group admits nothing from outside, so the SRT sender listens and the receiver calls it, as in Parts C and D's shadow, and after the sender's kill the caller re-dials. An outage drops the serving leg's flow between the two hosts at the receiving host; a kill strikes the primary's sender, importer or packager. The build, clip, switch and groomer are Part B's; only the matched cells run, for criteria 6 and 8. In a 75 s control at 1,000 ms the media-aware leg trailed the SRT leg by 1,680 ms at the median (1,611–1,755 ms, p5–p95), so the SRT leg runs at 2,680 ms; beside the lane's slices it trailed by 5,227 ms (5,194–5,261 ms), so 6,227 ms.
 
 **Part E.** The IRD's two inputs on `srt-send.sh`'s `rx` and `ma` lanes: a cut it is commanded to make, and a lane stopped with `srt-send.sh stop ma`. If a hardware ST 2022-7 receiver is available, Part A's opaque pair into it.
 
@@ -201,7 +203,7 @@ _Measured, 72 h of the live feed, `ma` and `pt` graded throughout and `seg` for 
 
 ### Part D, the shadow across a path: outside the receiving host's upgrade every leg delivered what SRT delivered, but for one group the media-aware leg skipped
 
-_Measured, 24 h of the live feed from the primary in eu-west-1 to a receiving host in us-west-2; Part B's cells across the path not yet run._
+_Measured, 24 h of the live feed from the primary in eu-west-1 to a receiving host in us-west-2._
 
 - **The path** (SRT's statistics on `rx`, every 10 s): RTT 116.7 ms at the median and 118.1 ms at most; 64 packets lost in 37 of 8,640 intervals, every one retransmitted in time, none dropped. Against `rx`, at the median of the hourly medians, `ma` trails by 0.02 s (matched by design), `pt` leads by 2.83 s and `seg` trails by 6.90 s.
 - **Criterion 9 holds.** The positive control matched all 11,322,096 units. In the graded window the dropper removed 19,011 units and damaged 717, and the grader named every one (19,681 missing, 47 altered) and none it had not touched.
@@ -209,12 +211,34 @@ _Measured, 24 h of the live feed from the primary in eu-west-1 to a receiving ho
 
 | Event | `ma` | `pt` | `seg` | Cause |
 | --- | --- | --- | --- | --- |
-| Hour 4 | 29 video units, under 1 s | none | none | the media-aware export skipped a video group its subscriber had evicted (`current group evicted; skipping to next buffered group`); SRT lost and recovered one packet in the same 10 s, and the primary logged nothing |
+| Hour 4 | 29 video units, under 1 s | none | none | the relay reset a video group's stream with `Old` and the export skipped to the next group (`current group evicted; skipping to next buffered group`); SRT lost and recovered one packet in the same 10 s, and the primary logged nothing |
 | Hour 17, the receiving host's unattended upgrade | 2,694 units, 21.1 s | 581, 4.6 s | 2,813, 21.6 s | a `libc` upgrade's service restarts stopped every lane; the grader, run outside systemd, ran on, `rx` with it, and its `ma` and `seg` callers, connecting while those lanes' listeners restarted, hung as in Part C until the 15 s watchdog restarted them, so up to 15 s of each is the grader's |
 
-- **Hour 4 is the one difference outside a host's event**: the media-aware leg alone, on the same path as `pt` and `seg`, lost a group, once in 24 h. Why the subscriber evicted a group within the export's 2 s delay, and whether the path's lost packet caused it, is not established.
-- **Criterion 11 is graded on its shadow half.** Criterion 10 holds across the path; criteria 6 and 8 wait on Part B's cells, whose rig is one host's and is split across two hosts before they run.
+- **Hour 4 is the one difference outside a host's event**, the media-aware leg's alone, once in 24 h. The export logged the relay's stream reset `Old`, which the relay sends (moq-dev `3c0daa21`, `lite/publisher.rs`) only while a group's stream sits blocked on the transport, unsent or unacknowledged, after its successor reached the relay a full budget earlier or presents a full budget ahead; the budget is the subscription's maximum delay, the export's `--delay 2s`. So the group's tail sat unsent or unacknowledged on that connection for about 2 s before the relay gave up on it, within 10 s of SRT losing and recovering one packet on the same path. The leg was matched to SRT's latency (5,822 ms) but not to its loss budget: SRT holds a packet up to 5.8 s, the relay a group's tail 2 s. Neither log shows the stall itself; a relay qlog would.
 - The upgrade timers were held on the publishing host but not on the receiving one, an on-demand host started for the run; `t83c-run.sh` refuses to start on a host whose upgrade timer is enabled.
+
+### Part D, switch across a path: matched, the switch cuts between SRT and either new-plane leg at the background's cost, as on one host
+
+`main` `cd560bde5e`, the primary in eu-west-1 to a receiving host in us-west-2, `contrib-10m.ts`, `SRT_INIT=7`; 36 runs, all valid, each arm's 18 at its matched latency. Read as Part B's tables; a fault's background is the hole before it on the leg the switch served.
+
+| Event, three runs each | Detection | Hole (background) | Programme lost | Bad pictures |
+| --- | --- | --- | --- | --- |
+| Media-aware arm, 2,680 ms (run medians within 33 ms, one at 220 ms) |  |  |  |  |
+| SRT leg's outage or kill | 2.84–2.92 | 0.23 (0.24) | 0 | 0 |
+| media-aware leg's outage or kill | 2.51–2.72 | 0.22 (0.24) | 0 | 0 |
+| commanded cut, SRT → media-aware | — | 0.23 (0.24) | 0 | 0 |
+| commanded cut, media-aware → SRT | — | 0.22 (0.20) | 0 | 0, 0, 1 |
+| Segmented arm, 6,227 ms (run medians within 7 ms) |  |  |  |  |
+| SRT leg's outage or kill | 5.21–5.29 | 0.22 (0.34) | 0 | 0 |
+| segmented leg's outage or kill | 5.47 | 0.22 (0.15) | 0 | 0 |
+| commanded cut, SRT → segmented | — | 0.22 (0.34) | 0 | 0 |
+| commanded cut, segmented → SRT | — | 0.22 (0.21) | 0 | 1, 0, 0 |
+
+- **Criterion 6 holds across the path on both arms.** In all 18 matched events of each arm the hole was within its background plus 0.1 s and no programme was lost or repeated. The eight single bad pictures, six at returns where the switch did not cut and two at cuts back to SRT, are Part B's grader limit: graded twice more, each read none at least once, and one read two.
+- **Criterion 8 holds.** Each cut between SRT and the media-aware leg changes the two tables it changed on one host, the export's PAT listing programme 0 and PMT 100 at version 0 against 6; across the segmented leg no table, version or PID differs. No SCTE-35 section was lost at any cut.
+- **The path lengthens the media-aware leg's lag, and detection with it.** At 1,000 ms the export trailed the SRT leg by 1.68 s across the path against 1.22 s on one host, and detection rose by about the difference, 2.51–2.92 s against 2.08–2.43 s. The lane's slices, held to their time, trailed by 5.23 s against 5.29 s, and detection stayed at 5.2–5.5 s.
+- The media-aware arm's latency steps, 0.14–0.21 s at its leg's faults and −0.05 to −0.11 s at the returns, where the switch did not cut, fall where the hole is no larger than the background's, so they are the grader's drift reading (Part B's limit), not the switch.
+- **Criterion 11 holds.** Criteria 6, 8 and 10 hold with every leg crossing the path, and each difference is attributed: hour 4's skip to the media-aware leg, its relay's 2 s budget against SRT's 5.8 s, by mechanism with the stall unobserved; hour 17 to the receiving host's upgrade.
 
 ## Corrections
 

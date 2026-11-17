@@ -42,7 +42,7 @@ grade() { # $1 run dir, $2 run name, $3 rig, $4 lega, $5 srt_ms, $6 cell, $7 ser
 		timeout 300 python3 "$H/t83-leg-lag.py" "$d/la" "$d/lb" --json >"$d/lag.json" 2>"$d/lag.err"
 	fi
 	if [ -e "$d/sw.idx" ]; then
-		timeout 300 python3 "$H/t83-tables.py" "$d/sw" --source "$d/live1" --vswitch-log "$d/vswitch.log" \
+		timeout 300 python3 "$H/t83-tables.py" "$d/sw" --source "$d/${TABLES_PREFIX:-live1}" --vswitch-log "$d/vswitch.log" \
 			--json >"$d/tables.json" 2>"$d/tables.err"
 	fi
 	python3 - "$@" >>"$SUM" <<'PY'
@@ -78,6 +78,14 @@ for r in rows:
 PY
 	tail -n +2 "$SUM" | grep "^$2," | tail -3
 }
+
+# GRADE_ONLY="<run dir> <run> <rig> <lega> <srt_ms> <cell> <serve> <rep>" grades one run made elsewhere
+# (t83d-batch.sh's) into this summary and exits; TABLES_PREFIX names its source capture (live1).
+if [ -n "${GRADE_ONLY:-}" ]; then
+	read -ra G <<<"$GRADE_ONLY"
+	grade "${G[@]}"
+	exit 0
+fi
 
 mixed() { # $1 run name, $2 lega, $3 srt_ms, $4 cell (none | outage-a ... | cut), $5 rep
 	local c=${4%-*} s=a
