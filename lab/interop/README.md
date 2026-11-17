@@ -64,4 +64,4 @@ With `moq` 0.9.8 this client carried media through `moq-dev`'s relays only, beca
 
 ## Status
 
-Superseded by the proposal to the runner, [englishm/moq-interop-runner#159](https://github.com/englishm/moq-interop-runner/pull/159): the two cases, the fixture generated at image build time and a TSDuck-based checker. This folder retires once it merges.
+Superseded by the runner's own MPEG-TS cases, merged in [englishm/moq-interop-runner#159](https://github.com/englishm/moq-interop-runner/pull/159): the two cases, the fixture generated at image build time, a TSDuck-based checker and the `moq-net-media-ts` client. `make-fixture.sh` and `validate-ts.sh` stay here for the [getting-started guide](../../docs/getting-started.md); the client retires.

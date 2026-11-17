@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# T11a re-sweep: the runner proposal's two TS cases through each registered public relay, with
+# T11a re-sweep: the runner's two TS cases through each registered public relay, with
 # `moq-dev` at both ends, over raw QUIC at the relay's highest registered draft.
 #   carriage  the subscriber is up before the publisher and must receive the whole fixture
 #   late      the subscriber joins 8.5 s into the 20 s fixture and must receive a decodable tail
