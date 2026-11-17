@@ -518,7 +518,7 @@ Building [T20](test-20-segmented-http3.md)'s HTTP/3 path surfaced a defect that 
 
 ## 6c. TSDuck: an HLS packager whose playlist overstates its segments
 
-**The report** ([tsduck/tsduck#1752](https://github.com/tsduck/tsduck/issues/1752)), from [T65](test-65-ird-hls-profile.md): with `--intra-close`, `--max-extra-duration` never forces a close, so a stream on which no I-frame is found becomes one segment; `EXTINF` exceeds `TARGETDURATION`, an RFC 8216 MUST; and `EXT-X-INDEPENDENT-SEGMENTS` is written whether or not segments are independent. **Verification:** on 3.45-4798, a public FFmpeg reproducer gives one 29.64 s segment, segments of 2.56–2.63 s under a target of 2, and validator errors -50061 and 535038; `master` has each defect, by reading. **State:** open.
+**The report** ([tsduck/tsduck#1752](https://github.com/tsduck/tsduck/issues/1752)), from [T65](test-65-ird-hls-profile.md): with `--intra-close`, `--max-extra-duration` never forces a close, so a stream without an I-frame becomes one segment; `EXTINF` exceeds `TARGETDURATION`, an RFC 8216 MUST; and `EXT-X-INDEPENDENT-SEGMENTS` is written unconditionally. **Verification:** on 3.45-4798, a public FFmpeg reproducer gives one 29.64 s segment, segments of 2.56–2.63 s under a target of 2, and validator errors -50061 and 535038. **State:** open; [tsduck#1773](https://github.com/tsduck/tsduck/pull/1773) with [tsduck-test#62](https://github.com/tsduck/tsduck-test/pull/62) fixes the first and third, under review.
 
 ## 6d. TSDuck: `tsp` that never exits when its input fails with `-P influx`
 
