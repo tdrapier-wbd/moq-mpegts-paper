@@ -276,7 +276,7 @@ The site's DVB analyser, over 10–15 min a lane, registers no error on `rx`, `p
 | SDT | 995 ms | 2,067 ms median, 2,116 ms max | 2 s | 6 of 9 |
 | NIT | 4,977 ms | 9,974 ms | 10 s | 0 |
 
-The export's, by construction, on the standing build and on current `main`: it emits PAT and PMT on the first frame in each 500 ms slot of media time (and on each keyframe), so a gap between two repeats reaches 500 ms plus a frame's spacing; and it repeats each SI table at the interval upstream's table of SI intervals gives it, which for the SDT (2 s) and NIT (10 s) is TR 101 290's own limit, on the first frame past it. Both targets sit on the limit with no margin, and the lane's grooming moves each repeat a little either side. These are the intervals criterion 10 already reports as the export's. No IRD has taken a lane yet: criterion 13 is not graded.
+The export's, by construction, on the standing build and on current `main`: it emits PAT and PMT on the first frame in each 500 ms slot of media time (and on each keyframe), so a gap between two repeats reaches 500 ms plus a frame's spacing; and it repeats each SI table at the interval upstream's table of SI intervals gives it, which for the SDT (2 s) and NIT (10 s) is TR 101 290's own limit, on the first frame past it. Both targets sit on the limit with no margin, and the lane's grooming moves each repeat a little either side. These are the intervals criterion 10 already reports as the export's; reported as [#9085](https://github.com/moq-dev/moq/issues/9085). No IRD has taken a lane yet: criterion 13 is not graded.
 
 ## Corrections
 
