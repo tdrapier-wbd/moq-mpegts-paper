@@ -142,7 +142,24 @@ moq_cli_detect() {
 		! "$relay" --help 2>&1 | grep -A3 -- '--auth-public <' | grep -q 'Patterns'; then
 		RELAY_AUTH=(--auth-public '')
 	fi
+	# Later builds name the controllers themselves: `delay` became `bbr` and `loss` `cubic`.
+	RELAY_CC_NAMES=old
+	if [ -n "$relay" ] && "$relay" --help 2>&1 | grep -A4 -- "$RELAY_CC_FLAG" | grep -q 'bbr'; then
+		RELAY_CC_NAMES=new
+	fi
 	RELAY_GREP='[m]oq-relay'
+}
+
+# moq_relay_cc: the controller MOQ_CC asks for (loss|delay, default delay), in the relay's own name.
+moq_relay_cc() {
+	local cc=${MOQ_CC:-delay}
+	if [ "${RELAY_CC_NAMES:-old}" = new ]; then
+		case $cc in
+		delay) cc=bbr ;;
+		loss) cc=cubic ;;
+		esac
+	fi
+	echo "$cc"
 }
 
 # moq_relay_public <bind-addr> <tls-name> [extra args...]
@@ -156,7 +173,7 @@ moq_relay_public() {
 	: "${RELAY_BIND:?call moq_cli_detect first}"
 	RELAY_ARGV=("${RELAY_BIND[@]}" "$bind" "${RELAY_TLS[@]}" "$tls"
 		"${RELAY_AUTH[@]}" "${RELAY_GSO[@]}"
-		"$RELAY_CC_FLAG" "${MOQ_CC:-delay}" "$@")
+		"$RELAY_CC_FLAG" "$(moq_relay_cc)" "$@")
 }
 
 # moq_relay_authed <bind-addr> <tls-name> [extra args...]
@@ -169,7 +186,7 @@ moq_relay_authed() {
 	shift 2
 	: "${RELAY_BIND:?call moq_cli_detect first}"
 	RELAY_ARGV=("${RELAY_BIND[@]}" "$bind" "${RELAY_TLS[@]}" "$tls" "${RELAY_GSO[@]}"
-		"$RELAY_CC_FLAG" "${MOQ_CC:-delay}" "$@")
+		"$RELAY_CC_FLAG" "$(moq_relay_cc)" "$@")
 }
 
 # moq_require_bytes <file> <min-bytes> <label>

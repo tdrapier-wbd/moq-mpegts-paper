@@ -25,7 +25,10 @@
 #
 # env: PORT (4475, the local relay, UDP), SRT_PORT (9147), MCAST (239.255.0.47:5047), LAT (1s),
 #      LINGER (30s), VPID (111), MOQ_CONNECT_VERSION and MOQ_LISTEN_VERSION (moq-lite-07-wip),
-#      EXPORT_ARGS (extra `export ts` flags, word-split, e.g. `--stitch`), PAIR (0), SKEW2 (0).
+#      EXPORT_ARGS (extra `export ts` flags, word-split, e.g. `--stitch`), PAIR (0), SKEW2 (0),
+#      IMPORT_ARGS (extra `import ts` flags, word-split, e.g. `--passthrough`), FOLLOW (1; 0 drops
+#      `--follow`, which `export ts --passthrough` refuses), LATE (seconds after the source starts at
+#      which a third export, leg c, joins; unset, none).
 set -uo pipefail
 
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
@@ -41,6 +44,8 @@ LAT=${LAT:-1s}
 LINGER=${LINGER:-30s}
 VPID=${VPID:-111}
 PAIR=${PAIR:-0}
+FOLLOW=${FOLLOW:-1}
+LATE=${LATE:-}
 SKEW2=${SKEW2:-0}
 export MOQ_CONNECT_VERSION=${MOQ_CONNECT_VERSION:-moq-lite-07-wip}
 export MOQ_LISTEN_VERSION=${MOQ_LISTEN_VERSION:-moq-lite-07-wip}
@@ -55,7 +60,7 @@ rm -f "$OUT"/source.done "$OUT"/supervisor.txt "$OUT"/supervisor2.txt "$OUT"/exp
 now() { python3 -c 'import time; print(f"{time.time():.3f}")'; }
 {
 	moq_record_build "$BIN/moq" "$BIN/moq-relay"
-	echo "arm=$ARM stimulus=$STIM secs=$SECS lat=$LAT linger=$LINGER version=$MOQ_CONNECT_VERSION pair=$PAIR skew2=$SKEW2 export_args=${EXPORT_ARGS:-} host=$(hostname)"
+	echo "arm=$ARM stimulus=$STIM secs=$SECS lat=$LAT linger=$LINGER version=$MOQ_CONNECT_VERSION pair=$PAIR skew2=$SKEW2 export_args=${EXPORT_ARGS:-} import_args=${IMPORT_ARGS:-} follow=$FOLLOW late=$LATE host=$(hostname)"
 	echo "started=$(now)"
 } >"$OUT/meta.txt"
 
@@ -75,12 +80,17 @@ PIDS+=($!)
 sleep 2
 C=("${MOQ_DIAL[@]}" "https://127.0.0.1:$PORT" --broadcast "$BCAST")
 
-for leg in a b; do
+FOLLOWARGS=()
+[ "$FOLLOW" = 1 ] && FOLLOWARGS=("${MOQ_FOLLOW[@]}" "$LINGER")
+export_leg() { # $1 leg, $2 tap seconds
 	# shellcheck disable=SC2086
-	("$BIN/moq" "${C[@]}" export ts "${MOQ_LAT[@]}" "$LAT" "${MOQ_FOLLOW[@]}" "$LINGER" ${EXPORT_ARGS:-} 2>"$OUT/export-$leg.log"
-		echo "$? $(now)" >"$OUT/export-$leg.exit") |
-		python3 "$HERE/t18-latency.py" tap "$VPID" "$OUT/egress-$leg.csv" --pipe --seconds $((SECS + 20)) \
-			>"$OUT/egress-$leg.ts" &
+	("$BIN/moq" "${C[@]}" export ts "${MOQ_LAT[@]}" "$LAT" ${FOLLOWARGS[@]+"${FOLLOWARGS[@]}"} ${EXPORT_ARGS:-} 2>"$OUT/export-$1.log"
+		echo "$? $(now)" >"$OUT/export-$1.exit") |
+		python3 "$HERE/t18-latency.py" tap "$VPID" "$OUT/egress-$1.csv" --pipe --seconds "$2" \
+			>"$OUT/egress-$1.ts"
+}
+for leg in a b; do
+	export_leg "$leg" $((SECS + 20)) &
 	PIDS+=($!)
 done
 sleep 1
@@ -125,16 +135,18 @@ while True:
 case "$ARM" in
 pipe)
 	if [ "$PAIR" = 1 ]; then
+		# shellcheck disable=SC2086
 		{
 			"${PLAY[@]}" 2>"$OUT/source.log"
 			touch "$OUT/source.done"
-		} | "${TAPSRC[@]}" | tee >("${DELAY[@]}" | supervise 2 "$BIN/moq" "${C[@]}" import ts) |
-			supervise "" "$BIN/moq" "${C[@]}" import ts &
+		} | "${TAPSRC[@]}" | tee >("${DELAY[@]}" | supervise 2 "$BIN/moq" "${C[@]}" import ts ${IMPORT_ARGS:-}) |
+			supervise "" "$BIN/moq" "${C[@]}" import ts ${IMPORT_ARGS:-} &
 	else
+		# shellcheck disable=SC2086
 		{
 			"${PLAY[@]}" 2>"$OUT/source.log"
 			touch "$OUT/source.done"
-		} | "${TAPSRC[@]}" | supervise "" "$BIN/moq" "${C[@]}" import ts &
+		} | "${TAPSRC[@]}" | supervise "" "$BIN/moq" "${C[@]}" import ts ${IMPORT_ARGS:-} &
 	fi
 	PIDS+=($!)
 	;;
@@ -149,7 +161,7 @@ srt)
 	PIDS+=($!)
 	sleep 2
 	supervise "" bash -c "tsp -I ip $MCAST --local-address 127.0.0.1 -O file - 2>>'$OUT/stage2.log' \
-		| '$BIN/moq' $(printf '%q ' "${C[@]}") import ts" &
+		| '$BIN/moq' $(printf '%q ' "${C[@]}") import ts ${IMPORT_ARGS:-}" &
 	PIDS+=($!)
 	sleep 1
 	{
@@ -164,6 +176,15 @@ srt)
 	exit 2
 	;;
 esac
+
+if [ -n "$LATE" ]; then
+	{
+		sleep "$LATE"
+		echo "late_start $(now)" >>"$OUT/meta.txt"
+		export_leg c $((SECS + 20 - ${LATE%.*}))
+	} &
+	PIDS+=($!)
+fi
 
 sleep "$((SECS + 15))"
 echo "finished=$(now)" >>"$OUT/meta.txt"

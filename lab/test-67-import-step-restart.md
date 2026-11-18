@@ -1,6 +1,6 @@
 # Test 67 — The import's own restart at an unflagged encoder switch
 
-**State: run, three times per stimulus and a control, on two builds.** At an unflagged encoder switch, back or forward, the import republishes itself and neither export ends. Past the catalog fix a switch costs 160 ms of programme on T64's stimulus, the truncated picture and the wait for a random-access one; on T34's capture it still costs 1,600 ms, because the import announces the new instance 1.2 s late, its catalog waiting on every track, and the stitched export starts at its second group (traced). Behind a supervisor it cost 2,400–2,800 ms. Rig: [T41](test-41-import-reanchor-coverage.md)'s [`t41-rewind-supervisor.sh`](scripts/t41-rewind-supervisor.sh), graded by [`t41-rewind-grade.py`](scripts/t41-rewind-grade.py); stimuli from [T34](test-34-real-encoder-severity.md) and [T64](test-64-synthetic-encoder-switch.md).
+**State: run, three times per stimulus and a control, on two builds.** At an unflagged encoder switch, back or forward, the import republishes itself and neither export ends. Past the catalog fix a switch costs 160 ms of programme on T64's stimulus, the truncated picture and the wait for a random-access one; on T34's capture it still costs 1,600 ms, because the import announces the new instance 1.2 s late, its catalog waiting on every track, and the stitched export starts at its second group (traced). Behind a supervisor it cost 2,400–2,800 ms. The passthrough lane, which ended at a step back, carries both directions with every byte on the open #9069 (loopback); its shadow on the live feed is running. Rig: [T41](test-41-import-reanchor-coverage.md)'s [`t41-rewind-supervisor.sh`](scripts/t41-rewind-supervisor.sh), graded by [`t41-rewind-grade.py`](scripts/t41-rewind-grade.py); stimuli from [T34](test-34-real-encoder-severity.md) and [T64](test-64-synthetic-encoder-switch.md).
 
 ## Objective
 
@@ -106,11 +106,46 @@ _Criteria, fixed before running:_
 
 **TR1 fails on its first clause and TR2 fails; TR3 places the delay in the import.** No `left` is logged: the export never ends the old program before turning, and turns within 2 ms of the announcement. The relay receives the old instance's withdrawal at once and the new instance's announcement 1.2 s later. At this build the import holds a new broadcast's announcement until its catalog's first snapshot goes out, which waits until every track the import created has published its configuration. On the capture every elementary stream's first unit starts within 0.76 s of the cut (SCTE-35 PID 0x8D last); which track's configuration resolves at 1.2 s is not traced.
 
+## The passthrough lane: a splice in place of the end
+
+`import ts --passthrough` ended at every step back ([#8911](https://github.com/moq-dev/moq/issues/8911)), and `export ts --passthrough` cannot follow a republish. [#9069](https://github.com/moq-dev/moq/pull/9069) (open, head `db0b251d4`) splices a step back, flagged or not, and an unflagged step forward of more than 10 s behind a break marker, the bytes passing unchanged. Its parent `f1eecd3a7` is the control; both thin LTO, on the laptop's loopback, `moq-lite-07-wip`. The supervisor runs as above with `IMPORT_ARGS=--passthrough FOLLOW=0` (a passthrough export refuses `--follow`): two exports `--delay 1s --passthrough` from the start, and a third (`LATE`) joining 9 s after the switch, on the table's three stimuli. One run per stimulus on the parent, three on the head. [`t67p-bytes.py`](scripts/t67p-bytes.py) grades each export's bytes against the stimulus; `t41-rewind-grade.py` the arrivals.
+
+_Criteria, fixed before running:_
+
+- **PS0, control.** On the parent the import exits at the switch in the capture's and T64's back runs, as #8911 reports; the forward run is reported. Otherwise the head is compared with what the parent did.
+- **PS1, validity.** Criterion 1's condition on the source; on the head, every export exits 0 after the source has ended.
+- **PS2, the import carries on.** On the head the supervisor records one start in every run, and its one exit follows the source's end.
+- **PS3, the bytes pass.** Each export's output is the stimulus's own bytes from its first packet to its last: no packet missing or altered, at the switch or elsewhere.
+- **PS4, no stall.** No export's longest picture arrival gap within 10 s of the switch exceeds 0.5 s.
+- **PS5, a late join.** The late export's first picture arrives within 3 s of its start.
+- **Reported:** where each export starts and ends in the stimulus, what the logs say at the switch, and each export's longest gap.
+
+_Results: every criterion holds._
+
+| Build, stimulus | Import at the switch | Exports a and b | Late export | Longest gap near the switch |
+| --- | --- | --- | --- | --- |
+| Parent, T64 back | exits: `PCR on PID 257 went back … without a discontinuity_indicator` | exit 1, ending at the switch (stimulus packet 113,223) | reads the supervisor's restarted import | — |
+| Parent, capture | exits, the same message on PID 111 | exit 1, ending at packet 1,166,546 | as above | — |
+| Parent, T64 forward | carries on | each loses 197 packets at the switch, 80 ms of the old encode's tail | — | — |
+| Head, T64 back and forward (×3 each) | carries on; one start, no exit | exit 0; the stimulus's own bytes, packets 4 to 219,811 (forward 219,801), no break | the stimulus's own bytes from its join, first picture 0.36–1.03 s after its start | 65–87 ms |
+| Head, capture (×3) | as above | exit 0; packets 1,578 to 1,579,881, no break | as above | 197–199 ms |
+
+On the head no log line marks the splice, the programme lost nothing, and the two exports are byte-identical. `t41-rewind-grade.py` counts seven continuity holes after the capture's switch; byte identity puts them in the stimulus. The import outlived the source on both builds, the rig holding its pipe open.
+
+_The shadow, criteria fixed before running._ The branch then runs against the live feed for 72 h on the primary, to meet the encoder's own switches ([`t67p-shadow.sh`](scripts/t67p-shadow.sh)): its own loopback relay, a passthrough import of the feed's multicast group and an export `--delay 1s --passthrough`, each supervised; [`t67p-tap.py`](scripts/t67p-tap.py) counts packets, continuity errors and PCR steps every 10 s before the import and after the export.
+
+- **SH1, validity.** The input records at least one PCR step of more than 1 s; otherwise the run is inconclusive and extended.
+- **SH2, nothing ends.** The import's and the export's supervisors each record one start and no exit before the rig stops.
+- **SH3, nothing stalls or drops at a step.** Within 30 s of each step the output's longest read gap is at most 0.5 s and it gains no continuity error the input lacks; the difference between the input's and the output's cumulative packet counts moves across the step (60 s before to 60 s after) by no more than its range over the hour before.
+- **SH4, no growth.** Each process's resident memory at the end is within 1.5× its value after the first hour.
+- **Reported:** each step's direction and size, and the log lines around it.
+
 ## Conclusions
 
 1. **Upstream's import now carries an unflagged encoder switch in both directions**, as a marked programme switch that `export ts --stitch --follow` follows. Neither the backward step that ended T34's imports nor the forward one that ended its exports ends anything on `main`.
 2. **Past the catalog fix a switch costs what the encode's structure sets**: nothing of the old encode but the picture the switch truncated, and of the new one the wait until the export's first group. On T64's stimulus that is 160 ms. On T34's capture it is 1,600 ms, a GOP more than the first random-access picture, because the import announces the new instance only once its catalog's first snapshot goes out, 1.2 s after the republish; the export turns at once, is refused the first group as older than its max age, and starts at the newest.
-3. **Not covered:** a 1+1 ingest pair, whose two importers each mint an epoch at the switch ([T41](test-41-import-reanchor-coverage.md) § _A 1+1 ingest pair whose importers each mint an epoch_); the SRT gateway path; and the release builds, which predate the restart.
+3. **On #9069's branch the passthrough lane carries both switches with every byte.** The import splices in place of ending, and each export, a late one included, delivers the stimulus's bytes unchanged; on the parent the step back ends both. Whether the live feed's own switches agree is the shadow's question.
+4. **Not covered:** a 1+1 ingest pair, whose two importers each mint an epoch at the switch ([T41](test-41-import-reanchor-coverage.md) § _A 1+1 ingest pair whose importers each mint an epoch_); the SRT gateway path; and the release builds, which predate the restart.
 
 ## Corrections
 
