@@ -258,7 +258,7 @@ _Measured, 24 h of the live feed from the primary in eu-west-1 to a receiving ho
 | 4 | 4.10–5.22 | 472–552, 3 of 3, 4.24–4.32 | 179–232, 3 of 3, 1.04–3.9 |
 
 - **Criterion 12 fails; the prediction is refuted.** Neither export skipped in the control, and every skip falls in a burst whose window holds the relay's `Old` resets on that connection. But both gave up far inside their delay: the relay's resets began at stalls of 0.59 s on the 2 s export and 1.6–2.1 s on the 5,822 ms one, and the exports skipped from stalls of 0.6 s and 2.1 s. The 2 s export also dropped late frames itself (`frame missed its deadline`) at 14 of its 15 skipping bursts; the 5,822 ms export never did.
-- **QUIC recovers; the relay discards.** The stall exceeds the burst by 0.1 s up to 2 s and by at most 0.45 s at 3 s, so recovery is prompt, and the content is lost by the relay's resets. The traces show no flow-control blocking. Why the reset threshold scales as about a quarter of the subscription's delay is not traced (reported as [#9018](https://github.com/moq-dev/moq/issues/9018)); [#8559](https://github.com/moq-dev/moq/issues/8559)'s outage loss was the transport's recovery, which this is not.
+- **QUIC recovers; the relay discards.** The stall exceeds the burst by 0.1 s up to 2 s and by at most 0.45 s at 3 s, so recovery is prompt, and the content is lost by the relay's resets. The traces show no flow-control blocking. The export stated half its delay as the subscription's maximum, which the stalls fit once a group's age at the burst is added; reported as [#9018](https://github.com/moq-dev/moq/issues/9018), fixed upstream, not yet re-run; [#8559](https://github.com/moq-dev/moq/issues/8559)'s outage loss was the transport's recovery, which this is not.
 
 ## Corrections
 
