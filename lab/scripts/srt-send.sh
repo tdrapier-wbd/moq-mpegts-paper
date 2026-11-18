@@ -8,6 +8,12 @@
 #   srt-send.sh stop LANE|all
 #   srt-send.sh status
 #   srt-send.sh origin start|stop                           on the source host, for the pt lane
+#   srt-send.sh install LANE MODE ADDR [LATENCY_MS] | origin install | uninstall LANE|all|origin
+#
+# start makes transient units, which a reboot ends; install makes the same units as enabled unit
+# files that start at boot and retry forever. They run copies of this script and b8-hls-recv.py in
+# /usr/local/lib/srt-send (re-run install to update them), and the seg lane logs to the journal.
+# stop pauses an installed unit until the next boot; uninstall removes it.
 #
 # LANE, with SRC the source host's private address:
 #   rx   the contribution as this host received it (stage 1's loopback group), untouched;
@@ -21,12 +27,13 @@
 # A lane other than rx is a producer unit (srt-lane-LANE) sending UDP to 127.0.0.1:519N and a sender
 # unit (srt-send-LANE) reading it, so a receiver's disconnect restarts only the sender. Lanes run in
 # parallel, one SRT port each. Tokens are read from their files inside the unit and reach no command
-# line; the SRT passphrase does, because tsp takes it only as an argument.
+# line; the SRT passphrase reaches tsp's, because tsp takes it only as an argument.
 #
 # Env: SRC, BCAST, MA_JWT_FILE (~/.moq-live/probe.jwt), SEG_URL_FILE (~/.srt-send/seg.url),
 #   PASSPHRASE_FILE (AES-256), STREAMID (the receiver's stream ID, if it asks one; it reaches the
 #   unit's command line, so not a secret), GROUP (239.255.0.1:5000), RATE (26000000), DELAY (2s,
-#   both exports), MA_LAT_MS (1000), SEG_LAT_MS (8000), SEG_RELEASE_MS (1500), LANE_PORT (4490),
+#   both exports), MA_LAT_MS (1000), SEG_LAT_MS (8000), SEG_RELEASE_MS (1500), SEG_LOG
+#   (~/.srt-send/seg-b8.jsonl; empty: the unit's journal), LANE_PORT (4490),
 #   MOQ_MA (~/bin-3c0daa21/moq, the standing relay's build), MOQ_PT (~/bin-66af7231), PACER
 #   (~/pacer-97f3a38/mpegts-pacer).
 #
@@ -48,6 +55,8 @@ MOQ_MA=${MOQ_MA:-$HOME/bin-3c0daa21/moq}
 MOQ_PT=${MOQ_PT:-$HOME/bin-66af7231}
 PACER=${PACER:-$HOME/pacer-97f3a38/mpegts-pacer}
 LOGDIR=$HOME/.srt-send
+SEG_LOG=${SEG_LOG-$LOGDIR/seg-b8.jsonl}
+LIB=/usr/local/lib/srt-send
 PT_BCAST=lane.pt.hang
 LANES="rx ma pt seg"
 UNITS="srt-send-rx srt-lane-ma srt-send-ma srt-lane-pt srt-send-pt srt-lane-seg srt-send-seg
@@ -79,16 +88,63 @@ udp_port() {
 unit() {
 	local name=$1
 	shift
+	if [ -n "${PERSIST:-}" ]; then
+		persist "$name" "$@"
+		return
+	fi
 	# tsp's SRT listener ignores SIGTERM while it waits for a caller.
 	sudo systemd-run --quiet --unit="$name" --uid="$(id -u)" --property=Nice=5 \
 		--property=Restart=always --property=RestartSec=2 --property=TimeoutStopSec=5 "$@"
+}
+
+# The same unit as a file: unit's --setenv options become Environment lines.
+persist() {
+	local name=$1 a cmd=()
+	shift
+	{
+		printf '[Unit]\nDescription=srt-send.sh %s\nWants=network-online.target\n' "$name"
+		printf 'After=network-online.target\nStartLimitIntervalSec=0\n\n[Service]\nUser=%s\n' "$(id -un)"
+		printf 'Nice=5\nRestart=always\nRestartSec=2\nTimeoutStopSec=5\n'
+		for a in "$@"; do
+			case $a in
+			--setenv=*)
+				a=${a#--setenv=}
+				printf 'Environment="%s"\n' "${a//%/%%}"
+				;;
+			"$HERE/srt-send.sh") cmd+=("$LIB/srt-send.sh") ;;
+			*) cmd+=("$a") ;;
+			esac
+		done
+		printf 'ExecStart=%s\n\n[Install]\nWantedBy=multi-user.target\n' "${cmd[*]}"
+	} | sudo tee "/etc/systemd/system/$name.service" >/dev/null
+	sudo systemctl daemon-reload
+	sudo systemctl enable --now --quiet "$name"
+}
+
+# Before install replaces UNITS, transient or installed.
+install_prep() {
+	PERSIST=1
+	SEG_LOG=
+	stop "$@"
+	sudo install -D -m 755 -t "$LIB" "$HERE/srt-send.sh" "$HERE/b8-hls-recv.py"
+}
+
+uninstall() {
+	local u
+	for u in "$@"; do
+		[ -f "/etc/systemd/system/$u.service" ] || continue
+		sudo systemctl disable --now --quiet "$u"
+		sudo rm "/etc/systemd/system/$u.service"
+	done
+	sudo systemctl daemon-reload
 }
 
 # Non-secret settings only: unit properties are readable by every local user.
 config_env() {
 	local v
 	for v in HOME SRC BCAST MA_JWT_FILE SEG_URL_FILE GROUP RATE DELAY MA_LAT_MS SEG_LAT_MS \
-		SEG_RELEASE_MS LANE_PORT MOQ_MA MOQ_PT PACER ADDR; do
+		SEG_RELEASE_MS SEG_LOG LANE_PORT MOQ_MA MOQ_PT PACER ADDR SRT_MODE SRT_ADDR SRT_LATENCY \
+		PASSPHRASE_FILE STREAMID; do
 		printf -- '--setenv=%s=%s\n' "$v" "${!v:-}"
 	done
 }
@@ -112,7 +168,7 @@ produce() {
 		;;
 	seg)
 		python3 -c "$B8_URL_FROM_FILE" "$SEG_URL_FILE" "$HERE/b8-hls-recv.py" --seconds 0 \
-			--release-ms "$SEG_RELEASE_MS" --log "$LOGDIR/seg-b8.jsonl" |
+			--release-ms "$SEG_RELEASE_MS" ${SEG_LOG:+--log "$SEG_LOG"} |
 			"${groom[@]}" --latency-ms "$SEG_LAT_MS" --max-latency-ms 14000
 		;;
 	esac
@@ -126,24 +182,30 @@ publish() {
 }
 
 sender() {
-	local lane=$1 mode=$2 addr=$3 latency=${4:-1000} in srt crypt="" sid=""
-	case $mode in
-	listener) srt="--listener 0.0.0.0:$addr" ;;
-	caller) srt="--caller $addr" ;;
-	*) die "mode: listener or caller" ;;
+	local lane=$1 envs
+	SRT_MODE=$2 SRT_ADDR=$3 SRT_LATENCY=${4:-1000}
+	case $SRT_MODE in listener | caller) ;; *) die "mode: listener or caller" ;; esac
+	[ -z "${PASSPHRASE_FILE:-}" ] || [ -r "$PASSPHRASE_FILE" ] || die "cannot read $PASSPHRASE_FILE"
+	mapfile -t envs < <(config_env)
+	unit "srt-send-$lane" "${envs[@]}" /bin/bash "$HERE/srt-send.sh" _send "$lane"
+}
+
+# Runs inside srt-send-LANE.
+send() {
+	local lane=$1 in srt opt=()
+	case $SRT_MODE in
+	listener) srt=(--listener "0.0.0.0:$SRT_ADDR") ;;
+	caller) srt=(--caller "$SRT_ADDR") ;;
 	esac
 	if [ "$lane" = rx ]; then
 		in=$GROUP
 	else
 		in=$(udp_port "$lane")
 	fi
-	if [ -n "${PASSPHRASE_FILE:-}" ]; then
-		[ -r "$PASSPHRASE_FILE" ] || die "cannot read $PASSPHRASE_FILE"
-		crypt="--passphrase \"\$(cat '$PASSPHRASE_FILE')\" --pbkeylen 32"
-	fi
-	[ -n "${STREAMID:-}" ] && sid="--streamid $(printf %q "$STREAMID")"
-	unit "srt-send-$lane" /bin/bash -c "exec tsp --buffer-size-mb 1 -I ip $in --local-address 127.0.0.1 \
-		-O srt $srt --transtype live --latency $latency $crypt $sid"
+	[ -z "${PASSPHRASE_FILE:-}" ] || opt+=(--passphrase "$(cat "$PASSPHRASE_FILE")" --pbkeylen 32)
+	[ -z "${STREAMID:-}" ] || opt+=(--streamid "$STREAMID")
+	exec tsp --buffer-size-mb 1 -I ip "$in" --local-address 127.0.0.1 \
+		-O srt "${srt[@]}" --transtype live --latency "$SRT_LATENCY" "${opt[@]}"
 }
 
 start() {
@@ -185,7 +247,8 @@ origin() {
 	local envs
 	ADDR=${ADDR:-$(ip -4 -o addr show ens5 | awk '{print $4}' | cut -d/ -f1)}
 	case ${1:-} in
-	start)
+	start | install)
+		[ "$1" = start ] || install_prep srt-lane-pt-pub srt-lane-relay
 		unit srt-lane-relay "$MOQ_PT/moq-relay" --listen "$ADDR:$LANE_PORT" --listen-tls-generate "$ADDR" \
 			--auth-public "**" --quic-gso=false --log-level warn
 		sleep 2
@@ -195,22 +258,32 @@ origin() {
 		status
 		;;
 	stop) stop srt-lane-pt-pub srt-lane-relay ;;
-	*) die "origin start|stop" ;;
+	*) die "origin start|install|stop" ;;
 	esac
 }
 
 case "${1:-}" in
 start) start "${2:?LANE}" "${3:?mode}" "${4:?PORT or HOST:PORT}" "${5:-}" ;;
-stop)
-	lanes=${2:?LANE or all}
+install)
+	install_prep "srt-send-${2:?LANE}" "srt-lane-$2"
+	start "$2" "${3:?mode}" "${4:?PORT or HOST:PORT}" "${5:-}"
+	;;
+stop | uninstall)
+	lanes=${2:?LANE, all or origin}
 	[ "$lanes" = all ] && lanes=$LANES
 	units=()
-	for l in $lanes; do units+=("srt-send-$l" "srt-lane-$l"); done
-	stop "${units[@]}"
+	for l in $lanes; do
+		case $l in
+		origin) units+=(srt-lane-pt-pub srt-lane-relay) ;;
+		*) units+=("srt-send-$l" "srt-lane-$l") ;;
+		esac
+	done
+	if [ "$1" = stop ]; then stop "${units[@]}"; else uninstall "${units[@]}"; fi
 	;;
 status) status ;;
 origin) origin "${2:-}" ;;
 _lane) produce "${2:?}" ;;
+_send) send "${2:?}" ;;
 _publish) publish ;;
-*) die "usage: srt-send.sh start LANE listener PORT|caller HOST:PORT [LATENCY_MS] | stop LANE|all | status | origin start|stop" ;;
+*) die "usage: srt-send.sh start|install LANE listener PORT|caller HOST:PORT [LATENCY_MS] | stop|uninstall LANE|all|origin | status | origin start|install|stop" ;;
 esac
