@@ -1,0 +1,25 @@
+cff-version: 1.2.0
+message: "If you cite this evaluation, please cite it as below."
+title: "Internet-Native Primary Distribution for Professional Broadcast"
+abstract: "A technical evaluation of the two data planes that can carry internet-native primary distribution for professional broadcast: Media over QUIC (MoQ), and segmented HTTP carrying MPEG-TS (HLS)."
+authors:
+  - family-names: Drapier
+    given-names: Thomas
+repository-code: "https://github.com/tdrapier-wbd/moq-mpegts-paper"
+keywords:
+  - Media over QUIC
+  - MoQ
+  - MPEG-TS
+  - HLS
+  - SRT
+  - broadcast contribution
+  - primary distribution
+preferred-citation:
+  type: report
+  title: "Internet-Native Primary Distribution for Professional Broadcast"
+  authors:
+    - family-names: Drapier
+      given-names: Thomas
+  status: preprint
+  url: "https://github.com/tdrapier-wbd/moq-mpegts-paper"
+  notes: "Working draft; AI assistance was heavily used in drafting."
