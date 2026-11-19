@@ -35,7 +35,9 @@
 #   both exports), MA_LAT_MS (1000), SEG_LAT_MS (8000), SEG_RELEASE_MS (1500), SEG_LOG
 #   (~/.srt-send/seg-b8.jsonl; empty: the unit's journal), LANE_PORT (4490),
 #   MOQ_MA (~/bin-3c0daa21/moq, the standing relay's build), MOQ_PT (~/bin-66af7231), PACER
-#   (~/pacer-97f3a38/mpegts-pacer).
+#   (~/pacer-97f3a38/mpegts-pacer), PT_RCVBUF (4194304: the pt sender's UDP receive buffer; the
+#   passthrough export writes one PCR interval at once, moq#9173, which overflows the default's
+#   ~39 ms at 25 Mb/s; the kernel caps it at net.core.rmem_max).
 #
 # A sender reads its input before the receiver connects, so each connection starts with up to a
 # socket buffer of stale packets and one continuity gap.
@@ -54,6 +56,7 @@ SEG_URL_FILE=${SEG_URL_FILE:-$HOME/.srt-send/seg.url}
 MOQ_MA=${MOQ_MA:-$HOME/bin-3c0daa21/moq}
 MOQ_PT=${MOQ_PT:-$HOME/bin-66af7231}
 PACER=${PACER:-$HOME/pacer-97f3a38/mpegts-pacer}
+PT_RCVBUF=${PT_RCVBUF:-4194304}
 LOGDIR=$HOME/.srt-send
 SEG_LOG=${SEG_LOG-$LOGDIR/seg-b8.jsonl}
 LIB=/usr/local/lib/srt-send
@@ -143,7 +146,7 @@ uninstall() {
 config_env() {
 	local v
 	for v in HOME SRC BCAST MA_JWT_FILE SEG_URL_FILE GROUP RATE DELAY MA_LAT_MS SEG_LAT_MS \
-		SEG_RELEASE_MS SEG_LOG LANE_PORT MOQ_MA MOQ_PT PACER ADDR SRT_MODE SRT_ADDR SRT_LATENCY \
+		SEG_RELEASE_MS SEG_LOG LANE_PORT MOQ_MA MOQ_PT PACER PT_RCVBUF ADDR SRT_MODE SRT_ADDR SRT_LATENCY \
 		PASSPHRASE_FILE STREAMID; do
 		printf -- '--setenv=%s=%s\n' "$v" "${!v:-}"
 	done
@@ -192,7 +195,7 @@ sender() {
 
 # Runs inside srt-send-LANE.
 send() {
-	local lane=$1 in srt opt=()
+	local lane=$1 in srt opt=() inopt=()
 	case $SRT_MODE in
 	listener) srt=(--listener "0.0.0.0:$SRT_ADDR") ;;
 	caller) srt=(--caller "$SRT_ADDR") ;;
@@ -202,9 +205,10 @@ send() {
 	else
 		in=$(udp_port "$lane")
 	fi
+	[ "$lane" != pt ] || inopt+=(--buffer-size "${PT_RCVBUF:-4194304}")
 	[ -z "${PASSPHRASE_FILE:-}" ] || opt+=(--passphrase "$(cat "$PASSPHRASE_FILE")" --pbkeylen 32)
 	[ -z "${STREAMID:-}" ] || opt+=(--streamid "$STREAMID")
-	exec tsp --buffer-size-mb 1 -I ip "$in" --local-address 127.0.0.1 \
+	exec tsp --buffer-size-mb 1 -I ip "$in" --local-address 127.0.0.1 "${inopt[@]}" \
 		-O srt "${srt[@]}" --transtype live --latency "$SRT_LATENCY" "${opt[@]}"
 }
 
