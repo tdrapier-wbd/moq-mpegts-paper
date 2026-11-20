@@ -51,7 +51,7 @@ Untaken quests on upstream `main` whose result would move an entry above, ranked
 | --- | --- | --- | --- | --- |
 | `qos-publisher-timeliness` | M | P1-l | A health verdict per publisher from the relay alone; the per-subscriber verdict is on `main` | None: it now defines the histogram type the lag histogram reuses; not taken |
 
-Set aside: the QoS line's lag histogram (R8 only), the E2EE line beyond P1-ae's gate (a contract option, not a requirement: [Control](../docs/control-plane.md) §7.3), `broadcast-fairness` (tenants sharing a cluster link; one operator's channels until P1-j's second hop) `perf/shard-default` (our relay's knee, which P1-j's supersedes) and `ts-step-damage` (one stream's step; every step met so far moved the whole multiplex).
+Set aside: the QoS line's lag histogram (R8 only), the E2EE line beyond P1-ae's gate (a contract option, not a requirement: [Control](../docs/control-plane.md) §7.3), `broadcast-fairness` (tenants sharing a cluster link; one operator's channels until P1-j's second hop) and `perf/shard-default` (our relay's knee, which P1-j's supersedes).
 
 ## Blocked on apparatus
 

@@ -494,7 +494,7 @@ With the fix to A, the byte-level result stands on draft 18. **Closed by us** on
 
 ### A multiplex program that fails to open stops every program — reported as [openmoq/moq2ts#62](https://github.com/openmoq/moq2ts/issues/62)
 
-The [cross-check](cross-check.md) of `moq-dev`'s [#8828](https://github.com/moq-dev/moq/pull/8828): at start-up `moq2ts` fails the whole pipeline when any configured program fails to open (`MptsPipeline.cpp`, `5e7b72e`), where `moq-dev` now publishes the others. Found by code; open.
+From the [cross-check](cross-check.md) of `moq-dev`'s [#8828](https://github.com/moq-dev/moq/pull/8828), by code: at start-up `moq2ts` failed the pipeline when any program failed to open (`MptsPipeline.cpp`, `5e7b72e`). **Fixed** by [#63](https://github.com/openmoq/moq2ts/pull/63) and [#64](https://github.com/openmoq/moq2ts/pull/64), merged; not yet verified.
 
 ### moq5's relay and a late subscriber — reported as [openmoq/moq5#51](https://github.com/openmoq/moq5/issues/51)
 
