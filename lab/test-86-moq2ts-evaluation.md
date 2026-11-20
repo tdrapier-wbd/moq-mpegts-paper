@@ -1,6 +1,6 @@
 # T86 — OpenMOQ's `moq2ts` through the campaign's tests
 
-**State: P2-r and P2-s run; `moq2ts` passes both, and neither found an issue to file.** Roadmap rows P2-r to P2-w put the campaign's tests to `moq2ts`'s headless publisher (`moq2ts-cli`) and console receiver (`moq2ts-receiver`), beside `moq-dev`'s own pair on the same clips and graders. Each row is a section here. A gap found becomes one issue on `moq2ts`, saying when it is a difference between `moq-dev` and the MoQT draft rather than a defect (OpenMOQ's request).
+**State: P2-r, P2-s and P2-t run. `moq2ts` passes the first two; P2-t found three issues to file, and on a publisher restart it loses 42.7 s against `moq-dev`'s 14 s.** Roadmap rows P2-r to P2-w put the campaign's tests to `moq2ts`'s headless publisher (`moq2ts-cli`) and console receiver (`moq2ts-receiver`), beside `moq-dev`'s own pair on the same clips and graders. Each row is a section here. A gap found becomes one issue on `moq2ts`, saying when it is a difference between `moq-dev` and the MoQT draft rather than a defect (OpenMOQ's request).
 
 ## Environment
 
@@ -66,3 +66,38 @@ _Conclusions._
 
 1. **`moq2ts` carries every PCR discontinuity class unchanged and without a stall.** Its pacing neither sleeps through the 30 s forward jump nor waits out the 600 s rewind; the longest read gap near any event is within 70 ms of the control's, which is one 250 ms object. P2-s found nothing to report as an issue.
 2. **`moq-dev`'s arm is T67's parent and repeats it**: on `f1eecd3a7` the passthrough import ends at every step back and loses packets at the unflagged step forward, both of which [#9069](https://github.com/moq-dev/moq/pull/9069) fixes ([T67](test-67-import-step-restart.md)). Here the gap is 98 packets, against T67's 197 on its supervisor's lane.
+
+## P2-t — restarts and loop wraps
+
+T28's infrastructure axis on loopback, [`t86-restart.sh`](scripts/t86-restart.sh): `tsp` plays a 150 s cut of `contrib-5m` once at its PCR rate to a local UDP port, which each publisher instance reads through its own `tsp`, so a killed publisher takes nothing upstream with it. The publisher, `moq-relay` and the receiver each run under a supervisor that restarts them 0.5 s after they exit, and 60 s in one of them gets SIGKILL. Arm A is `moq2ts-cli` (live, from stdin; it reconnects by itself) and `moq2ts-receiver` on draft 22; arm M is `moq-dev`'s passthrough pair. A fifth cell, in place of T41's loop wraps, plays a 30 s cut five times over, four unflagged wraps, with nothing killed. One run per cell and arm.
+
+_Criteria, fixed before running:_
+
+1. **The control is clean.** With nothing killed, each arm's output is the source's bytes from its join to the end, and each component starts once.
+2. **Each kill is recovered.** After the cell's kill, the output resumes without intervention beyond the supervisor's restarts, and from there to the end is the source's bytes.
+3. **`moq2ts` loses no more than `moq-dev`.** Per cell, arm A's programme lost (the source packets missing from its output, in seconds of the clip) is within 1 s of arm M's.
+4. **The wraps pass.** In the wrap cell the output is the source's bytes from the join to the end, and no component exits.
+5. **Reported:** per cell, the outage (the longest read gap) and every component's exits.
+
+_Results._ Graded by [`t86-restart-grade.py`](scripts/t86-restart-grade.py); the receiver cell's two instances are graded apart, because the restarted one rejoins at the start of a group the first had begun, and the identity grader matches forwards only. Programme lost is in seconds of the clip.
+
+| Cell | `moq2ts` lost | Its outage | `moq-dev` lost | Its outage |
+| --- | --: | --: | --: | --: |
+| Control | 0 | 0.41 s | 0 | 0.14 s |
+| Publisher killed (three runs) | 42.74, 42.74, 15.47 s | 41.9, 41.8, 11.8 s | 14.08, 14.08, 11.34 s | 14.1, 14.1, 11.4 s |
+| Relay killed | 12.91 s | 10.0 s | 13.81 s | 13.8 s |
+| Receiver killed | 0 (1,385 packets repeated) | 0.63 s | 1.58 s | 1.61 s |
+| Four loop wraps | 0 | 0.14 s | 9.67 s | 2.91 s |
+
+Criterion 1 holds, read against two things every run shares, the control included: the receiver's retries before the publisher's first catalog exists, and the last partial object each publisher holds once its input stops (287 packets on `moq2ts`, 35 on `moq-dev`). Criterion 2 holds in every cell: `moq2ts-cli` reconnects to a restarted relay without exiting. Criterion 3 fails on the publisher cell and holds on the other two. Criterion 4 holds for `moq2ts`; `moq-dev`'s import exits at each wrap, as at every step back on this build ([P2-s](#p2-s--pcr-discontinuities)).
+
+_What the publisher cell's loss is made of._ With the relay at `debug`, three more runs all took the slow course:
+
+- **The restarted publisher is refused until the relay drops its dead predecessor.** Each time `moq2ts-cli` connects, `moq-relay` advertises the namespace it still holds, and `moqxr` answers the PUBLISH_NAMESPACE with an error and then closes its own session. It gets in only after the relay's 10 s idle timeout drops the dead session, at its next back-off step: 75.0 s for a kill at 61.1 s. The same refusal stops two publishers sharing a relay: each ends the other's session within 30 ms of the second connecting, on drafts 18 and 22.
+- **The receiver stays on its ended subscription for 30 s.** When the dead session drops, the relay withdraws the namespace and ends the receiver's subscriptions without a PUBLISH_DONE: in `moq-dev`'s code a subscription whose upstream failed ends in error and drops its request stream, and only a finished track gets one. `moq2ts-receiver` reacted at once in one run of six; in the other five it stayed until its own session closed 30 s later, 102.9 s, while the new publisher had been in since 75.0 s. That wait is the difference between 42.7 s and `moq-dev`'s 14 s.
+- **The receiver never answers a PUBLISH_NAMESPACE.** The relay advertises the new publisher's namespace to it and logs "no answer to the advertisement" every 5 s.
+
+_Conclusions._
+
+1. **`moq2ts` matches or beats `moq-dev` on a relay or receiver restart and across loop wraps**; on a publisher restart it loses 42.7 s in five runs of six against 11–14 s.
+2. **Three findings for OpenMOQ.** The first is a `moqxr` defect, not a difference between `moq-dev` and the draft: drafts 18 and 22 let a publisher send PUBLISH_NAMESPACE to any subscriber, and require exactly one OK or error in answer. The third is a receiver defect for the same reason. For the second, the draft lets either endpoint cancel a request by resetting its stream, so a receiver must take a cancelled subscription as ended; which side drops the signal in five runs of six is not settled without the wire.
