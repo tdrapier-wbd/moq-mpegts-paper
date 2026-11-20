@@ -260,7 +260,7 @@ Under inbound blackouts across a 117 ms path, `moq-relay` reset a subscriber's g
 
 ### The media-aware export drops a field-coded feed's pictures — reported
 
-Since [#8638](https://github.com/moq-dev/moq/pull/8638) (groups addressed by their start) `export ts` loses about a fifth of the live feed's field-coded pictures, its audio intact, and logs a skip at every group even of a progressive stream that loses nothing. Bisected on loopback ([T83](test-83-mixed-plane-pair.md) Part D), still on `main`; reported as [#9081](https://github.com/moq-dev/moq/issues/9081).
+Since [#8638](https://github.com/moq-dev/moq/pull/8638) (groups addressed by their start) `export ts` on moq-lite-06 drops every open-GOP leading picture, a fifth of the feed's, and logs a skip at every group. Bisected on loopback ([T83](test-83-mixed-plane-pair.md) Part D); reported as [#9081](https://github.com/moq-dev/moq/issues/9081), then [diagnosed](https://github.com/moq-dev/moq/issues/9081#issuecomment-7043675627) with a failing test: lite-07 and moq-transport are clean.
 
 ### What a receiving site's analysers flag on the exports — reported
 
