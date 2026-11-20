@@ -1,21 +1,28 @@
 #!/usr/bin/env bash
-# T11d: moq2ts's headless publisher and console receiver against moq-dev, draft 22, loopback.
-# usage: t11d-arm.sh <out-dir> <A|B|C|D> [passthrough|demux]
+# T11d and T86: moq2ts's headless publisher and console receiver against moq-dev, loopback.
+# usage: t11d-arm.sh <out-dir> <A|B|C|D|M> [passthrough|demux]
 #   A  moq2ts-cli --unmodified -> moq-relay  -> moq2ts-receiver
 #   B  moq2ts-cli --unmodified -> moq5-relay -> moq2ts-receiver
 #   C  moq import ts           -> moq-relay  -> moq2ts-receiver (passthrough or demux)
 #   D  moq2ts-cli --unmodified -> moq-relay  -> moq export ts
+#   M  moq import ts --passthrough -> moq-relay -> moq export ts --passthrough (moq-dev's own pair, on
+#      moq-lite-07 (MVER), since moq-dev lists its passthrough track only in its own catalog)
 # env: MOQ (moq-dev bin dir: moq, moq-relay), RELAY5 (moq5-relay, B only), CLI (moq2ts-cli),
 #      RECV (moq2ts-receiver), CLIP (source TS), PCRT (ts-pcr-timing.py), PORT (default 4433),
 #      SECS (receiver window, default 130), SEG (moq2ts-cli object bytes, default 310764),
 #      TRACK (names the receiver's track out of band, bypassing catalog discovery)
+#      DRAFT (MoQT draft for every client, default 22; the receiver takes 22 or 18),
+#      CLI_ARGS (extra moq2ts-cli flags, word-split: `--insecure` for a self-signed relay since moqxr 0.4.21)
 # The receiver's output is teed into ts-pcr-timing.py --live, which stamps arrivals.
 set -u
 OUT=$1 ARM=$2 MODE=${3:-passthrough}
 MOQ=${MOQ:?} CLI=${CLI:?} RECV=${RECV:?} CLIP=${CLIP:?} PCRT=${PCRT:?}
-PORT=${PORT:-4433} SECS=${SECS:-130} NAME=t11d.msf
+PORT=${PORT:-4433} SECS=${SECS:-130} NAME=t11d.msf DRAFT=${DRAFT:-22}
 mkdir -p "$OUT" && cd "$OUT" || exit 1
-url="moqt://127.0.0.1:$PORT"
+url="moqt://127.0.0.1:$PORT" ver="moq-transport-$DRAFT"
+[ "$ARM" = M ] && url="https://127.0.0.1:$PORT" ver=${MVER:-moq-lite-07-wip}
+[ "$ARM" = M ] && export MOQ_LISTEN_VERSION=$ver
+[ "$ARM" = M ] && NAME=t11d.hang # the suffix picks the catalog an export reads
 
 if [ "$ARM" = B ]; then
 	openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 -nodes -days 2 \
@@ -53,32 +60,35 @@ relay=$!
 sleep 1
 
 case $ARM in
-C)
+C | M)
 	flags=()
-	[ "$MODE" = passthrough ] && flags=(--passthrough)
+	{ [ "$MODE" = passthrough ] || [ "$ARM" = M ]; } && flags=(--passthrough)
 	tsp -I file "$CLIP" -P regulate --pcr-synchronous -O file - 2>tsp.log |
-		"$MOQ/moq" --connect-tls-insecure --connect "$url" --connect-version moq-transport-22 \
+		"$MOQ/moq" --connect-tls-insecure --connect "$url" --connect-version "$ver" \
 			--broadcast "$NAME" import ts "${flags[@]}" >send.log 2>&1 &
 	;;
 *)
 	# --paced releases one object per --fragment-ms whatever it holds, so an object must hold
 	# 250 ms of the clip: SEG = clip rate / 8 / 4, in whole packets (310,764 for 9.95 Mb/s).
-	"$CLI" --endpoint "$url" --namespace "$NAME" --video "$CLIP" --unmodified --paced --draft 22 \
+	# shellcheck disable=SC2086
+	"$CLI" --endpoint "$url" --namespace "$NAME" --video "$CLIP" --unmodified --paced --draft "$DRAFT" ${CLI_ARGS:-} \
 		--fragment-ms 250 --segment-bytes "${SEG:-310764}" >send.log 2>&1 &
 	;;
 esac
 send=$!
 sleep 3
 case $ARM in
-D)
-	timeout "$SECS" "$MOQ/moq" --connect-tls-insecure --connect "$url" --connect-version moq-transport-22 \
-		--broadcast "$NAME" export ts 2>recv.log | tee out.ts |
+D | M)
+	exp=()
+	[ "$ARM" = M ] && exp=(--passthrough)
+	timeout "$SECS" "$MOQ/moq" --connect-tls-insecure --connect "$url" --connect-version "$ver" \
+		--broadcast "$NAME" export ts "${exp[@]}" 2>recv.log | tee out.ts |
 		python3 "$PCRT" --live --seconds "$SECS" --report-json release.json >release.txt 2>&1 &
 	;;
 *)
 	track=()
 	[ -n "${TRACK:-}" ] && track=(--track "$TRACK")
-	"$RECV" --url "$url" --namespace "$NAME" "${track[@]}" --out - --duration "$SECS" --insecure \
+	"$RECV" --url "$url" --namespace "$NAME" "${track[@]}" --out - --duration "$SECS" --insecure --draft "$DRAFT" \
 		--stats-json stats.json 2>recv.log | tee out.ts |
 		python3 "$PCRT" --live --seconds "$SECS" --report-json release.json >release.txt 2>&1 &
 	;;
