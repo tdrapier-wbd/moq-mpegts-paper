@@ -479,30 +479,27 @@ Dial-side flags renamed on the development branch warned and then did not take e
 
 ### OpenMOQ's MSFTS publisher through `moq-relay` — reported as [openmoq/moqxr#57](https://github.com/openmoq/moqxr/issues/57)
 
-[T11b](test-11-interop.md#t11b--openmoqs-msfts-publisher-through-a-moq-dev-relay) put the headless MSFTS example in `moqxr` 0.4.4 through a `moq-dev` relay and found four publisher-side problems, filed as one issue.
-
-- **A:** every object FINs its subgroup, so only object 0 is sent. The issue carries the one-line fix.
-- **B:** on draft 18 a cancelled subscription is never released, so every moq-lite subscriber through `moq-relay` is refused as a duplicate.
-- **C:** one group for the life of the stream, which the relay's group caps end at about 27 s at 10 Mb/s.
-- **D:** drafts 14, 16 and 17 fail on the relay's SUBSCRIBE_NAMESPACE.
-
-With the fix to A, the byte-level result stands on draft 18. **Closed by us** once the maintainer pointed to its successor, `moq2ts`, below.
+[T11b](test-11-interop.md#t11b--openmoqs-msfts-publisher-through-a-moq-dev-relay): the headless MSFTS example in `moqxr` 0.4.4 sent only object 0 (each object FINned its subgroup; one-line fix given), never released a cancelled draft-18 subscription, kept one group for the stream's life, which the relay's caps end at about 27 s, and failed drafts 14–17 on SUBSCRIBE_NAMESPACE. With the fix, draft 18 is byte-exact. **Closed by us** for its successor, `moq2ts`, below.
 
 ### `moq2ts`'s paced publisher and its final group — reported as [openmoq/moq2ts#8](https://github.com/openmoq/moq2ts/issues/8)
 
-[T11d](test-11-interop.md#t11d--moq2ts-headless-publisher-and-receiver-criteria-fixed-before-the-first-run): `moq2ts-cli --paced` sends a segment's bytes per fragment duration rather than at the source's rate, and its receiver gets the final group twice; otherwise the loop is byte-exact. Verified: pacing follows the PCR (`4717ce3`), and the final group no longer repeats with [openmoq/moq5#54](https://github.com/openmoq/moq5/pull/54) (`a734a91`). **Closed fixed: #54 merged.**
+[T11d](test-11-interop.md#t11d--moq2ts-headless-publisher-and-receiver-criteria-fixed-before-the-first-run): `moq2ts-cli --paced` sent a segment per fragment duration, not at the source's rate, and its receiver got the final group twice. Verified fixed: pacing follows the PCR (`4717ce3`), and [openmoq/moq5#54](https://github.com/openmoq/moq5/pull/54) (`a734a91`) ends the repeat. **Closed.**
 
 ### A multiplex program that fails to open stops every program — reported as [openmoq/moq2ts#62](https://github.com/openmoq/moq2ts/issues/62)
 
 From the [cross-check](cross-check.md) of `moq-dev`'s [#8828](https://github.com/moq-dev/moq/pull/8828), by code: at start-up `moq2ts` failed the pipeline when any program failed to open (`MptsPipeline.cpp`, `5e7b72e`). **Fixed** by [#63](https://github.com/openmoq/moq2ts/pull/63) and [#64](https://github.com/openmoq/moq2ts/pull/64), merged; not yet verified.
 
+### A `moq2ts` publisher refused by `moq-relay`'s announcements — reported as [openmoq/moqxr#156](https://github.com/openmoq/moqxr/issues/156) and [openmoq/moq2ts#70](https://github.com/openmoq/moq2ts/issues/70)
+
+[T86](test-86-moq2ts-evaluation.md#p2-t--restarts-and-loop-wraps) P2-t: `moqxr` closes its session after refusing the PUBLISH_NAMESPACE `moq-relay` sends unasked, so two publishers on one relay end each other's sessions, on drafts 18 and 22, and a restarted one is locked out until the relay drops its predecessor (#156). `moq2ts-receiver` never answers one (#70). Both are defects against the draft, which lets a publisher send PUBLISH_NAMESPACE to any subscriber. **Open.**
+
 ### moq5's relay and a late subscriber — reported as [openmoq/moq5#51](https://github.com/openmoq/moq5/issues/51)
 
-[T11c](test-11-interop.md#t11c--moq5-against-moq-dev-both-ways-criteria-fixed-before-the-first-run) direction 1: a passthrough import's catalog, published once before `moq5-relay` subscribed upstream, never reached a late `moq export ts`, on drafts 16, 18 and 22. **Closed by the maintainer**: draft 22's fill, served only from the relay's retained log, is fixed on moq5 `main`, and on 16 and 18 the repro needed `export ts --passthrough`. Verified: with it, all three drafts pass on `main` (T11 § _Corrections_).
+[T11c](test-11-interop.md#t11c--moq5-against-moq-dev-both-ways-criteria-fixed-before-the-first-run) direction 1: a passthrough import's catalog, published once before `moq5-relay` subscribed upstream, never reached a late `moq export ts`, on drafts 16, 18 and 22. **Closed by the maintainer**: draft 22's fill is fixed on moq5 `main`, and on 16 and 18 the repro needed `export ts --passthrough`; with it all three drafts pass (T11 § _Corrections_).
 
 ### imquic's relay and a group's final object — reported as [meetecho/imquic#44](https://github.com/meetecho/imquic/issues/44)
 
-[T11](test-11-interop.md): through imquic's relay on draft 22, `moq-dev`'s subscriber lacked a group's final object at the same ten of nineteen boundaries each run. The relay sent each on a second stream of its subgroup, which that subscriber drops: imquic's parser marks every object of the chunk carrying a stream's FIN as its end. **Fixed by the maintainer and closed**; verified on loopback against stock and [on the public relay](https://github.com/meetecho/imquic/issues/44#issuecomment-6686805894): no group split, every final object delivered.
+[T11](test-11-interop.md): through imquic's relay on draft 22, `moq-dev`'s subscriber lacked a group's final object at the same ten of nineteen boundaries each run. The relay sent each on a second stream of its subgroup, which that subscriber drops: imquic's parser marks every object of the chunk carrying a stream's FIN as its end. **Fixed and closed**; verified on loopback and [on the public relay](https://github.com/meetecho/imquic/issues/44#issuecomment-6686805894): every final object delivered.
 
 ### No common version, no cause logged — reported as [#8451](https://github.com/moq-dev/moq/issues/8451)
 
