@@ -264,7 +264,7 @@ Since [#8638](https://github.com/moq-dev/moq/pull/8638) (groups addressed by the
 
 ### What a receiving site's analysers flag on the exports — reported
 
-`export ts` repeats PAT and PMT every 500 ms and each SI table at its TR 101 290 limit, on a frame, so the DVB analyser flags them continually: [#9085](https://github.com/moq-dev/moq/issues/9085). Our [#9185](https://github.com/moq-dev/moq/pull/9185) (open) has the schedule repeat the tables every 100 ms of the PCR grid, and SI at half its limit; on a replay of the feed, PAT/PMT gaps peak at 101 ms, `main`'s at 824 ms. `export ts --passthrough` writes each PCR interval in one burst, so the feed reads as VBR and an SRT sender's default socket buffer drops datagrams that the direct SRT feed keeps: [#9173](https://github.com/moq-dev/moq/issues/9173). Both [T83](test-83-mixed-plane-pair.md) Part E, unchanged on `main`.
+`export ts` repeats PAT and PMT every 500 ms and each SI table at its TR 101 290 limit, on a frame, so the DVB analyser flags them: [#9085](https://github.com/moq-dev/moq/issues/9085). Our [#9185](https://github.com/moq-dev/moq/pull/9185) (open) has the schedule repeat the tables every 100 ms of the PCR grid, and SI at half its limit; on a replay of the feed, PAT/PMT gaps peak at 101 ms, `main`'s at 824 ms. `export ts --passthrough` writes each PCR interval in one burst, so the feed reads as VBR and an SRT sender's default socket buffer drops datagrams: [#9173](https://github.com/moq-dev/moq/issues/9173). Our [#9232](https://github.com/moq-dev/moq/pull/9232) (open) paces each in runs of seven packets. Both [T83](test-83-mixed-plane-pair.md) Part E.
 
 ---
 
