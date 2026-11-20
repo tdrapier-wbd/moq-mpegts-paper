@@ -1,16 +1,18 @@
 #!/usr/bin/env python3
 """Wait for Codex's and CodeRabbit's reviews of a pull request's current head; return once both
-have finished on it, never after a fixed wait.
+have finished on it, never after a fixed wait. With `--once`, read the state once and return: the
+first step of a session that resumes a pull request left awaiting its feedback.
 
-    pr-await-bots.py <owner/repo> <pr> [--poll 30] [--max-min 45] [--no-codex]
+    pr-await-bots.py <owner/repo> <pr> [--poll 30] [--max-min 45] [--no-codex] [--once]
 
 Codex is done when its summary comment's `codex-review-state` names the head with status
 `completed`. CodeRabbit is done when it has a review on the head, or its summary marks the head
 assessed with no review in progress. A Codex status naming a failure, and CodeRabbit's "Reviews
 paused" or "Review skipped", end that bot's wait as a failure. A push meanwhile restarts both on the
 new head. Then it prints the head's review comments and review bodies, the input to the loop's
-reply step. Exit 0 when both finished, 2 when a bot failed, paused or skipped, 1 on timeout, 3 when
-the PR is a draft (CodeRabbit skips drafts; Codex waits for ready).
+reply step, and the head's checks. Exit 0 when both finished, 2 when a bot failed, paused or
+skipped, 1 on timeout, 3 when the PR is a draft (CodeRabbit skips drafts; Codex waits for ready), 4
+under `--once` while a bot or a check is still running on the head.
 """
 import argparse
 import json
@@ -75,6 +77,23 @@ def rabbit_state(comments, reviews, head):
     return "waiting", "no review on the head"
 
 
+def checks(repo, n):
+    """The head's checks by outcome, from `gh pr checks` (whose exit status encodes them too)."""
+    out = subprocess.run(["gh", "pr", "checks", str(n), "-R", repo, "--json", "name,bucket"], capture_output=True, text=True)
+    if not out.stdout.strip():
+        return {}
+    by = {}
+    for c in json.loads(out.stdout):
+        by.setdefault(c["bucket"], []).append(c["name"])
+    return by
+
+
+def checks_line(by):
+    if not by:
+        return "checks: none reported"
+    return "checks: " + "; ".join(f"{k} {len(v)}" + (f" ({', '.join(v)})" if k in ("fail", "cancel", "pending") else "") for k, v in sorted(by.items()))
+
+
 def report(repo, n, head):
     comments = paged(f"repos/{repo}/pulls/{n}/comments?per_page=100")
     reviews = paged(f"repos/{repo}/pulls/{n}/reviews?per_page=100")
@@ -94,6 +113,7 @@ def main():
     ap.add_argument("--poll", type=int, default=30, help="seconds between polls")
     ap.add_argument("--max-min", type=int, default=45, help="give up after this many minutes")
     ap.add_argument("--no-codex", action="store_true", help="wait for CodeRabbit only")
+    ap.add_argument("--once", action="store_true", help="read the state once, without waiting")
     a = ap.parse_args()
     deadline = time.time() + a.max_min * 60
     head, last = None, None
@@ -117,8 +137,16 @@ def main():
         if line[9:] != last:
             print(line, flush=True)
             last = line[9:]
+        if a.once:
+            by = checks(a.repo, a.pr)
+            print(checks_line(by))
+            if "waiting" in (cx[0], cr[0]) or "pending" in by:
+                print("feedback still pending on the head: end the session and re-check later")
+                return 4
         if cx[0] != "waiting" and cr[0] != "waiting":
             report(a.repo, a.pr, head)
+            if not a.once:
+                print(checks_line(checks(a.repo, a.pr)))
             return 2 if "failed" in (cx[0], cr[0]) else 0
         if time.time() > deadline:
             print(f"timed out after {a.max_min} min")
