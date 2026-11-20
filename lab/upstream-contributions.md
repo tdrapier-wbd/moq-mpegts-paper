@@ -479,7 +479,7 @@ Dial-side flags renamed on the development branch warned and then did not take e
 
 ### OpenMOQ's MSFTS publisher through `moq-relay` — reported as [openmoq/moqxr#57](https://github.com/openmoq/moqxr/issues/57)
 
-[T11b](test-11-interop.md#t11b--openmoqs-msfts-publisher-through-a-moq-dev-relay): the headless MSFTS example in `moqxr` 0.4.4 sent only object 0 (each object FINned its subgroup; one-line fix given), never released a cancelled draft-18 subscription, kept one group for the stream's life, which the relay's caps end at about 27 s, and failed drafts 14–17 on SUBSCRIBE_NAMESPACE. With the fix, draft 18 is byte-exact. **Closed by us** for its successor, `moq2ts`, below.
+[T11b](test-11-interop.md#t11b--openmoqs-msfts-publisher-through-a-moq-dev-relay): the headless MSFTS example in `moqxr` 0.4.4 sent only object 0 (each object closed its subgroup with a FIN; one-line fix given), never released a cancelled draft-18 subscription, kept one group for the stream's life, which the relay's caps end at about 27 s, and failed drafts 14–17 on SUBSCRIBE_NAMESPACE. With the fix, draft 18 is byte-exact. **Closed by us** for its successor, `moq2ts`, below.
 
 ### `moq2ts`'s paced publisher and its final group — reported as [openmoq/moq2ts#8](https://github.com/openmoq/moq2ts/issues/8)
 
