@@ -10,11 +10,13 @@
 # the receivers get TAIL_S more seconds. M runs on moq-lite-07 (MVER), clear of moq#9081.
 # env: MOQ (moq-dev bin dir), CLI, RECV (moq2ts), CLIP, PORT (default 4433), DRAFT (default 22),
 #      PROGRAMS (default "1 2 3"), SEG (cell U's moq2ts-cli object bytes, default 621528: 250 ms of
-#      a 19.9 Mb/s multiplex), TAIL_S (default 15)
+#      a 19.9 Mb/s multiplex), TAIL_S (default 15), JOIN_AT (receivers start this many s after the
+#      source rather than before it; P2-u). events.log: the source's and each receiver's start.
 set -u
 OUT=$1 ARM=$2 CELL=$3
 MOQ=${MOQ:?} CLI=${CLI:?} RECV=${RECV:?} CLIP=${CLIP:?}
-PORT=${PORT:-4433} DRAFT=${DRAFT:-22} PROGRAMS=${PROGRAMS:-1 2 3} TAIL_S=${TAIL_S:-15}
+PORT=${PORT:-4433} DRAFT=${DRAFT:-22} PROGRAMS=${PROGRAMS:-1 2 3} TAIL_S=${TAIL_S:-15} JOIN_AT=${JOIN_AT:-0}
+TAP="$(cd "$(dirname "$0")" && pwd)/t67p-tap.py"
 mkdir -p "$OUT" && cd "$OUT" || exit 1
 url="moqt://127.0.0.1:$PORT" ver="moq-transport-$DRAFT" name=t86v.msf
 if [ "$ARM" = M ]; then
@@ -34,39 +36,48 @@ moq=("$MOQ/moq" --connect-tls-insecure --connect "$url" --connect-version "$ver"
 relay=$!
 sleep 1
 
-# moq2ts-receiver exits at once while no catalog exists: retry until its output has a byte
-rx() { # <out.ts> <stats.json> <log> [--track <name>]
-	local out=$1 stats=$2 log=$3 tries=0
-	shift 3
+log() { echo "$(python3 -c 'import time; print(f"{time.time():.3f}")') $*" >>events.log; }
+
+# moq2ts-receiver exits at once while no catalog exists: retry until its output has a byte. Each
+# receiver's output is tapped every 100 ms into arrivals-<label>.csv.
+rx() { # <out.ts> <label> [--track <name>]
+	local out=$1 label=$2 tries=0
+	shift 2
+	log "receiver $label start"
 	while [ "$tries" -lt 100 ]; do
 		tries=$((tries + 1))
-		"$RECV" --url "$url" --namespace "$name" "$@" --out "$out" --duration "$secs" --insecure \
-			--draft "$DRAFT" --stats-json "$stats" 2>>"$log"
+		"$RECV" --url "$url" --namespace "$name" "$@" --out - --duration "$((secs - JOIN_AT))" --insecure \
+			--draft "$DRAFT" --stats-json "stats-$label.json" 2>>"recv-$label.log" |
+			python3 "$TAP" "arrivals-$label.csv" --tee --interval 0.1 >"$out"
 		[ -s "$out" ] && break
 		sleep 0.2
 	done
 	echo "$out: $tries attempts" >>attempts.txt
 }
+ex() { # <out.ts> <label> <broadcast> [--passthrough]
+	local out=$1 label=$2 bc=$3
+	shift 3
+	log "receiver $label start"
+	timeout "$((secs - JOIN_AT))" "${moq[@]}" --broadcast "$bc" export ts "$@" 2>"recv-$label.log" |
+		python3 "$TAP" "arrivals-$label.csv" --tee --interval 0.1 >"$out"
+}
 
 recv=()
-if [ "$CELL" = U ]; then
-	if [ "$ARM" = M ]; then
-		timeout "$secs" "${moq[@]}" --broadcast "$name" export ts --passthrough >out.ts 2>recv.log &
-	else
-		rx out.ts stats.json recv.log &
-	fi
-	recv+=($!)
-else
-	for n in $PROGRAMS; do
-		if [ "$ARM" = M ]; then
-			timeout "$secs" "${moq[@]}" --broadcast "t86v/$n.hang" export ts >"egress-$n.ts" 2>"recv-$n.log" &
-		else
-			rx "egress-$n.ts" "stats-$n.json" "recv-$n.log" --track "program-$n" &
-		fi
+start_receivers() {
+	if [ "$CELL" = U ]; then
+		if [ "$ARM" = M ]; then ex out.ts u "$name" --passthrough & else rx out.ts u & fi
 		recv+=($!)
-	done
+	else
+		for n in $PROGRAMS; do
+			if [ "$ARM" = M ]; then ex "egress-$n.ts" "$n" "t86v/$n.hang" & else rx "egress-$n.ts" "$n" --track "program-$n" & fi
+			recv+=($!)
+		done
+	fi
+}
+if [ "$JOIN_AT" = 0 ]; then
+	start_receivers
+	sleep 1
 fi
-sleep 1
 
 if [ "$ARM" = A ] && [ "$CELL" = P ]; then
 	python3 - "$url" "$name" "$DRAFT" "$PROGRAMS" >config.json <<'EOF'
@@ -88,8 +99,13 @@ MP) pub=("${moq[@]}" --broadcast "$name" import ts --program all) ;;
 *) echo "unknown arm or cell: $ARM $CELL" >&2 && exit 2 ;;
 esac
 date -u +"source start %T" >>build.txt
+log "source start"
 tsp -I file "$CLIP" -P regulate --pcr-synchronous -O file - 2>tsp.log | "${pub[@]}" >send.log 2>&1 &
 send=$!
+if [ "$JOIN_AT" != 0 ]; then
+	sleep "$JOIN_AT"
+	start_receivers
+fi
 wait "${recv[@]}"
 echo "receivers done; publisher $(kill -0 "$send" 2>/dev/null && echo running || echo exited)" >>build.txt
 kill "$send" 2>/dev/null
