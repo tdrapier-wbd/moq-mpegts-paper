@@ -12,7 +12,8 @@
 #   T0=<epoch s> ROLE=src|rcv PEER=<other host> BIN=<moq dir> t83d-skip.sh <label>
 #
 # Env: PORT (4810), FEED (239.255.0.1:5000), DELAYS ("2s 5822ms"), BURSTS ("0.25 0.5 1 1.5 2 3 4"),
-#      REPS (3), CONTROL (60 s), GAP (25 s), OUT (/tmp/t83d-skip), BIND (first of `hostname -I`).
+#      REPS (3), CONTROL (60 s), GAP (25 s), OUT (/tmp/t83d-skip), BIND (first of `hostname -I`),
+#      QLOG (1; empty: the relay writes no qlog).
 set -uo pipefail
 
 H=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
@@ -29,6 +30,7 @@ REPS=${REPS:-3}
 CONTROL=${CONTROL:-60}
 GAP=${GAP:-25}
 OUT=${OUT:-/tmp/t83d-skip}/$LABEL
+QLOG=${QLOG-1}
 BC=t83d.skip.$LABEL
 FIRST=$((T0 + 10 + CONTROL))
 SECS=$((FIRST + ${#BURSTS[@]} * REPS * GAP + 10 - T0))
@@ -65,7 +67,7 @@ if [ "$ROLE" = src ]; then
 	moq_cli_detect "$BIN/moq" "$BIN/moq-relay"
 	until_t "$T0"
 	setsid "$BIN/moq-relay" --listen "$BIND:$PORT" --listen-tls-generate "$BIND" "${RELAY_AUTH[@]}" \
-		--quic-gso=false --quic-qlog "$OUT/qlog" --log-level info >"$OUT/relay.log" 2>&1 &
+		--quic-gso=false ${QLOG:+--quic-qlog "$OUT/qlog"} --log-level info >"$OUT/relay.log" 2>&1 &
 	PIDS+=("$!")
 	stamp relay_start
 	sleep 2
