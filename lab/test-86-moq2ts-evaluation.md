@@ -1,6 +1,6 @@
 # T86 — OpenMOQ's `moq2ts` through the campaign's tests
 
-**State: P2-r to P2-v run. `moq2ts` passes P2-r and P2-s; P2-t found three issues, filed, and on a publisher restart it loses 42.7 s against `moq-dev`'s 14 s. P2-u: both pairs carry 9.95 Mb/s whole to 1 % random loss and neither from 3 %, where `moq2ts` loses 2.6–12.5 s more than `moq-dev`'s `main`; a late join is prompt on both. P2-v: it carries a multiplex whole and each programme as its own track with nothing lost, but joins a programme 4.3–4.6 s after start-up, past the 3 s allowed.** Roadmap rows P2-r to P2-w put the campaign's tests to `moq2ts`'s headless publisher (`moq2ts-cli`) and console receiver (`moq2ts-receiver`), beside `moq-dev`'s own pair on the same clips and graders. Each row is a section here. A gap found becomes one issue on `moq2ts`, saying when it is a difference between `moq-dev` and the MoQT draft rather than a defect (OpenMOQ's request).
+**State: P2-r to P2-w run. `moq2ts` passes P2-r and P2-s; P2-t found three issues, filed, and on a publisher restart it loses 42.7 s against `moq-dev`'s 14 s. P2-u: both pairs carry 9.95 Mb/s whole to 1 % random loss and neither from 3 %, where `moq2ts` loses 2.6–12.5 s more than `moq-dev`'s `main`; a late join is prompt on both. P2-v: it carries a multiplex whole and each programme as its own track with nothing lost, but joins a programme 4.3–4.6 s after start-up, past the 3 s allowed. P2-w: it carries the live feed unchanged, byte for byte through its captured splice, as `moq-dev`'s passthrough does.** Roadmap rows P2-r to P2-w put the campaign's tests to `moq2ts`'s headless publisher (`moq2ts-cli`) and console receiver (`moq2ts-receiver`), beside `moq-dev`'s own pair on the same clips and graders. Each row is a section here. A gap found becomes one issue on `moq2ts`, saying when it is a difference between `moq-dev` and the MoQT draft rather than a defect (OpenMOQ's request).
 
 ## Environment
 
@@ -180,3 +180,39 @@ _Conclusions._
 2. **Through the same loss `moq-dev` delivers more.** On its current `main` both receivers write through the gaps, and `moq2ts` loses 2.6–12.5 s more of the 60 s at every lossy rung.
 3. **A late join is prompt on both, and per programme too.** `moq2ts` joins a running broadcast or programme within 0.4–1.7 s, closer to the live edge than `moq-dev`. P2-v's 4.3–4.6 s join is therefore a start-up cost only.
 4. **Nothing new to file.** The late receiver's hold is #73's mechanism, and `moq-dev`'s exit on starvation does not reproduce on its `main`.
+
+## P2-w — the live feed
+
+Two captures of the live feed (hardware encoder, 25.000 Mb/s CBR, 1080i25 H.264, MP2, AC-3, teletext and three SCTE-35 PIDs), each released once at 25 Mb/s by [`t86-loss.sh`](scripts/t86-loss.sh) with the shaper passing everything (no loss, no delay) and the receiver started first. The release is `tsp -P regulate --bitrate 25000000`, since pacing on PCR would follow a step.
+
+- **The step (S).** [T34](test-34-real-encoder-severity.md#a-switch-between-two-encodes-the-first-graded-step)'s ring around the feed's one captured step, an unflagged splice to a second encode 16,844.6 s behind, lifted 30,000 s as T34 and T67 replayed it: 97.1 s, the splice 71.9 s in.
+- **The long capture (L).** 300 s of the feed at its hand-off, without a step.
+
+Arm A is `moq2ts-cli --unmodified` (objects of 250 ms, `--segment-bytes 781140`) → `moq2ts-receiver`, draft 22, as in P2-u. Arm M is `moq-dev` `main` `b45179d39b`'s passthrough pair, `moq-lite-07`, on which a passthrough import splices a clock step instead of ending. One run per cell and arm. Graded by [`t86-units-grade.py`](scripts/t86-units-grade.py), which matches each output's units against the capture's on T83 Part C's parser ([`t83c-shadow.py`](scripts/t83c-shadow.py) `units`: an audio frame, a PES or a SCTE-35 section, keyed by PID and PTS and compared by digest), and by `t86-loss-grade.py` for byte identity, the join and read gaps.
+
+_Criteria, fixed before running:_
+
+1. **The grader's controls hold.** The step capture against itself: every unit present. With 2 s of packets cut 1 s after the splice: 1.96 s of video missing, starting 1.85 s after the splice, every loss within 5 s of it. With 1 s cut at 20 s: 0.92 s of video missing, every loss more than 5 s from the splice. _Run before the first capture: all three hold._
+2. **Cell L conserves the feed.** From each arm's join to the capture's end, every unit is present with its digest, none altered, missing or added.
+3. **Cell S conserves the feed away from the step.** As criterion 2 for every unit more than 5 s from the splice; neither receiver ends before the capture does.
+4. **The step costs `moq2ts` no more than `moq-dev`.** Arm A's video missing or altered within 5 s of the splice is within 0.5 s of arm M's.
+5. **Reported:** the step's cost on each arm in seconds of video, against SRT's nothing and the 2.8 s of T34's best case on the design that ended the import; byte identity; the join; the longest read gap.
+
+_Results._ Every criterion holds.
+
+| Cell, arm | Units graded | Missing, altered, added | Byte identity from the first byte | First byte, behind live | Longest read gap |
+| --- | --: | --: | --- | --- | --: |
+| S, `moq2ts` | 11,993 | 0 | whole; the source's 12 continuity breaks and one PCR step | 2.44 s in, 0.28 s | 1,069 ms |
+| S, `moq-dev` | 12,285 | 0 | whole, as above | 0.09 s in, 1.06 s | 30 ms |
+| L, `moq2ts` | 37,560 | 0 | whole | 2.27 s in, 0.19 s | 1,046 ms |
+| L, `moq-dev` | 37,711 | 0 | whole | 1.08 s in, 1.06 s | 209 ms |
+
+- **The step costs nothing on either arm (criteria 3 and 4 hold).** Each output is the capture's bytes from its first byte to the end, through the splice. Every unit within 5 s of it is present with its digest. Neither receiver ends early.
+- **The long capture is conserved (criterion 2 holds).** On both arms, every unit from the join to the end is present with its digest, and the output is the capture's bytes.
+- **The join is graded per PID.** The first run found every loss within the first 0.6 s after the join: audio frames of PES begun before the output's first byte, which the feed's long, unaligned audio PES make undeliverable. Byte identity showed nothing lost after that byte. The grader now takes the join from the first unit other than a SCTE-35 section (a section is keyed by its CRC, which repeats), and grades each PID from its own first unit delivered. Its three controls give the same results after the change.
+- **The read gaps are each receiver's cadence**, as at P2-u's rung 0: `moq2ts-receiver` writes about once a second.
+
+_Conclusions._
+
+1. **`moq2ts` carries the live feed unchanged, its unflagged splice included.** The 300 s of a hardware encode, and T34's switch to a second encode 16,844.6 s behind with no `discontinuity_indicator`, cross `moq-relay` byte for byte on draft 22. `moq-dev`'s passthrough on `main` does the same, as [T67](test-67-import-step-restart.md) found on the same capture. Where T34's design lost 9.8 s at this step (2.8 s at best), neither opaque lane now loses anything.
+2. **Nothing to file.**

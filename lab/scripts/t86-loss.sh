@@ -9,12 +9,13 @@
 # env: MOQ (moq-dev bin dir), CLI, RECV (moq2ts), CLIP, PORT (default 4433; the shaper listens on
 #      PORT+1), LOSS (percent, default 0), DELAY_MS (default 15), JOIN_AT (default 0), DRAFT (22),
 #      SEG (moq2ts-cli object bytes, default 310764: 250 ms of 9.95 Mb/s), TAIL_S (default 15),
-#      RELAY_CC (the relay's congestion controller, default bbr)
+#      RELAY_CC (the relay's congestion controller, default bbr), RATE (CLIP's b/s, default 9945951),
+#      REGULATE (tsp regulate's options, default --pcr-synchronous; --bitrate N across a clock step)
 set -u
 OUT=$1 ARM=$2
 MOQ=${MOQ:?} CLI=${CLI:?} RECV=${RECV:?} CLIP=${CLIP:?}
 PORT=${PORT:-4433} LOSS=${LOSS:-0} DELAY_MS=${DELAY_MS:-15} JOIN_AT=${JOIN_AT:-0} DRAFT=${DRAFT:-22}
-TAIL_S=${TAIL_S:-15}
+TAIL_S=${TAIL_S:-15} RATE=${RATE:-9945951} REGULATE=${REGULATE:---pcr-synchronous}
 HERE=$(cd "$(dirname "$0")" && pwd)
 mkdir -p "$OUT" && cd "$OUT" || exit 1
 SPORT=$((PORT + 1))
@@ -30,9 +31,9 @@ printf '[log]\nlevel = "info"\n\n[listen]\nbind = "127.0.0.1:%s"\ntls.generate =
 	"$PORT" "$pub" >relay.toml
 {
 	cat "$MOQ.sha" 2>/dev/null
-	echo "arm $ARM relay_cc ${RELAY_CC:-bbr} loss $LOSS delay_ms $DELAY_MS join_at $JOIN_AT clip $CLIP"
+	echo "arm $ARM relay_cc ${RELAY_CC:-bbr} loss $LOSS delay_ms $DELAY_MS join_at $JOIN_AT clip $CLIP rate $RATE regulate $REGULATE"
 } >build.txt
-secs=$(($(python3 -c "import os; print(int(os.path.getsize('$CLIP') * 8 / 9.945951e6))") + TAIL_S + 5))
+secs=$(($(python3 -c "import os; print(int(os.path.getsize('$CLIP') * 8 / $RATE))") + TAIL_S + 5))
 log() { echo "$(python3 -c 'import time; print(f"{time.time():.3f}")') $*" >>events.log; }
 
 "$MOQ/moq-relay" relay.toml --quic-gso=false --quic-congestion-control "${RELAY_CC:-bbr}" >relay.log 2>&1 &
@@ -81,7 +82,8 @@ if [ "$JOIN_AT" = 0 ]; then
 fi
 log "source start"
 (
-	tsp -I file "$CLIP" -P regulate --pcr-synchronous -O file - 2>tsp.log | publish >send.log 2>&1
+	# shellcheck disable=SC2086
+	tsp -I file "$CLIP" -P regulate $REGULATE -O file - 2>tsp.log | publish >send.log 2>&1
 	log "publisher exit"
 ) &
 send=$!
