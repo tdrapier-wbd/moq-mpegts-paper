@@ -254,9 +254,9 @@ T28's attribution depends on neither, because it rests on the acknowledgement fr
 
 [T28](test-28-failure-injection-matrix.md)'s gaps to SRT trace to four QUIC defaults: a controller that yields to random loss, reorder thresholds that declare overtaken packets lost, a probe backoff that delays recovery after an outage, and the idle timeout. **Decided:** the probe timer re-arms when the peer is heard again, by default (merged as our [#6178](https://github.com/moq-dev/moq/pull/6178)); declined on random-loss and `netem`-reorder evidence, a rate-holding controller, exposed reorder thresholds and a profile. Closed. The outage evidence, with [T84](test-84-moq-cdn-relay-impairment.md)'s, names trunks as the consumer the pruned `quic-deadline` and `quic-careful-resume` quests lacked: [#8559](https://github.com/moq-dev/moq/issues/8559), open.
 
-### The relay gives up inside a subscriber's delay — reported, fixed
+### The relay gives up inside a subscriber's delay — reported, fixed, regressed
 
-Under inbound blackouts across a 117 ms path, `moq-relay` reset a subscriber's groups as `Old` at stalls of 0.6 s under `export ts --delay 2s` and 1.6–2.1 s at 5,822 ms, QUIC recovering within 0.1 s ([T83](test-83-mixed-plane-pair.md) Part D). **Cause:** the TS export stated half its delay as the subscription's maximum. **Fixed** by [#9067](https://github.com/moq-dev/moq/pull/9067), merged: every TS subscription states its whole delay, as does the export's own skip. Re-run: each export evicts only at stalls that reach its delay.
+Under blackouts across a 117 ms path, `moq-relay` reset a subscriber's groups `Old` at stalls of 0.6 s under `export ts --delay 2s` and 1.6–2.1 s at 5,822 ms, QUIC recovering within 0.1 s ([T83](test-83-mixed-plane-pair.md) Part D). **Cause:** the TS export stated half its delay as the subscription's maximum. **Fixed** by [#9067](https://github.com/moq-dev/moq/pull/9067): exports then evicted only at stalls reaching their delay. Current `main`'s relay evicts from 0.56 s and 2.04 s, where `3c0daa21` serving the same clients does not.
 
 ### The media-aware export drops a field-coded feed's pictures — reported
 

@@ -60,8 +60,11 @@ mkdir -p "$OUT"
 if [ "$ROLE" = src ]; then
 	BIND=${BIND:-$(hostname -I | awk '{print $1}')}
 	mkdir -p "$OUT/qlog"
+	# shellcheck source=moq-cli-flags.sh
+	. "$H/moq-cli-flags.sh"
+	moq_cli_detect "$BIN/moq" "$BIN/moq-relay"
 	until_t "$T0"
-	setsid "$BIN/moq-relay" --listen "$BIND:$PORT" --listen-tls-generate "$BIND" --auth-public "**" \
+	setsid "$BIN/moq-relay" --listen "$BIND:$PORT" --listen-tls-generate "$BIND" "${RELAY_AUTH[@]}" \
 		--quic-gso=false --quic-qlog "$OUT/qlog" --log-level info >"$OUT/relay.log" 2>&1 &
 	PIDS+=("$!")
 	stamp relay_start

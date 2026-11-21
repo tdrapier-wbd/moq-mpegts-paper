@@ -8,9 +8,16 @@ it sent after the burst ended. Resets are the RESET_STREAM frames the relay sent
 window (its start to the next burst's), by application code: WebTransport maps code n onto
 0x52e4a40fa8db + n + n // 0x1e, and moq-lite's `Old` is 0x34. Times are the epoch in each file's
 name plus the event's offset; the importer's connection (a local peer) is skipped.
+
+Later relays write one `.sqlog` for every connection, keyed by `group_id`, timed from the relay's
+start (`relay_start` in the `events.txt` beside the qlog directory) and with no frames. There the
+stall ends at the first packet the relay received on the connection after the burst, which is the
+receiving host's acknowledgement unless one of its own probes lands first; resets are not visible,
+and the first connection, the importer's, is skipped.
 """
 
 import argparse
+import bisect
 import glob
 import json
 import os
@@ -76,6 +83,27 @@ def connection(path, bs):
     return peer, t0, stall, resets
 
 
+def sequential(path, bs, start):
+    received = {}
+    with open(path, "rb") as f:
+        for rec in f.read().split(b"\x1e"):
+            if b"packet_received" not in rec:
+                continue
+            try:
+                e = json.loads(rec)
+            except ValueError:
+                continue
+            received.setdefault(e.get("group_id"), []).append(start + e["time"] / 1000)
+    out = []
+    for g, ts in sorted(received.items(), key=lambda kv: kv[1][0])[1:]:
+        stall = []
+        for b in bs:
+            i = bisect.bisect_left(ts, b[3])
+            stall.append(round(ts[i] - b[2], 3) if i < len(ts) else None)
+        out.append({"file": g, "peer_start": ts[0], "stall_s": stall, "resets": [{} for _ in bs]})
+    return out
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("qlog")
@@ -84,6 +112,10 @@ def main():
     a = ap.parse_args()
     bs = bursts(a.events)
     out = []
+    starts = os.path.join(os.path.dirname(os.path.abspath(a.qlog)), "events.txt")
+    for p in sorted(glob.glob(f"{a.qlog}/*.sqlog")):
+        start = next(float(line.split()[-1]) for line in open(starts) if line.startswith("relay_start"))
+        out += sequential(p, bs, start)
     for p in sorted(glob.glob(f"{a.qlog}/*.qlog")):
         peer, t0, stall, resets = connection(p, bs)
         if peer is None or peer.startswith(("10.", "127.")):
