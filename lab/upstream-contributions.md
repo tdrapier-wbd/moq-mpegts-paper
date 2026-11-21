@@ -493,9 +493,9 @@ From the [cross-check](cross-check.md) of `moq-dev`'s [#8828](https://github.com
 
 [T86](test-86-moq2ts-evaluation.md#p2-t--restarts-and-loop-wraps) P2-t: `moqxr` closes its session after refusing the PUBLISH_NAMESPACE `moq-relay` sends unasked, so publishers on one relay end each other's sessions and a restarted one waits out its predecessor (#156). `moq2ts-receiver` never answers one (#70); both are defects against the draft. After PUBLISH_DONE the receiver waits moq5's default 30 s, losing 42.7 s against `moq-dev`'s 14 s (#73). **#156 fixed** by [openmoq/moqxr#157](https://github.com/openmoq/moqxr/pull/157), not yet verified; #70 and #73 open.
 
-### T86's kit and test arms — offered as [openmoq/moq2ts#74](https://github.com/openmoq/moq2ts/issues/74) and [moq-dev/moq#9315](https://github.com/moq-dev/moq/issues/9315)
+### T86's kit and test arms — offered as [openmoq/moq2ts#74](https://github.com/openmoq/moq2ts/issues/74), [moq-dev/moq#9315](https://github.com/moq-dev/moq/issues/9315) and [englishm/moq-interop-runner#206](https://github.com/englishm/moq-interop-runner/pull/206)
 
-[`kits/t86/`](kits/t86/README.md) reruns T86 from synthetic inputs, offered to OpenMOQ. #9315 proposes three `just test ts` arms: an unflagged splice through passthrough, an import restart under a running export, and a late join to one program. **Open.**
+[`kits/t86/`](kits/t86/README.md) reruns T86 from synthetic inputs, offered to OpenMOQ. #9315 proposes three `just test ts` arms: an unflagged splice through passthrough, an import restart, and a late join to one program; #206 proposes three runner scenarios. **Open.**
 
 ### moq5's relay and a late subscriber — reported as [openmoq/moq5#51](https://github.com/openmoq/moq5/issues/51)
 
