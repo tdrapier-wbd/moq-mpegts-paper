@@ -10,6 +10,7 @@ a contribution made between two encoders whose clocks were not locked (T34), wit
 
 usage: t64-switch.py <out.ts> [back|forward]
 env:   STEP (16844.5 s), CUT (30 s into the first encode), SECS (60, each encode's length),
+       SIZE (1280x720), VRATE (video b/s, 4000000), MUXRATE (6000000),
        BASE (33155.5 s, the lower clock, so a step back stays above zero; the upper is BASE + STEP),
        KEY (0.08 s, the second encode's first keyframe after the switch, in decode order)
 """
@@ -27,6 +28,9 @@ CUT = float(os.environ.get("CUT", "30"))
 SECS = float(os.environ.get("SECS", "60"))
 BASE = float(os.environ.get("BASE", "33155.5"))
 KEY = float(os.environ.get("KEY", "0.08"))
+SIZE = os.environ.get("SIZE", "1280x720")
+VRATE = os.environ.get("VRATE", "4000000")
+MUXRATE = os.environ.get("MUXRATE", "6000000")
 # The second encode starts this far into the programme, and cuts its GOPs at another length (frames
 # at 25 Hz).
 SKEW = 0.28
@@ -35,16 +39,16 @@ GOP_A, GOP_B = 24, 30
 
 def encode(path, offset, skew, gop, muxdelay):
     cmd = ["ffmpeg", "-hide_banner", "-loglevel", "error", "-y"]
-    for graph in ("testsrc2=size=1280x720:rate=25", "sine=frequency=1000:sample_rate=48000",
+    for graph in (f"testsrc2=size={SIZE}:rate=25", "sine=frequency=1000:sample_rate=48000",
                   "sine=frequency=440:sample_rate=48000"):
         cmd += ["-ss", str(skew), "-t", str(SECS), "-f", "lavfi", "-i", graph]
     cmd += [
         "-map", "0:v", "-map", "1:a", "-map", "2:a",
         "-c:v", "libx264", "-preset", "veryfast", "-profile:v", "high", "-pix_fmt", "yuv420p",
         "-g", str(gop), "-keyint_min", str(gop), "-sc_threshold", "0", "-bf", "2",
-        "-b:v", "4M", "-maxrate", "4M", "-bufsize", "4M", "-x264-params", "nal-hrd=cbr",
+        "-b:v", VRATE, "-maxrate", VRATE, "-bufsize", VRATE, "-x264-params", "nal-hrd=cbr",
         "-c:a:0", "mp2", "-b:a:0", "192k", "-c:a:1", "ac3", "-b:a:1", "192k",
-        "-f", "mpegts", "-muxrate", "6000000", "-pcr_period", "20", "-mpegts_flags", "+nit",
+        "-f", "mpegts", "-muxrate", MUXRATE, "-pcr_period", "20", "-mpegts_flags", "+nit",
         "-mpegts_service_id", "1", "-mpegts_pmt_start_pid", "0x100", "-mpegts_start_pid", "0x101",
         "-metadata", "service_provider=synthetic", "-metadata", "service_name=switch",
         "-muxdelay", str(muxdelay), "-output_ts_offset", str(offset), path,
