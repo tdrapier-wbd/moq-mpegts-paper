@@ -1,6 +1,6 @@
 # Test 67 — The import's own restart at an unflagged encoder switch
 
-**State: run, three times per stimulus and a control, on two builds.** At an unflagged encoder switch, back or forward, the import republishes itself and neither export ends. Past the catalog fix a switch costs 160 ms of programme on T64's stimulus, the truncated picture and the wait for a random-access one; on T34's capture it still costs 1,600 ms, because the import announces the new instance 1.2 s late, its catalog waiting on every track, and the stitched export starts at its second group (traced). Behind a supervisor it cost 2,400–2,800 ms. The passthrough lane, which ended at a step back, carries both directions with every byte on the open #9069 (loopback); its shadow on the live feed is running. Rig: [T41](test-41-import-reanchor-coverage.md)'s [`t41-rewind-supervisor.sh`](scripts/t41-rewind-supervisor.sh), graded by [`t41-rewind-grade.py`](scripts/t41-rewind-grade.py); stimuli from [T34](test-34-real-encoder-severity.md) and [T64](test-64-synthetic-encoder-switch.md).
+**State: run, three times per stimulus and a control, on two builds.** At an unflagged encoder switch, back or forward, the import republishes itself and neither export ends. Past the catalog fix a switch costs 160 ms of programme on T64's stimulus, the truncated picture and the wait for a random-access one; on T34's capture it still costs 1,600 ms, because the import announces the new instance 1.2 s late, its catalog waiting on every track, and the stitched export starts at its second group (traced). Behind a supervisor it cost 2,400–2,800 ms. The passthrough lane, which ended at a step back, carries both directions with every byte on #9069's branch (loopback). Its shadow met no switch in 72 h of the live feed and runs again on `main`, which has merged it. Rig: [T41](test-41-import-reanchor-coverage.md)'s [`t41-rewind-supervisor.sh`](scripts/t41-rewind-supervisor.sh), graded by [`t41-rewind-grade.py`](scripts/t41-rewind-grade.py); stimuli from [T34](test-34-real-encoder-severity.md) and [T64](test-64-synthetic-encoder-switch.md).
 
 ## Objective
 
@@ -139,6 +139,13 @@ _The shadow, criteria fixed before running._ The branch then runs against the li
 - **SH3, nothing stalls or drops at a step.** Within 30 s of each step the output's longest read gap is at most 0.5 s and it gains no continuity error the input lacks; the difference between the input's and the output's cumulative packet counts moves across the step (60 s before to 60 s after) by no more than its range over the hour before.
 - **SH4, no growth.** Each process's resident memory at the end is within 1.5× its value after the first hour.
 - **Reported:** each step's direction and size, and the log lines around it.
+
+_The shadow's first 72 h, on the branch before its final fix: inconclusive._
+
+- **SH1 fails:** the input recorded no PCR step in 72.0 h and 4.31 G packets, so the run is extended, on `main` past the merge, under the same criteria.
+- **SH2 holds:** each supervisor recorded one start and no exit.
+- **SH3 has no step to grade.** Without one, the output's longest read gap was 239 ms (the input's 233 ms), its six continuity errors were the input's six, and the difference between the two cumulative packet counts held at 54,600 ± 270, the export's 3.3 s behind the import.
+- **SH4 fails on the relay**, which grew 1.92× from the first hour to the end (251 to 481 MB); the import grew 1.44× (225 to 325 MB) and the export 1.19× (262 to 311 MB). The relay's growth slows, 112, 75 and 43 MB in successive days, but has not levelled off at 72 h, unlike the per-group retention measured on quinn ([Evidence](evidence.md) §3.6). The branch changed only the import and the export; the extension measures the relay on `main` again.
 
 ## Conclusions
 
