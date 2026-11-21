@@ -15,7 +15,8 @@
 #
 # Env: REPO (~/work/moq), ENV_SH (~/work/env.sh), BOARD_PORT (18490), DELAYS (5822ms),
 #      BURSTS ("3 4"), REPS (4), CONTROL (30), GAP (25, the rig's), BAD_AT (5), GOOD_AT (1),
-#      HALT (1: at the end, stop this host unless KEEP exists), KEEP (~/keep-running), MAX_STEPS (30).
+#      HALT (1: at the end, stop this host unless KEEP exists), KEEP (~/keep-running), MAX_STEPS (30),
+#      AB_RUNS (0; N: no bisect, N judge runs alternating the endpoints BAD, GOOD, GOOD, BAD, ...).
 # Builds `moq` beside the relay, as the endpoints were built, so features unify alike.
 set -uo pipefail
 
@@ -43,6 +44,7 @@ GOOD_AT=${GOOD_AT:-1}
 HALT=${HALT:-1}
 KEEP=${KEEP:-$HOME/keep-running}
 MAX_STEPS=${MAX_STEPS:-30}
+AB_RUNS=${AB_RUNS:-0}
 WINDOWS=$((${#BURSTS[@]} * REPS))
 SECS=$((10 + CONTROL + WINDOWS * GAP + 10))
 TREE=$W/tree
@@ -134,6 +136,14 @@ verdict() {
 }
 
 log "start: $GOOD..$BAD, judge ${BURSTS[*]} s x $REPS, bad >= $BAD_AT, good <= $GOOD_AT of $WINDOWS"
+if [ "$AB_RUNS" -gt 0 ]; then
+	log "replication: $AB_RUNS runs alternating BAD_BIN and GOOD_BIN, ABBA"
+	for ((i = 1; i <= AB_RUNS; i++)); do
+		case $((i % 4)) in 1 | 0) e=bad r=$BAD_BIN ;; *) e=good r=$GOOD_BIN ;; esac
+		log "ab$i-$e: $(judge "ab$i-$e" "$r") of $WINDOWS"
+	done
+	exit 0
+fi
 for e in bad good; do
 	if [ $e = bad ]; then r=$BAD_BIN; else r=$GOOD_BIN; fi
 	v=$(verdict "ep-$e" "$r")
