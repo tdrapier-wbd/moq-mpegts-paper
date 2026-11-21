@@ -54,7 +54,7 @@ The rows are the requirements of [Problem](problem.md) §5 that a data plane dec
 | **A week's operation** | ✓ 169 h on the live feed, every resource converged; one run (§11.1) | — not run | ✓ 168 h through one CDN origin group, every resource flat, the merge losing nothing; one run (§11.1) | — not run |
 | **Open publisher** | ◐ `moq import ts`, one implementation (§9.2) | ✓ `moq-dev`'s whole-multiplex import, and `moq2ts` under MSFTS (§9.3) | ✓ TSDuck at classic durations; at low latency only Apple's segmenter (§9.2) | ✓ open-source SRT; RIST openly specified and multi-vendor (§1.1) |
 | **Fan-out fabric as a service** | ◐ Cloudflare, Akamai and moq.pro operate MoQ relays, priced where published at four to ten times commodity; otherwise self-run (§3) | ◐ the same relays (§3) | ✓ any HTTP CDN, a dozen suppliers (§3) | ✗ no commodity market sells it to the destination (§3) |
-| **Open subscriber** (receive to TS) | ◐ `moq export ts`, one implementation (§9.2) | ◐ `moq export ts`; `moq2ts`'s console receiver, untested here (§9.3) | ◐ `tsp -I hls` and FFmpeg at classic durations, neither surviving an origin restart; nothing free at low latency (§9.2) | ✓ open-source SRT and RIST receivers (§1.1) |
+| **Open subscriber** (receive to TS) | ◐ `moq export ts`, one implementation (§9.2) | ◐ `moq export ts`; `moq2ts`'s console receiver, byte-exact from its own publisher, unpaced (§9.3) | ◐ `tsp -I hls` and FFmpeg at classic durations, neither surviving an origin restart; nothing free at low latency (§9.2) | ✓ open-source SRT and RIST receivers (§1.1) |
 
 **Latency marks every lane met because R4 asks for a bounded few seconds**; the sub-second band is a projection on all of them (§5.1).
 
@@ -278,7 +278,7 @@ Internet-measured for segmented HTTP, media-aware MoQ and SRT ([T4](../lab/test-
 | --- | --- | --- | --- |
 | Lane | media-aware, and whole-multiplex passthrough | **transparent TS** | none — transport only |
 | Scope | publisher, relay, subscriber | **publisher**, console receiver | protocol library, **relay**, sample clients |
-| Media format | `hang` catalog/container | MSF + MSFTS (`packaging: "m2ts"`) | **deliberately none** |
+| Media format | `hang` catalog/container | MSF + MSFTS (`packaging: "mpeg2ts"`) | **deliberately none** |
 | Format standing | individual draft for its `mpegts` catalog section (demultiplexed carriage only) | **adopted WG format** + individual draft | N/A |
 | Wire versions | moq-lite 01–06, 07 opt-in and in progress; **MOQT 18, 20, 22** on upstream `main` from late October 2026, 14–22 before | MOQT 14, 16–18, 21, 22 | MOQT 14, 16 and 18 |
 | Source failover | route reselection; between importers, a marked switch to the newest (`export ts --stitch`) | N/A (publisher) | **none — publisher loss is terminal** |
@@ -286,7 +286,7 @@ Internet-measured for segmented HTTP, media-aware MoQ and SRT ([T4](../lab/test-
 
 Transparent carriage is no longer single-vendor, but **transparent is not always verbatim** (`moq2ts`'s per-program mode drops nulls). Cloudflare's format-blind relay cannot corrupt opaque TS, but thins less intelligently under pressure ([Architecture](architecture.md) §5).
 
-**Two open implementations subscribe to whole-TS carriage**: `moq-dev`'s whole-multiplex import and the export writing its bytes back out ([Evidence](../lab/evidence.md) §3.1), and `moq2ts`'s console receiver, on OpenMOQ's stack and not covered here. `moq-dev`'s "verbatim" tracks carry undecoded PIDs one per track inside the media-aware lane. Byte-faithful carriage over MoQ is measured on one implementation, one run per arm, which is why §2's structural limits do not yet move the preference to the opaque lane. Relay-level interop with `moqxr` holds only narrowly; with OpenMOQ's moq5 it holds at the byte both ways, though neither stack's catalog finds the other's TS track ([Evidence](../lab/evidence.md) §3.7).
+**Two open implementations subscribe to whole-TS carriage**: `moq-dev`'s whole-multiplex import and the export writing its bytes back out ([Evidence](../lab/evidence.md) §3.1), and `moq2ts`'s console receiver, unpaced, so needing a pacer before an IRD. `moq-dev`'s "verbatim" tracks carry undecoded PIDs one per track inside the media-aware lane. Byte-faithful carriage over MoQ is measured on two implementations, a few runs each, which is why §2's structural limits do not yet move the preference to the opaque lane. `moq-relay` carries `moq2ts`'s pair byte for byte on drafts 22 and 18, and `moq-dev` and moq5 interoperate at the byte both ways, but neither stack's catalog finds the other's TS track ([Evidence](../lab/evidence.md) §3.7).
 
 **Operational maturity favours segmented HTTP decisively**, by reasoning and measurement: mature multi-vendor tooling and staff skills against a pre-1.0 ecosystem, whose cost is in following upstream. A breaking change reached a rig about weekly, two of nine silently, so each upgrade needs a rig audit ([T54](../lab/test-54-dependency-risk.md)).
 

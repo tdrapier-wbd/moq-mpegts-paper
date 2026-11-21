@@ -370,7 +370,7 @@ Filed as [**#3925**](https://github.com/moq-dev/moq/issues/3925): conformant egr
 
 ### Four closed as completed by a planning document that changed no code
 
-[#3987](https://github.com/moq-dev/moq/pull/3987), quest files only, closed [#3798](https://github.com/moq-dev/moq/issues/3798), [#3925](https://github.com/moq-dev/moq/issues/3925), [#3926](https://github.com/moq-dev/moq/issues/3926) and [#3731](https://github.com/moq-dev/moq/issues/3731); each defect was intact on `ffa5b81b`. #3731 reopened, T11c's discovery result [posted](https://github.com/moq-dev/moq/issues/3731#issuecomment-6223909800), and `moq2ts` [named](https://github.com/moq-dev/moq/issues/3731#issuecomment-6769099729) as the consumer its pruned quest `msfts-convergence` lacked. Method rule: [`method-notes.md`](method-notes.md) § _A closed issue is a claim about a tracker, not about a binary_.
+[#3987](https://github.com/moq-dev/moq/pull/3987), quest files only, closed [#3798](https://github.com/moq-dev/moq/issues/3798), [#3925](https://github.com/moq-dev/moq/issues/3925), [#3926](https://github.com/moq-dev/moq/issues/3926) and [#3731](https://github.com/moq-dev/moq/issues/3731); each defect was intact on `ffa5b81b`. #3731 reopened; T11c's discovery result [posted](https://github.com/moq-dev/moq/issues/3731#issuecomment-6223909800), `moq2ts` [named](https://github.com/moq-dev/moq/issues/3731#issuecomment-6769099729) as pruned `msfts-convergence`'s consumer, and T11d's catalog-only gap [posted](https://github.com/moq-dev/moq/issues/3731#issuecomment-7064997090). Method rule: [`method-notes.md`](method-notes.md) § _A closed issue is a claim about a tracker, not about a binary_.
 
 ### #2829 and #3948, closed by #4001 — real code, and verified
 
