@@ -489,9 +489,9 @@ Dial-side flags renamed on the development branch warned and then did not take e
 
 From the [cross-check](cross-check.md) of `moq-dev`'s [#8828](https://github.com/moq-dev/moq/pull/8828), by code: at start-up `moq2ts` failed the pipeline when any program failed to open (`MptsPipeline.cpp`, `5e7b72e`). **Fixed** by [#63](https://github.com/openmoq/moq2ts/pull/63) and [#64](https://github.com/openmoq/moq2ts/pull/64), merged; not yet verified.
 
-### A `moq2ts` publisher refused by `moq-relay`'s announcements — reported as [openmoq/moqxr#156](https://github.com/openmoq/moqxr/issues/156) and [openmoq/moq2ts#70](https://github.com/openmoq/moq2ts/issues/70)
+### A `moq2ts` publisher restart through `moq-relay` — reported as [openmoq/moqxr#156](https://github.com/openmoq/moqxr/issues/156), [openmoq/moq2ts#70](https://github.com/openmoq/moq2ts/issues/70) and [#73](https://github.com/openmoq/moq2ts/issues/73)
 
-[T86](test-86-moq2ts-evaluation.md#p2-t--restarts-and-loop-wraps) P2-t: `moqxr` closes its session after refusing the PUBLISH_NAMESPACE `moq-relay` sends unasked, so two publishers on one relay end each other's sessions, on drafts 18 and 22, and a restarted one is locked out until the relay drops its predecessor (#156). `moq2ts-receiver` never answers one (#70). Both are defects against the draft, which lets a publisher send PUBLISH_NAMESPACE to any subscriber. **Open.**
+[T86](test-86-moq2ts-evaluation.md#p2-t--restarts-and-loop-wraps) P2-t: `moqxr` closes its session after refusing the PUBLISH_NAMESPACE `moq-relay` sends unasked, so two publishers on one relay end each other's sessions, on drafts 18 and 22, and a restarted one is locked out until the relay drops its predecessor (#156). `moq2ts-receiver` never answers one (#70). Both are defects against the draft. After PUBLISH_DONE the receiver waits moq5's conformant default 30 s, losing 42.7 s against `moq-dev`'s 14 s (#73). **Open.**
 
 ### moq5's relay and a late subscriber — reported as [openmoq/moq5#51](https://github.com/openmoq/moq5/issues/51)
 
