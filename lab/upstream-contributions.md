@@ -487,7 +487,7 @@ Dial-side flags renamed on the development branch warned and then did not take e
 
 ### A multiplex program that fails to open stops every program — reported as [openmoq/moq2ts#62](https://github.com/openmoq/moq2ts/issues/62)
 
-From the [cross-check](cross-check.md) of `moq-dev`'s [#8828](https://github.com/moq-dev/moq/pull/8828), by code: at start-up `moq2ts` failed the pipeline when any program failed to open (`MptsPipeline.cpp`, `5e7b72e`). **Fixed** by [#63](https://github.com/openmoq/moq2ts/pull/63) and [#64](https://github.com/openmoq/moq2ts/pull/64), merged; not yet verified.
+From the [cross-check](cross-check.md) of `moq-dev`'s [#8828](https://github.com/moq-dev/moq/pull/8828), by code: at start-up `moq2ts` failed the pipeline when any program failed to open (`MptsPipeline.cpp`, `5e7b72e`). **Fixed** by [#63](https://github.com/openmoq/moq2ts/pull/63) and [#64](https://github.com/openmoq/moq2ts/pull/64); verified ([T86](test-86-moq2ts-evaluation.md#p2-v--multi-programme-streams) P2-v).
 
 ### A `moq2ts` publisher restart through `moq-relay` — reported as [openmoq/moqxr#156](https://github.com/openmoq/moqxr/issues/156), [openmoq/moq2ts#70](https://github.com/openmoq/moq2ts/issues/70) and [#73](https://github.com/openmoq/moq2ts/issues/73)
 
