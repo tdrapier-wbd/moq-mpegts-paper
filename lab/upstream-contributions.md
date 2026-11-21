@@ -491,7 +491,7 @@ From the [cross-check](cross-check.md) of `moq-dev`'s [#8828](https://github.com
 
 ### A `moq2ts` publisher restart through `moq-relay` — reported as [openmoq/moqxr#156](https://github.com/openmoq/moqxr/issues/156), [openmoq/moq2ts#70](https://github.com/openmoq/moq2ts/issues/70) and [#73](https://github.com/openmoq/moq2ts/issues/73)
 
-[T86](test-86-moq2ts-evaluation.md#p2-t--restarts-and-loop-wraps) P2-t: `moqxr` closes its session after refusing the PUBLISH_NAMESPACE `moq-relay` sends unasked, so two publishers on one relay end each other's sessions, on drafts 18 and 22, and a restarted one is locked out until the relay drops its predecessor (#156). `moq2ts-receiver` never answers one (#70). Both are defects against the draft. After PUBLISH_DONE the receiver waits moq5's conformant default 30 s, losing 42.7 s against `moq-dev`'s 14 s (#73). **Open.**
+[T86](test-86-moq2ts-evaluation.md#p2-t--restarts-and-loop-wraps) P2-t: `moqxr` closes its session after refusing the PUBLISH_NAMESPACE `moq-relay` sends unasked, so publishers on one relay end each other's sessions and a restarted one waits out its predecessor (#156). `moq2ts-receiver` never answers one (#70); both are defects against the draft. After PUBLISH_DONE the receiver waits moq5's default 30 s, losing 42.7 s against `moq-dev`'s 14 s (#73). **#156 fixed** by [openmoq/moqxr#157](https://github.com/openmoq/moqxr/pull/157), not yet verified; #70 and #73 open.
 
 ### moq5's relay and a late subscriber — reported as [openmoq/moq5#51](https://github.com/openmoq/moq5/issues/51)
 
