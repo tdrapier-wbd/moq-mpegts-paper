@@ -23,8 +23,11 @@ if [ "$ARM" = M ]; then
 	url="https://127.0.0.1:$PORT" rurl="https://127.0.0.1:$SPORT" ver=moq-lite-07-wip name=t86u.hang
 	export MOQ_LISTEN_VERSION=$ver
 fi
-printf '[log]\nlevel = "info"\n\n[listen]\nbind = "127.0.0.1:%s"\ntls.generate = ["localhost"]\n\n[auth]\npublic = "**"\n' \
-	"$PORT" >relay.toml
+# A glob build reads `**` as everything; a prefix build (before the globs, and again from #9251) `""`.
+pub='**'
+"$MOQ/moq-relay" --help 2>&1 | grep -A3 -- '--auth-public <' | grep -q Patterns || pub=''
+printf '[log]\nlevel = "info"\n\n[listen]\nbind = "127.0.0.1:%s"\ntls.generate = ["localhost"]\n\n[auth]\npublic = "%s"\n' \
+	"$PORT" "$pub" >relay.toml
 {
 	cat "$MOQ.sha" 2>/dev/null
 	echo "arm $ARM relay_cc ${RELAY_CC:-bbr} loss $LOSS delay_ms $DELAY_MS join_at $JOIN_AT clip $CLIP"

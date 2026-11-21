@@ -1,6 +1,6 @@
 # T86 — OpenMOQ's `moq2ts` through the campaign's tests
 
-**State: P2-r to P2-v run. `moq2ts` passes P2-r and P2-s; P2-t found three issues, filed, and on a publisher restart it loses 42.7 s against `moq-dev`'s 14 s. P2-u: both pairs carry 9.95 Mb/s whole to 1 % random loss and neither from 3 %, where `moq2ts` loses 7.9 s more; a late join is prompt on both. P2-v: it carries a multiplex whole and each programme as its own track with nothing lost, but joins a programme 4.3–4.6 s after start-up, past the 3 s allowed.** Roadmap rows P2-r to P2-w put the campaign's tests to `moq2ts`'s headless publisher (`moq2ts-cli`) and console receiver (`moq2ts-receiver`), beside `moq-dev`'s own pair on the same clips and graders. Each row is a section here. A gap found becomes one issue on `moq2ts`, saying when it is a difference between `moq-dev` and the MoQT draft rather than a defect (OpenMOQ's request).
+**State: P2-r to P2-v run. `moq2ts` passes P2-r and P2-s; P2-t found three issues, filed, and on a publisher restart it loses 42.7 s against `moq-dev`'s 14 s. P2-u: both pairs carry 9.95 Mb/s whole to 1 % random loss and neither from 3 %, where `moq2ts` loses 2.6–12.5 s more than `moq-dev`'s `main`; a late join is prompt on both. P2-v: it carries a multiplex whole and each programme as its own track with nothing lost, but joins a programme 4.3–4.6 s after start-up, past the 3 s allowed.** Roadmap rows P2-r to P2-w put the campaign's tests to `moq2ts`'s headless publisher (`moq2ts-cli`) and console receiver (`moq2ts-receiver`), beside `moq-dev`'s own pair on the same clips and graders. Each row is a section here. A gap found becomes one issue on `moq2ts`, saying when it is a difference between `moq-dev` and the MoQT draft rather than a defect (OpenMOQ's request).
 
 ## Environment
 
@@ -159,24 +159,24 @@ _Discriminator, fixed after the ladder and before running it._ From 3 % both arm
 
 _Results._ Graded by [`t86-loss-grade.py`](scripts/t86-loss-grade.py) and, in J2, as P2-v. The shaper is valid (criterion 1): rung 0 drops nothing, and every other cell measures within 0.07 points of its rung below 3 % and within 0.62 above. Programme lost, in seconds of the 60 s source, with continuity errors; an export that exits is placed in the source:
 
-| Rung (measured)    | Arm A, `moq2ts` |                Arm M, `moq-dev` |
-| ------------------ | --------------: | ------------------------------: |
-| 0, 0.13, 1.07 %    |        0, whole |                        0, whole |
-| 3.1 %              |      27.7 (226) |                      19.8 (337) |
-| 5.2–5.4 %          |      45.7 (154) | 51.7 (62), export exits at 14 s |
-| 10.3–10.4 %        |       50.7 (88) | 56.2 (86), export exits at 41 s |
-| 3.2–3.6 %, `cubic` |      48.0 (144) |  56.6 (54), export exits at 8 s |
-| 5.1–5.6 %, `cubic` |      49.2 (111) |  57.3 (40), export exits at 7 s |
+| Rung (measured) | Arm A, `moq2ts` | Arm M, `moq-dev` `f1eecd3a` | Arm M, `moq-dev` `main` `b45179d39b` |
+| --- | --: | --: | --: |
+| 0, 0.13, 1.07 % | 0, whole | 0, whole | 0, whole (rung 0) |
+| 3.1 % | 27.7 (226) | 19.8 (337) | 15.2 (340) |
+| 5.2–5.4 % | 45.7 (154) | 51.7 (62), export exits at 14 s | 35.4 (470) |
+| 10.3–10.4 % | 50.7 (88) | 56.2 (86), export exits at 41 s | 48.1 (420) |
+| 3.2–3.6 %, `cubic` | 48.0 (144) | 56.6 (54), export exits at 8 s | 37.2 (463) |
+| 5.1–5.6 %, `cubic` | 49.2 (111) | 57.3 (40), export exits at 7 s | 42.6 (477) |
 
 - **To 1 % both arms pass whole (criteria 2 and 3 hold there); from 3 % neither does.** Arm A's longest read gap at rung 0 is 1.07 s against arm M's 32 ms, the cadence at which `moq2ts-receiver` writes, not a loss. Each starts 3.1–3.5 s after the receiver starts, as both wait for the source's first group.
-- **Criterion 4 fails at 3 %**, where `moq2ts` loses 7.9 s more, and holds at every other rung. At 5 % and 10 % `moq2ts` loses less because `moq-dev`'s export ends: starved, it reads the source's clock as running 18,000–276,000 ppm slow and exits once the shortfall has used half its delay, as its code documents. `moq2ts-receiver` plays on, with gaps.
-- **The discriminator fails: `cubic` does worse.** At 3 % arm A loses 48.0 s against 27.7 s on BBRv3, arm M 56.6 s against 19.8 s. The cliff is therefore not BBRv3's loss threshold alone. Both arms fall together and the relay's controller moves it, so the rig puts it in the relay's sending through random loss, not in either receiver. A loss-based controller on this 15 ms path at 3 % random loss sustains about 4.5 Mb/s by the Mathis bound, under half the clip's 9.95 Mb/s; that is a reading, not a measurement.
+- **Criterion 4 fails at every lossy rung against `moq-dev`'s `main`**, where `moq2ts` loses 2.6–12.5 s more. On `f1eecd3a` it failed at 3 % alone: at 5 % and 10 % `moq-dev`'s export ended, reading the starved source's clock as running 18,000–276,000 ppm slow and exiting once the shortfall had used half its delay. On `main` (re-run with the relay's anonymous grant written as the prefix `""`, which it requires) the export plays on with gaps, as `moq2ts-receiver` does; it still logs the shortfall as drift, up to 8,700 ppm, but no longer fails on it.
+- **The discriminator fails: `cubic` does worse.** At 3 % arm A loses 48.0 s against 27.7 s on BBRv3, arm M on `main` 37.2 s against 15.2 s. The cliff is therefore not BBRv3's loss threshold alone. Both arms fall together and the relay's controller moves it, so the rig puts it in the relay's sending through random loss, not in either receiver. A loss-based controller on this 15 ms path at 3 % random loss sustains about 4.5 Mb/s by the Mathis bound, under half the clip's 9.95 Mb/s; that is a reading, not a measurement.
 - **Late join (criterion 5 holds on both arms).** In J1 each output is the source's bytes from its first byte to the end. `moq2ts` writes 0.41 s after starting, 20.24 s into the source and 0.22 s behind the live edge; `moq-dev` writes after 1.08 s, at 20.09 s and 1.05 s behind. In J2 every capture grades its programme CARRIED, every PMT as in P2-v, and `moq2ts`'s are, filtered to their elementary streams, the source's packets from the join to the end with no gap. First-byte delays are 0.63, 1.65 and 0.81 s on `moq2ts`, 0.73, 0.46 and 1.71 s on `moq-dev`, for programmes 1, 2 and 3.
 - **A late `moq2ts-receiver` does not see the track end.** In J1 it holds its last object until its `--duration` expires, 20 s after the publisher exits, where at rung 0 it ends within 1.2 s. This is consistent with [#73](https://github.com/openmoq/moq2ts/issues/73)'s mechanism: the PUBLISH_DONE stream count includes streams a late joiner never received.
 
 _Conclusions._
 
 1. **On a lossy path the two implementations stand or fall together.** Both carry 9.95 Mb/s whole to 1 % random loss on a 15 ms path, and neither carries it from 3 %. The relay's congestion controller shifts the cliff and the receivers do not, so it is a property of the transport under random loss. These figures compare the two implementations in one userspace rig; they do not replace T5's.
-2. **They fail differently.** `moq2ts-receiver` keeps writing through the gaps. `moq-dev`'s export exits once starvation outruns its delay, and reports the starvation as a clock drift. At 3 % on BBRv3, `moq-dev` loses less.
+2. **Through the same loss `moq-dev` delivers more.** On its current `main` both receivers write through the gaps, and `moq2ts` loses 2.6–12.5 s more of the 60 s at every lossy rung.
 3. **A late join is prompt on both, and per programme too.** `moq2ts` joins a running broadcast or programme within 0.4–1.7 s, closer to the live edge than `moq-dev`. P2-v's 4.3–4.6 s join is therefore a start-up cost only.
-4. **Nothing new to file.** The late receiver's hold is #73's mechanism. `moq-dev`'s exit on starvation is documented.
+4. **Nothing new to file.** The late receiver's hold is #73's mechanism, and `moq-dev`'s exit on starvation does not reproduce on its `main`.
