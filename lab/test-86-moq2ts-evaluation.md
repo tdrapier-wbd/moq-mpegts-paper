@@ -1,6 +1,6 @@
 # T86 — OpenMOQ's `moq2ts` through the campaign's tests
 
-**State: P2-r, P2-s and P2-t run. `moq2ts` passes the first two; P2-t found three issues to file, and on a publisher restart it loses 42.7 s against `moq-dev`'s 14 s.** Roadmap rows P2-r to P2-w put the campaign's tests to `moq2ts`'s headless publisher (`moq2ts-cli`) and console receiver (`moq2ts-receiver`), beside `moq-dev`'s own pair on the same clips and graders. Each row is a section here. A gap found becomes one issue on `moq2ts`, saying when it is a difference between `moq-dev` and the MoQT draft rather than a defect (OpenMOQ's request).
+**State: P2-r, P2-s, P2-t and P2-v run. `moq2ts` passes P2-r and P2-s; P2-t found three issues, filed, and on a publisher restart it loses 42.7 s against `moq-dev`'s 14 s. P2-v: it carries a multiplex whole and each programme as its own track with nothing lost, but joins a programme 4.3–4.6 s after start-up, past the 3 s allowed.** Roadmap rows P2-r to P2-w put the campaign's tests to `moq2ts`'s headless publisher (`moq2ts-cli`) and console receiver (`moq2ts-receiver`), beside `moq-dev`'s own pair on the same clips and graders. Each row is a section here. A gap found becomes one issue on `moq2ts`, saying when it is a difference between `moq-dev` and the MoQT draft rather than a defect (OpenMOQ's request).
 
 ## Environment
 
@@ -101,3 +101,38 @@ _Conclusions._
 
 1. **`moq2ts` matches or beats `moq-dev` on a relay or receiver restart and across loop wraps**; on a publisher restart it loses 42.7 s in five runs of six against 11–14 s.
 2. **Three findings for OpenMOQ.** The first is a `moqxr` defect, not a difference between `moq-dev` and the draft: drafts 18 and 22 let a publisher send PUBLISH_NAMESPACE to any subscriber, and require exactly one OK or error in answer. The third is a receiver defect for the same reason. The second is neither side's defect against the draft, which has the stream count include fill streams and the subscriber wait at least the delivery timeouts after PUBLISH_DONE: it is moq5's 30 s default meeting streams the relay counts and the receiver never processes, and is reported to `moq2ts` ([#73](https://github.com/openmoq/moq2ts/issues/73)) as a default worth changing in a live receiver.
+
+## P2-v — multi-programme streams
+
+[T10](test-10-mpts-multiservice.md)'s fixtures, rebuilt by [`make-real-mpts.sh`](scripts/make-real-mpts.sh): `mpts3.ts`, three programmes on independent clocks (programme 1 the news contribution with seven elementary streams, 2 video only, 3 video and audio), and `mpts3-cc.ts`, the same on one clock. 60 s at 19.9 Mb/s. [`t86-mpts.sh`](scripts/t86-mpts.sh) releases the fixture once through `tsp -P regulate --pcr-synchronous` into the publisher's stdin, every receiver started first. Two cells, each on both implementations:
+
+- **Unmodified multiplex (U).** Arm A: `moq2ts-cli --unmodified`, one `unmodified-multiplex` track, read by `moq2ts-receiver`. Arm M: `import ts --passthrough` → `export ts --passthrough`. T10 never ran opaque carriage of a multiplex.
+- **Per programme (P).** Arm A: `moq2ts-cli --config` with programmes 1, 2 and 3 keeping all DVB SI, one `moq2ts-receiver --track program-<n>` per programme. Arm M: `import ts --program all` → one `export ts` per programme broadcast, T10's split, on `moq-lite-07` so that #9081 does not touch programme 1's field-coded video.
+
+`moq2ts` on draft 22; one run per fixture, cell and arm. Graded by [`t10-grade.py`](scripts/t10-grade.py), per programme, and in cell U also by `ts-passthrough-identity.py`.
+
+_Criteria, fixed before running:_
+
+1. **Validity.** Each fixture gives 0 continuity events and every PCR within 13 ticks on `pcrverify`, as T10's did.
+2. **Cell U carries the multiplex whole.** The output is the fixture's bytes from the join to the end, and every programme is CARRIED, its PMT bit-identical.
+3. **Cell P carries each programme.** Each programme's capture grades it CARRIED: its own PAT entry and PMT, its PCR on its own PID with no interval above 40 ms, every elementary stream present with its stream type and descriptors, 0 continuity events. Its video delivers at least 95 % of the source's packets, which allows a 3 s join.
+4. **Reported, not graded:** PMT bit identity and SI (SDT, EIT present/following) per programme in cell P, audio and SCTE-35 packet counts, the join, and either arm's difference between the two fixtures.
+
+_Results._ Both fixtures are valid: 0 continuity events, every checked PCR within 13 ticks (criterion 1). Every one of the 16 captures grades its programme CARRIED, with 0 continuity events, no PCR interval above 40 ms, every elementary stream present with its stream type and descriptors, and the SDT entry and EIT present/following sections identical to the source's. The table gives each programme's video packets delivered as a share of the source's, `mpts3` / `mpts3-cc`:
+
+| Programme | U, `moq2ts` | U, `moq-dev` | P, `moq2ts` (its join) | P, `moq-dev` |
+| --- | --: | --: | --: | --: |
+| 1, seven ES, field-coded | 96.3 / 96.3 % | 99.6 / 99.6 % | 92.4 / 92.4 % (4.6 s) | 97.9 / 97.9 % |
+| 2, video only | 98.4 / 97.3 % | 100 / 100 % | 92.9 / 92.9 % (4.3 s) | 100.3 / 97.1 % |
+| 3, video and audio | 99.3 / 98.3 % | 100 / 99.9 % | 97.4 / 97.5 % (2.4, 2.1 s) | 98.7 / 95.3 % |
+
+- **Cell U (criterion 2 holds on both arms).** Each output is the fixture's bytes from the join to the end, and every PMT is bit-identical. `moq2ts` joins 2.2 s in, `moq-dev` 0.24 s.
+- **Cell P, `moq-dev` (criterion 3 holds).** Programme 1's PMT is rebuilt (structure identical, bytes not), as in T10's split; programmes 2 and 3 are bit-identical. Each programme's export is padded to the multiplex's 19.9 Mb/s: programme 2's capture is 91 % null packets.
+- **Cell P, `moq2ts` (criterion 3 fails on programmes 1 and 2, on the join alone).** Filtered to its programme's elementary streams, each capture is the source's packets in order from its join to the fixture's end, with no gap; every PMT is bit-identical and no nulls are added. The join, 4.3–4.6 s on programmes 1 and 2, exceeds the 3 s the criterion allows. At start-up `moq2ts-cli --config` reads about 1 s of PCR time for each programme's PAT and PMT before it publishes the catalog, then starts each programme at its next random access point. On `mpts3.ts` programme 2's first PMT comes between 1 and 2 s in, so it opens late and joins the catalog then, as documented; its join is the same on `mpts3-cc.ts`, where it opens at once.
+- **The receiver exits at once while no catalog exists** (`no MSF catalog received`), so the rig restarts each `moq2ts-receiver` until its first byte, as [P2-t](#p2-t--restarts-and-loop-wraps)'s supervisor did.
+
+_Conclusions._
+
+1. **Both implementations carry a multiplex whole on MoQ**: `moq2ts --unmodified` and `moq-dev`'s passthrough deliver the fixture's own bytes from the join, every programme with its PAT entry, PMT, PCR and SI, on independent and common clocks. This is the opaque carriage of a multiplex that T10 left unrun.
+2. **Both carry each programme as its own track.** `moq2ts` forwards a programme's packets unchanged, PMT included, and adds nothing; `moq-dev` rebuilds programme 1's PMT and pads every programme to the multiplex's rate. Neither loses anything after its join. `moq2ts`'s start-up join is the longer: 4.3–4.6 s on programmes 1 and 2, where `moq-dev`'s video shares imply under 3 s. A late join to a running broadcast is P2-u's.
+3. **Nothing to file.** The late PMT is handled as `moq2ts` documents it, and the start-up join is a property of reading the PSI before publishing, not a defect.

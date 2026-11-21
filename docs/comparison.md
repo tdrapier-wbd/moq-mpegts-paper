@@ -103,7 +103,7 @@ The hybrid keeps satellite's near-zero marginal cost and spends fade margin to d
 
 |  | Segmented HTTP | MoQ media-aware lane | MoQ opaque lane | SRT — the incumbent |
 | --- | --- | --- | --- | --- |
-| Multi-programme mux | **normatively excluded** (§9) | **flattened** by builds up to moq 0.12.8; **split** into one intact broadcast per programme on upstream `main` from late September 2026, each SDT still listing every service | **verbatim by construction**; measured on one programme | verbatim by construction; measured on one programme |
+| Multi-programme mux | **normatively excluded** (§9) | **flattened** by builds up to moq 0.12.8; **split** into one intact broadcast per programme on upstream `main` from late September 2026 | **verbatim by construction**; measured on one programme | verbatim by construction; measured on one programme |
 | PIDs, PSI, service identity, SDT/NIT, EIT schedule | **preserved**, non-default PIDs included; the 8-day EPG byte-identical | preserved; a joining receiver has the whole EPG in ~1 ms | preserved | **preserved** — measured over the wire; EIT not exercised |
 | TDT/TOT, CAT | **preserved** | TDT/TOT **~14 s late** on moq 0.9.11, a merged fix unmeasured; CAT not carried | preserved | **preserved**; CAT not exercised |
 | Continuity counters, stuffing, mux rate | preserved, except a forced re-stamp on the injected PAT/PMT | counters regenerated; stuffing not the source's, padded to the declared source rate (+0.36 %, file domain) | **preserved** — the source's bytes, released on its PCR | **preserved; the source mux rate exactly** |
