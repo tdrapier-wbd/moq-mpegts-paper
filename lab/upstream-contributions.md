@@ -260,7 +260,7 @@ Under blackouts across a 117 ms path, `moq-relay` reset a subscriber's groups `O
 
 ### The media-aware export drops a field-coded feed's pictures — reported
 
-Since [#8638](https://github.com/moq-dev/moq/pull/8638) (groups addressed by their start) `export ts` on moq-lite-06 drops every open-GOP leading picture, a fifth of the feed's, and logs a skip at every group. Bisected on loopback ([T83](test-83-mixed-plane-pair.md) Part D); reported as [#9081](https://github.com/moq-dev/moq/issues/9081), then [diagnosed](https://github.com/moq-dev/moq/issues/9081#issuecomment-7043675627) with a failing test: lite-07 and moq-transport are clean.
+Since [#8638](https://github.com/moq-dev/moq/pull/8638) `export ts` on moq-lite-06 drops every open-GOP leading picture, a fifth of the feed's, and logs a skip at every group. Bisected on loopback ([T83](test-83-mixed-plane-pair.md) Part D); reported as [#9081](https://github.com/moq-dev/moq/issues/9081), then [diagnosed](https://github.com/moq-dev/moq/issues/9081#issuecomment-7043675627) with a failing test: lite-07 and moq-transport are clean. Luke's fix, [#9378](https://github.com/moq-dev/moq/pull/9378), is open.
 
 ### What a receiving site's analysers flag on the exports — reported
 
@@ -495,7 +495,7 @@ From the [cross-check](cross-check.md) of `moq-dev`'s [#8828](https://github.com
 
 ### T86's kit and test arms — offered as [openmoq/moq2ts#74](https://github.com/openmoq/moq2ts/issues/74), [moq-dev/moq#9315](https://github.com/moq-dev/moq/issues/9315) and [englishm/moq-interop-runner#206](https://github.com/englishm/moq-interop-runner/pull/206)
 
-[`kits/t86/`](kits/t86/README.md) reruns T86 from synthetic inputs, offered to OpenMOQ. #9315 proposes three `just test ts` arms: an unflagged splice through passthrough, an import restart, and a late join to one program; #206 proposes three runner scenarios. **Open.**
+[`kits/t86/`](kits/t86/README.md) reruns T86 from synthetic inputs, offered to OpenMOQ. #9315's three `just test ts` arms are our pull requests: [#9392](https://github.com/moq-dev/moq/pull/9392), an unflagged splice; [#9394](https://github.com/moq-dev/moq/pull/9394), a late join to one program; [#9395](https://github.com/moq-dev/moq/pull/9395), an import restart with its fix (the passthrough export follows it: 1.0 s lost, not 14.4 s); #206 proposes three runner scenarios. **Open.**
 
 ### moq5's relay and a late subscriber — reported as [openmoq/moq5#51](https://github.com/openmoq/moq5/issues/51)
 
@@ -519,7 +519,7 @@ Since #7729 the catalog carries `MAX_CACHE_DURATION` 0, which draft 18 applies t
 
 ### A CDN-hosted moqx relay at a join — reported on [openmoq/moqx#795](https://github.com/openmoq/moqx/issues/795#issuecomment-6289975173) and as [#842](https://github.com/openmoq/moqx/issues/842)
 
-[T11](test-11-interop.md): an unforwarded joining FETCH loses the head of the group in progress, the SI track's object included. TRACK_STATUS's undefined code (#842) reads as INTERNAL_ERROR, which the specification allows ([#843](https://github.com/openmoq/moqx/issues/843), closed). Our STOP_SENDING ended the subscription: [#817](https://github.com/openmoq/moqx/issues/817), fixed in moxygen; not re-tested. **Open:** a local moqx on draft 16, v0.3.6 or the fixed snapshot, serves the joining FETCH (our groups restart at 0, short of #795's precondition); on draft 18 the node refuses it, unforwarded, to a track's opener, losing a once-published catalog ([T52](test-52-cdn-relay-fanout.md)); on the latest image 14 openers of 14, no later joiner; no mid-group join lost its session ([re-tested](https://github.com/openmoq/moqx/issues/795#issuecomment-6418121868)); cause: the opener shared the publisher's I/O thread ([#883](https://github.com/openmoq/moqx/issues/883)); v0.3.6 refused every loopback opener with local forwarders, none without; v0.3.7, with [#899](https://github.com/openmoq/moqx/pull/899), refused none there or on either node ([T52](test-52-cdn-relay-fanout.md)). The snapshot's 64-bit Hop ID ([moq#6545](https://github.com/moq-dev/moq/issues/6545)): fixed by [#6614](https://github.com/moq-dev/moq/pull/6614).
+[T11](test-11-interop.md): an unforwarded joining FETCH loses the head of the group in progress, the SI track's object included. TRACK_STATUS's undefined code (#842) reads as INTERNAL_ERROR, which the specification allows ([#843](https://github.com/openmoq/moqx/issues/843), closed). Our STOP_SENDING ended the subscription: [#817](https://github.com/openmoq/moqx/issues/817), fixed in moxygen; not re-tested. **Open:** a local moqx on draft 16 serves the joining FETCH (our groups restart at 0, short of #795's precondition); on draft 18 the node refuses it, unforwarded, to a track's opener, losing a once-published catalog ([T52](test-52-cdn-relay-fanout.md)); on the latest image 14 openers of 14, no later joiner; no mid-group join lost its session ([re-tested](https://github.com/openmoq/moqx/issues/795#issuecomment-6418121868)); v0.3.7, with [#899](https://github.com/openmoq/moqx/pull/899) for [#883](https://github.com/openmoq/moqx/issues/883)'s shared I/O thread, refuses no opener on loopback or either node ([T52](test-52-cdn-relay-fanout.md)). The snapshot's 64-bit Hop ID ([moq#6545](https://github.com/moq-dev/moq/issues/6545)): fixed by [#6614](https://github.com/moq-dev/moq/pull/6614).
 
 ---
 
