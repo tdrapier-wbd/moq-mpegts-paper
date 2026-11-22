@@ -16,7 +16,11 @@
 # Env: REPO (~/work/moq), ENV_SH (~/work/env.sh), BOARD_PORT (18490), DELAYS (5822ms),
 #      BURSTS ("3 4"), REPS (4), CONTROL (30), GAP (25, the rig's), BAD_AT (5), GOOD_AT (1),
 #      HALT (1: at the end, stop this host unless KEEP exists), KEEP (~/keep-running), MAX_STEPS (30),
-#      AB_RUNS (0; N: no bisect, N judge runs alternating the endpoints BAD, GOOD, GOOD, BAD, ...).
+#      AB_RUNS (0; N: no bisect, N judge runs alternating the endpoints BAD, GOOD, GOOD, BAD, ...),
+#      CAL_RUNS (0; N: in place of the endpoint check, N runs alternating the endpoints; unless every
+#      current relay's run evicts in more windows than every good relay's, stop; else each step sums
+#      two runs against the sum of those two extremes, a tie taking a third), CONFIRM (1: judge the
+#      first bad commit and its parent again at the end).
 # Builds `moq` beside the relay, as the endpoints were built, so features unify alike.
 set -uo pipefail
 
@@ -45,6 +49,8 @@ HALT=${HALT:-1}
 KEEP=${KEEP:-$HOME/keep-running}
 MAX_STEPS=${MAX_STEPS:-30}
 AB_RUNS=${AB_RUNS:-0}
+CAL_RUNS=${CAL_RUNS:-0}
+CONFIRM=${CONFIRM:-1}
 WINDOWS=$((${#BURSTS[@]} * REPS))
 SECS=$((10 + CONTROL + WINDOWS * GAP + 10))
 TREE=$W/tree
@@ -60,7 +66,7 @@ SRV=$!
 
 finish() {
 	echo "done" >"$W/www/job"
-	git -C "$TREE" bisect log >"$W/bisect-log.txt" 2>/dev/null
+	git -C "$TREE" bisect log >"$W/bisect-log.tmp" 2>/dev/null && mv "$W/bisect-log.tmp" "$W/bisect-log.txt"
 	log "finished; the receiver reads done within its poll"
 	sleep 40
 	kill "$SRV" 2>/dev/null
@@ -144,16 +150,86 @@ if [ "$AB_RUNS" -gt 0 ]; then
 	done
 	exit 0
 fi
-for e in bad good; do
-	if [ $e = bad ]; then r=$BAD_BIN; else r=$GOOD_BIN; fi
-	v=$(verdict "ep-$e" "$r")
-	log "endpoint $e: $v"
-	if [ "$v" != $e ]; then
-		log "endpoints do not separate on this judge: stop"
+# calibrate: CAL_RUNS runs alternating the endpoints; sets CUT, or stops unless every current
+# relay's run evicts in more windows than every good relay's
+calibrate() {
+	local i e r n bmin=999 gmax=-1
+	for ((i = 1; i <= CAL_RUNS; i++)); do
+		case $((i % 4)) in 1 | 0) e=bad r=$BAD_BIN ;; *) e=good r=$GOOD_BIN ;; esac
+		n=$(judge "cal$i-$e" "$r")
+		[ "$n" = err ] && n=$(judge "cal$i-$e-r" "$r")
+		log "cal$i-$e: $n of $WINDOWS"
+		if [ "$n" = err ]; then
+			log "calibration: no result: stop"
+			exit 1
+		fi
+		if [ $e = bad ]; then
+			[ "$n" -lt "$bmin" ] && bmin=$n
+		else
+			[ "$n" -gt "$gmax" ] && gmax=$n
+		fi
+	done
+	if [ "$bmin" -le "$gmax" ]; then
+		log "calibration: current relay's least $bmin, good relay's most $gmax: no separation, stop"
 		exit 1
 	fi
-	SEEN[$(sha256sum "$r" | cut -c1-64)]=$v
-done
+	CUT=$((bmin + gmax))
+	log "calibration: current relay's least $bmin, good relay's most $gmax; two runs bad above $CUT, good below"
+	SEEN[$(sha256sum "$BAD_BIN" | cut -c1-64)]=bad
+	SEEN[$(sha256sum "$GOOD_BIN" | cut -c1-64)]=good
+}
+
+# verdict2 <label> <relay>: two runs summed against CUT; a tie takes a third run against 1.5 CUT
+verdict2() {
+	local label=$1 relay=$2 a b c
+	a=$(judge "$label-a" "$relay")
+	[ "$a" = err ] && a=$(judge "$label-r" "$relay")
+	b=$(judge "$label-b" "$relay")
+	[ "$b" = err ] && b=$(judge "$label-s" "$relay")
+	if [ "$a" = err ] || [ "$b" = err ]; then
+		echo err
+		return
+	fi
+	if [ $((a + b)) -gt "$CUT" ]; then
+		echo bad
+	elif [ $((a + b)) -lt "$CUT" ]; then
+		echo good
+	else
+		c=$(judge "$label-c" "$relay")
+		[ "$c" = err ] && {
+			echo err
+			return
+		}
+		log "$label: tie, third run $c"
+		if [ $((2 * (a + b + c))) -gt $((3 * CUT)) ]; then echo bad; else echo good; fi
+	fi
+}
+
+# build <name>: the relay at HEAD into relays/<name>
+build() {
+	(
+		# shellcheck source=/dev/null
+		. "$ENV_SH"
+		CARGO_TARGET_DIR=$W/target nice -n 10 cargo build --release --bin moq --bin moq-relay
+	) >"$W/build-logs/$1.log" 2>&1 && cp "$W/target/release/moq-relay" "$W/relays/$1"
+}
+
+if [ "$CAL_RUNS" -gt 0 ]; then
+	calibrate
+	V=verdict2
+else
+	for e in bad good; do
+		if [ $e = bad ]; then r=$BAD_BIN; else r=$GOOD_BIN; fi
+		v=$(verdict "ep-$e" "$r")
+		log "endpoint $e: $v"
+		if [ "$v" != $e ]; then
+			log "endpoints do not separate on this judge: stop"
+			exit 1
+		fi
+		SEEN[$(sha256sum "$r" | cut -c1-64)]=$v
+	done
+	V=verdict
+fi
 
 mkdir -p "$W/build-logs"
 git -C "$REPO" fetch -q origin main
@@ -171,18 +247,13 @@ until grep -qE "is the first bad commit|only .skip.ped commits left" "$W/step.tx
 	c=$(git rev-parse HEAD)
 	s8=${c:0:8}
 	log "step $step: $s8 $(git log -1 --format=%s | cut -c1-90)"
-	if (
-		# shellcheck source=/dev/null
-		. "$ENV_SH"
-		CARGO_TARGET_DIR=$W/target nice -n 10 cargo build --release --bin moq --bin moq-relay
-	) >"$W/build-logs/$s8.log" 2>&1; then
-		cp "$W/target/release/moq-relay" "$W/relays/$s8"
+	if build "$s8"; then
 		h=$(sha256sum "$W/relays/$s8" | cut -c1-64)
 		if [ -n "${SEEN[$h]:-}" ]; then
 			v=${SEEN[$h]}
 			log "step $step: binary already judged, $v"
 		else
-			v=$(verdict "s$step-$s8" "$W/relays/$s8")
+			v=$($V "s$step-$s8" "$W/relays/$s8")
 			[ "$v" = err ] || SEEN[$h]=$v
 		fi
 	else
@@ -198,3 +269,14 @@ until grep -qE "is the first bad commit|only .skip.ped commits left" "$W/step.tx
 done
 cat "$W/step.txt" >>"$LOG"
 log "bisect ended"
+git bisect log >"$W/bisect-log.txt"
+
+# confirm: judge the first bad commit and its parent again, each binary afresh
+fb=$(grep -oE '^[0-9a-f]{40} is the first bad commit' "$W/step.txt" | cut -c1-40)
+if [ "$CONFIRM" = 1 ] && [ -n "$fb" ]; then
+	git bisect reset >/dev/null 2>&1
+	git checkout -q "$fb" && build "first-${fb:0:8}" &&
+		log "confirm first bad ${fb:0:8}: $($V "conf-bad" "$W/relays/first-${fb:0:8}")"
+	git checkout -q "$fb^" && build "parent-${fb:0:8}" &&
+		log "confirm its parent $(git rev-parse --short=8 HEAD): $($V "conf-good" "$W/relays/parent-${fb:0:8}")"
+fi
