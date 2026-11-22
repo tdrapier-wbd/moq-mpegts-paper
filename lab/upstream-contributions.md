@@ -112,7 +112,7 @@ Export waited for every SI entry, so a track that never resolved left the progra
 
 ### Frame-sync loss killed the whole publisher — closed in two days
 
-**Report.** One damaged byte in an MP2, AC-3 or E-AC-3 frame header ended the publisher and every other track with it, because the legacy-audio PES loop propagated a header-parse failure instead of scanning for the next sync word ([#2729](https://github.com/moq-dev/moq/issues/2729)). **Fixed** by [#2751](https://github.com/moq-dev/moq/pull/2751) in two days: scan forward and confirm before trust (64 KiB bound), the TS layer's rule. On a 20 s DVB capture's one-byte MP2 mutant the publisher died at 12 s before and ran to the end after, dropping one 24 ms MP2 frame and nothing else; the looped clip died at its first wrap before and ran on after. It also closed AAC split across a PES boundary.
+**Report.** One damaged byte in an MP2, AC-3 or E-AC-3 frame header ended the publisher and every other track with it, because the legacy-audio PES loop propagated a header-parse failure instead of scanning for the next sync word ([#2729](https://github.com/moq-dev/moq/issues/2729)). **Fixed** by [#2751](https://github.com/moq-dev/moq/pull/2751): scan forward and confirm before trust (64 KiB bound). On a 20 s DVB capture's one-byte MP2 mutant the publisher died at 12 s before and ran to the end after, dropping one 24 ms MP2 frame and nothing else; the looped clip died at its first wrap before and ran on after. It also closed AAC split across a PES boundary.
 
 ### A splice publishes a _substituted_ frame — closed, with two measured residuals
 
@@ -144,7 +144,7 @@ Export waited for every SI entry, so a track that never resolved left the progra
 
 ### The exporter died on session loss — closed
 
-`moq export ts` exited the instant its session dropped — the single most consequential transport-resilience gap for primary distribution, because a broadcast subscriber must ride out relay maintenance unattended. The reconnect loop stayed alive; the sink task was fatal ([#2459](https://github.com/moq-dev/moq/issues/2459)). Closed by [#2469](https://github.com/moq-dev/moq/pull/2469) (broadcast _linger_): the relay keeps the broadcast announced for the reconnect window and a re-attaching source splices back; a clean unannounce still tears down immediately. Measured surviving relay kill and restart with byte-identical output. [#2647](https://github.com/moq-dev/moq/pull/2647): re-attach within seconds of a relay returning; a dead relay errors in tens of seconds — the axis for a supervisor deciding to re-home a subscriber.
+`moq export ts` exited the instant its session dropped; a broadcast subscriber must ride out relay maintenance unattended. The reconnect loop stayed alive; the sink task was fatal ([#2459](https://github.com/moq-dev/moq/issues/2459)). Closed by [#2469](https://github.com/moq-dev/moq/pull/2469) (broadcast _linger_): the relay keeps the broadcast announced for the reconnect window and a re-attaching source splices back; a clean unannounce still tears down immediately. Measured surviving relay kill and restart with byte-identical output. [#2647](https://github.com/moq-dev/moq/pull/2647): re-attach within seconds of a relay returning; a dead relay errors in tens of seconds — the axis for a supervisor deciding to re-home a subscriber.
 
 ### A cancelled write dropped bytes and said nothing — closed, in a different repository
 
@@ -256,7 +256,7 @@ T28's attribution depends on neither, because it rests on the acknowledgement fr
 
 ### The relay gives up inside a subscriber's delay — reported, fixed, regressed
 
-Under blackouts across a 117 ms path, `moq-relay` reset a subscriber's groups `Old` at stalls of 0.6 s under `export ts --delay 2s` and 1.6–2.1 s at 5,822 ms ([T83](test-83-mixed-plane-pair.md) Part D). **Cause:** the TS export stated half its delay as the subscription's maximum. **Fixed** by [#9067](https://github.com/moq-dev/moq/pull/9067): exports then evicted only at stalls reaching their delay. **Regressed** ([#9320](https://github.com/moq-dev/moq/issues/9320)): interleaved with `3c0daa21` over 3 h, `main`'s relay evicts the 5,822 ms subscriber at 43 of 128 3–4 s blackouts; `3c0daa21`, 4.
+Across a 117 ms path's blackouts, `moq-relay` reset a subscriber's groups `Old` at stalls of 0.6 s under `export ts --delay 2s` and 1.6–2.1 s at 5,822 ms ([T83](test-83-mixed-plane-pair.md) Part D). **Cause:** the TS export stated half its delay as the subscription's maximum. **Fixed** by [#9067](https://github.com/moq-dev/moq/pull/9067): exports then evicted only at stalls reaching their delay. **Regressed** ([#9320](https://github.com/moq-dev/moq/issues/9320)): interleaved with `3c0daa21` over 3 h, `main`'s relay evicts the 5,822 ms subscriber at 43 of 128 3–4 s blackouts; `3c0daa21`, 4. Bisected to [#7017](https://github.com/moq-dev/moq/pull/7017), which ages an application-limited BBRv3 bandwidth estimate: 22 of 32 windows, its parent 1.
 
 ### The media-aware export drops a field-coded feed's pictures — reported
 
