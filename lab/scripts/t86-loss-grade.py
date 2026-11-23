@@ -6,9 +6,10 @@
 Per run: the shaper's measured loss; the output against the source (ts-passthrough-identity.py's
 JSON, written to identity.json if absent); programme lost after the join, gaps plus the tail short
 of the source's end, in seconds of the source at RATE; continuity errors and the longest read gap
-after the first byte (arrivals.csv); and the join: the first byte's delay from the receiver's first
-start, its place in the source, and how far behind the live edge it lands (time since the source
-started, less that place). Prints one row per run.
+after the first byte and before the final read, which is reported apart (arrivals.csv); and the
+join: the first byte's delay from the receiver's first start, its place in the source, and how far
+behind the live edge it lands (time since the source started, less that place). Prints one row per
+run.
 """
 
 import argparse
@@ -38,7 +39,8 @@ def main():
     ap.add_argument("--rate", type=float, default=9945951.0)
     a = ap.parse_args()
     pps = a.rate / (188 * 8)
-    print("run | loss % | whole | lost s | gaps | tail s | cc | max gap ms | 1st byte s | joins at s | behind live s")
+    print("run | loss % | whole | lost s | gaps | tail s | cc | max gap ms | last read ms | 1st byte s | joins at s "
+          "| behind live s")
     for d in a.runs:
         ij = os.path.join(d, "identity.json")
         if not os.path.exists(ij):
@@ -53,9 +55,11 @@ def main():
         live = [r for r in rows if int(r["packets"]) > 0]
         first = float(live[0]["t"]) if live else None
         cc = sum(int(r["cc_errors"]) for r in rows)
-        # a read after the publisher has gone (a held last object) is no gap in delivery
+        # the final read, and any read after the publisher has gone, deliver its held last object:
+        # no gap in delivery, so the final read's wait is reported apart
         end = ev.get("publisher exit", float("inf")) + 1.0
-        max_gap = max((int(r["max_gap_ms"]) for r in live[1:] if float(r["t"]) <= end), default=0)
+        max_gap = max((int(r["max_gap_ms"]) for r in live[1:-1] if float(r["t"]) <= end), default=0)
+        last_gap = int(live[-1]["max_gap_ms"]) if len(live) > 1 else 0
         tail = (idn["source_packets"] - idn["end_source_packet"]) / pps
         lost = idn["gap_packets"] / pps + tail
         whole = idn["gaps"] == 0 and idn["foreign"] == 0 and cc == 0 and tail <= 1.0
@@ -63,7 +67,8 @@ def main():
         delay = first - ev["receiver start"] if first else float("nan")
         behind = (first - ev["source start"]) - joins if first else float("nan")
         print(f"{os.path.basename(d.rstrip('/'))} | {shaper['loss_measured_pct']:.2f} | {'yes' if whole else 'no'} | "
-              f"{lost:.2f} | {idn['gaps']} | {tail:.2f} | {cc} | {max_gap} | {delay:.2f} | {joins:.2f} | {behind:.2f}")
+              f"{lost:.2f} | {idn['gaps']} | {tail:.2f} | {cc} | {max_gap} | {last_gap} | {delay:.2f} | {joins:.2f} | "
+              f"{behind:.2f}")
 
 
 if __name__ == "__main__":

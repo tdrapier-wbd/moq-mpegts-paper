@@ -14,13 +14,13 @@ Four kinds of thing are recorded: defects verified against before-and-after buil
 
 ### The lane this campaign measures did not exist when it started
 
-A real contribution capture published and subscribed back produced continuously undecodable H.264 (`non-existing PPS 0 referenced`), because the import/export path kept a single SPS and a single PPS and a source carrying several lost all but the last seen. PES **DTS was not authored at all**, so B-frame content — 12,480 B-frames in the capture — emitted a decode timeline a player had to be told to ignore. Reported as [#1798](https://github.com/moq-dev/moq/issues/1798) and [#1836](https://github.com/moq-dev/moq/issues/1836), fixed by [#1812](https://github.com/moq-dev/moq/pull/1812) and [#1843](https://github.com/moq-dev/moq/pull/1843).
+A real contribution capture published and subscribed back produced continuously undecodable H.264 (`non-existing PPS 0 referenced`), because the import/export path kept a single SPS and a single PPS and a source carrying several lost all but the last seen. PES **DTS was not authored at all**, so B-frame content emitted a decode timeline a player had to be told to ignore. Reported as [#1798](https://github.com/moq-dev/moq/issues/1798) and [#1836](https://github.com/moq-dev/moq/issues/1836), fixed by [#1812](https://github.com/moq-dev/moq/pull/1812) and [#1843](https://github.com/moq-dev/moq/pull/1843).
 
-The larger carriage question went to [#1799](https://github.com/moq-dev/moq/issues/1799), which presented media-aware and byte-opaque options **neutrally** and asked for a direction rather than advocating one. Upstream chose verbatim per-PID carriage under an `mpegts` catalog section ([#1815](https://github.com/moq-dev/moq/pull/1815)), so ancillary PIDs — DVB teletext, AC-3, all three SCTE-35 PIDs — survive as opaque tracks while video and audio stay typed and playable without TS support.
+The larger carriage question went to [#1799](https://github.com/moq-dev/moq/issues/1799), which asked, **neutrally**, for a direction between media-aware and byte-opaque carriage. Upstream chose verbatim per-PID carriage under an `mpegts` catalog section ([#1815](https://github.com/moq-dev/moq/pull/1815)), so ancillary PIDs — DVB teletext, AC-3, all three SCTE-35 PIDs — survive as opaque tracks while video and audio stay typed and playable without TS support.
 
 ### The harness that found most of what follows
 
-The MPEG-TS/IRD compliance harness this campaign uses was offered upstream as [#2024](https://github.com/moq-dev/moq/pull/2024): relay round trip, TSDuck parsing, and PCR interval, accuracy, mux-rate stability and continuity graded against IRD expectations. It landed as [#2011](https://github.com/moq-dev/moq/pull/2011), hardened in [#2043](https://github.com/moq-dev/moq/pull/2043), as `just test ts`.
+Our MPEG-TS/IRD compliance harness was offered upstream as [#2024](https://github.com/moq-dev/moq/pull/2024): relay round trip, TSDuck parsing, and PCR interval, accuracy, mux-rate stability and continuity graded against IRD expectations. It landed as [#2011](https://github.com/moq-dev/moq/pull/2011), hardened in [#2043](https://github.com/moq-dev/moq/pull/2043), as `just test ts`.
 
 ### Open-GOP keyframe detection — closed
 
@@ -256,7 +256,7 @@ T28's attribution depends on neither, because it rests on the acknowledgement fr
 
 ### The relay gives up inside a subscriber's delay — reported, fixed, regressed
 
-Across a 117 ms path's blackouts, `moq-relay` reset a subscriber's groups `Old` at stalls of 0.6 s under `export ts --delay 2s` and 1.6–2.1 s at 5,822 ms ([T83](test-83-mixed-plane-pair.md) Part D). **Cause:** the TS export stated half its delay as the subscription's maximum. **Fixed** by [#9067](https://github.com/moq-dev/moq/pull/9067): exports then evicted only at stalls reaching their delay. **Regressed** ([#9320](https://github.com/moq-dev/moq/issues/9320)): interleaved with `3c0daa21` over 3 h, `main`'s relay evicts the 5,822 ms subscriber at 43 of 128 3–4 s blackouts; `3c0daa21`, 4. Bisected to [#7017](https://github.com/moq-dev/moq/pull/7017), which ages an application-limited BBRv3 bandwidth estimate: 22 of 32 windows, its parent 1.
+Across a 117 ms path's blackouts, `moq-relay` reset a subscriber's groups `Old` at stalls of 0.6 s under `export ts --delay 2s` and 1.6–2.1 s at 5,822 ms ([T83](test-83-mixed-plane-pair.md) Part D). **Cause:** the TS export stated half its delay as the subscription's maximum. **Fixed** by [#9067](https://github.com/moq-dev/moq/pull/9067): exports then evicted only at stalls reaching their delay. **Regressed** ([#9320](https://github.com/moq-dev/moq/issues/9320)): `main`'s relay evicts the 5,822 ms subscriber at a third of 3–4 s blackouts, against `3c0daa21`'s 3 %; bisected to [#7017](https://github.com/moq-dev/moq/pull/7017), which ages an application-limited BBRv3 bandwidth estimate (T83 Part D). **Fix proposed**, [#9460](https://github.com/moq-dev/moq/pull/9460): pace by the probed maximum, ageing only the reported estimate; open, unverified.
 
 ### The media-aware export drops a field-coded feed's pictures — reported, fixed
 
@@ -465,9 +465,9 @@ The subscriber opens discovery on an _empty_ namespace prefix, which moxygen rej
 
 ### A media-level interop profile — contributed
 
-The community interop matrix is control-plane only, so `setup-only` can report green where no media byte flows — **an entire failure class is invisible to the matrix the ecosystem reads.** The argument to [englishm/moq-interop-runner#32](https://github.com/englishm/moq-interop-runner/issues/32) is that media-level validation does not require decoding played video: **pick a fixture container that checks itself.** Every MPEG-TS PID carries a 4-bit continuity counter, so loss, duplication and reordering are detectable from the received bytes alone, and the checker shows its sensitivity to all three.
+The community interop matrix is control-plane only, so `setup-only` can report green where no media byte flows. [englishm/moq-interop-runner#32](https://github.com/englishm/moq-interop-runner/issues/32) argues that media-level validation needs no decoding: **pick a fixture that checks itself.** Every MPEG-TS PID carries a 4-bit continuity counter, so loss, duplication and reordering show in the received bytes, and the checker shows its sensitivity to all three.
 
-It also suggested a zero-field namespace subscription test (data for moq-wg#1457) and recording the negotiated transport beside the draft. **State:** another contributor took it up as a `media` area (CMSF first); [our reply](https://github.com/englishm/moq-interop-runner/issues/32#issuecomment-6218255528) keeps T-STD out of pass/fail. **The MPEG-TS half is merged ([englishm/moq-interop-runner#159](https://github.com/englishm/moq-interop-runner/pull/159), `1381bc154`):** a build-time fixture, a TSDuck-backed oracle with 32 sensitivity tests, the cases `ts-carriage-integrity` and `ts-late-subscriber`, and a `moq-net` client in `moq-dev`'s passthrough layout passing both on 19 of 41 cells.
+It also suggested a zero-field namespace subscription test (data for moq-wg#1457) and recording the negotiated transport beside the draft. **State:** another contributor took it up as a `media` area (CMSF first); [our reply](https://github.com/englishm/moq-interop-runner/issues/32#issuecomment-6218255528) keeps T-STD out of pass/fail. **The MPEG-TS half is merged ([englishm/moq-interop-runner#159](https://github.com/englishm/moq-interop-runner/pull/159), `1381bc154`):** a build-time fixture, a TSDuck-backed oracle with 32 sensitivity tests, the cases `ts-carriage-integrity` and `ts-late-subscriber`, and a `moq-net` client in `moq-dev`'s passthrough layout passing both on 19 of 41 cells. The nightly awaits that client's image (`build-images.yml`).
 
 ### A flag-alias regression — reported, fixed, verified, closed
 
@@ -475,7 +475,7 @@ Dial-side flags renamed on the development branch warned and then did not take e
 
 ### Corroboration from an independent stack
 
-`moqxr` [PR #21](https://github.com/mondain/moqxr/pull/21) reports the same preannounce split from the publisher side, resolved by a default-off opt-in, and the idle timeout we measured: a publisher with no subscriber dies at about 32 s. The idle timeout constrains more than one stack.
+`moqxr` [PR #21](https://github.com/mondain/moqxr/pull/21) reports the same preannounce split from the publisher side, resolved by a default-off opt-in, and the idle timeout we measured: a publisher with no subscriber dies at about 32 s.
 
 ### OpenMOQ's MSFTS publisher through `moq-relay` — reported as [openmoq/moqxr#57](https://github.com/openmoq/moqxr/issues/57)
 
@@ -491,11 +491,11 @@ From the [cross-check](cross-check.md) of `moq-dev`'s [#8828](https://github.com
 
 ### A `moq2ts` publisher restart through `moq-relay` — reported as [openmoq/moqxr#156](https://github.com/openmoq/moqxr/issues/156), [openmoq/moq2ts#70](https://github.com/openmoq/moq2ts/issues/70) and [#73](https://github.com/openmoq/moq2ts/issues/73)
 
-[T86](test-86-moq2ts-evaluation.md#p2-t--restarts-and-loop-wraps) P2-t: `moqxr` closes its session after refusing the PUBLISH_NAMESPACE `moq-relay` sends unasked, so publishers on one relay end each other's sessions and a restarted one waits out its predecessor (#156). `moq2ts-receiver` never answers one (#70); both are defects against the draft. After PUBLISH_DONE the receiver waits moq5's default 30 s, losing 42.7 s against `moq-dev`'s 14 s (#73). **#156 fixed** by [openmoq/moqxr#157](https://github.com/openmoq/moqxr/pull/157), not yet verified; #70 and #73 open.
+[T86](test-86-moq2ts-evaluation.md#p2-t--restarts-and-loop-wraps) P2-t: `moqxr` closes its session after refusing the PUBLISH_NAMESPACE `moq-relay` sends unasked, so publishers on one relay end each other's sessions and a restarted one waits out its predecessor (#156). `moq2ts-receiver` never answers one (#70); both are defects against the draft. After PUBLISH_DONE the receiver waits moq5's default 30 s, losing 42.7 s against `moq-dev`'s 14 s (#73). **Fixed and verified** ([T86](test-86-moq2ts-evaluation.md#re-check-of-the-first-and-third-findings-fixes)): #156 by [openmoq/moqxr#157](https://github.com/openmoq/moqxr/pull/157); #70 by [openmoq/moq5#71](https://github.com/openmoq/moq5/pull/71), refusing it `NOT_SUPPORTED`. #73 open: [openmoq/moq5#74](https://github.com/openmoq/moq5/pull/74), merged, makes the wait settable; `moq2ts-receiver` does not yet set it.
 
 ### T86's kit and test arms — offered as [openmoq/moq2ts#74](https://github.com/openmoq/moq2ts/issues/74), [moq-dev/moq#9315](https://github.com/moq-dev/moq/issues/9315) and [englishm/moq-interop-runner#206](https://github.com/englishm/moq-interop-runner/pull/206)
 
-[`kits/t86/`](kits/t86/README.md) reruns T86 from synthetic inputs, offered to OpenMOQ. #9315's three `just test ts` arms are our pull requests: [#9392](https://github.com/moq-dev/moq/pull/9392), an unflagged splice, merged; [#9394](https://github.com/moq-dev/moq/pull/9394), a late join to one program, open; [#9395](https://github.com/moq-dev/moq/pull/9395), an import restart and its fix, closed as superseded by the maintainer's [#9385](https://github.com/moq-dev/moq/pull/9385), the same design; #206 proposes three runner scenarios.
+[`kits/t86/`](kits/t86/README.md) reruns T86 from synthetic inputs. OpenMOQ ran every cell on arm A: all pass but `t`'s 43 s publisher restart (#73) and `v`'s start-up, now his [openmoq/moq2ts#77](https://github.com/openmoq/moq2ts/issues/77). #9315's three `just test ts` arms are ours: [#9392](https://github.com/moq-dev/moq/pull/9392), an unflagged splice, and [#9394](https://github.com/moq-dev/moq/pull/9394), a late join to one program, merged; [#9395](https://github.com/moq-dev/moq/pull/9395), an import restart, superseded by the maintainer's [#9385](https://github.com/moq-dev/moq/pull/9385); #206 proposes three runner scenarios.
 
 ### moq5's relay and a late subscriber — reported as [openmoq/moq5#51](https://github.com/openmoq/moq5/issues/51)
 

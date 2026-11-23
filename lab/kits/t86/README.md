@@ -6,6 +6,25 @@ This kit reruns [T86](../../test-86-moq2ts-evaluation.md) on any build of OpenMO
 
 ffmpeg with libx264, TSDuck (3.45 or later) and Python 3; `moq2ts-cli` and `moq2ts-receiver` built headless; `moq-relay` and `moq` from `moq-dev` (the relay serves both arms). About 2.5 GB for the inputs and 1.5 GB a cell for the outputs. macOS or Linux.
 
+Build these as the kit was run:
+
+- **`moq-relay` and `moq`** at `moq-dev` `b45179d39b` (`moq-relay` 0.17.2): `cargo build --release --bin moq --bin moq-relay`. An older relay, such as 0.17.1, ends every draft-22 session of `moq2ts-receiver` with `trailing bytes` and rejects `--quic-congestion-control bbr`.
+- **`moq2ts-cli`** on the `moqxr` release SDK that `moq2ts` pins (`MOQXR_VERSION` in its `.github/workflows/build.yml`), passed as `-DMOQXR_SDK_DIR`.
+- **`moq2ts-receiver`** on an installed moq5 `main`, built with its pinned and patched picoquic and the threaded picoquic adapter. Without that adapter `moq_endpoint_connect` returns "not supported by this build".
+
+```bash
+cd moq5 && eval "$(scripts/setup_picoquic_deps.sh)"   # clones picoquic and picotls, applies moq5's patches
+cmake -S . -B build/svc -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=<moq5-install> \
+  -DMOQ_BUILD_SERVICE=ON -DMOQ_BUILD_MSF=ON -DMOQ_BUILD_MPEG2TS=ON -DMOQ_BUILD_ADAPTER_PICOQUIC=ON \
+  -DMOQ_BUILD_PQ_THREADED=ON -DMOQ_PICOQUIC_SOURCE_DIR="$MOQ_PICOQUIC_SOURCE_DIR" -DMOQ_PICOTLS_PREFIX="$MOQ_PICOTLS_PREFIX"
+cmake --build build/svc --parallel && cmake --install build/svc
+cd ../moq2ts && cmake -S src/receive -B build-receiver -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH=<moq5-install> \
+  -DMOQ_PICOQUIC_SOURCE_DIR="$MOQ_PICOQUIC_SOURCE_DIR" -DMOQ_PICOTLS_PREFIX="$MOQ_PICOTLS_PREFIX"
+cmake --build build-receiver --parallel --target moq2ts-receiver
+```
+
+On macOS, set `OPENSSL_ROOT_DIR` (Homebrew's `openssl@3`) before `setup_picoquic_deps.sh`.
+
 ## Running
 
 ```bash
@@ -30,7 +49,7 @@ Each rule is T86's for that cell, shortened; the section linked holds the full c
 | `v`, three programmes ([P2-v](../../test-86-moq2ts-evaluation.md#p2-v--multi-programme-streams)) | `mpts3.ts` (independent clocks), `mpts3-cc.ts` (one clock) | U: whole, every programme CARRIED with its PMT bit-identical; P: every programme CARRIED, its video at least 95 % of the input's packets (a 3 s join) |
 | `w`, the live feed's shape ([P2-w](../../test-86-moq2ts-evaluation.md#p2-w--the-live-feed)) | `live.ts`; `live-splice.ts`, an unflagged splice to a clock 16,844.5 s behind | both whole; no unit missing, altered or added, the splice included |
 
-In `grade.sh`'s table, `whole` requires no continuity error in the output. The inputs of `s`, `t`'s loop and `w`'s splice carry their own continuity breaks, so judge those rows on `lost s` and `gaps`, which compare bytes with the input.
+In `grade.sh`'s table, `whole` requires no continuity error in the output, and `max gap ms` leaves out the final read, which only delivers the publisher's held last object; `last read ms` reports that read's wait. The inputs of `s`, `t`'s loop and `w`'s splice carry their own continuity breaks, so judge those rows on `lost s` and `gaps`, which compare bytes with the input.
 
 ## What the scripts are
 

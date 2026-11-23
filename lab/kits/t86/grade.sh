@@ -26,7 +26,7 @@ verdict() {
 	echo "cc events $cc; $pv"
 }
 
-echo "run | loss % | whole | lost s | gaps | tail s | cc | max gap ms | 1st byte s | joins at s | behind live s"
+echo "run | loss % | whole | lost s | gaps | tail s | cc | max gap ms | last read ms | 1st byte s | joins at s | behind live s"
 case $CELL in
 r)
 	bytes "$FX/base.ts" 9945951 "$dir/base"
