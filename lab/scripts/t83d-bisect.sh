@@ -17,6 +17,8 @@
 #      BURSTS ("3 4"), REPS (4), CONTROL (30), GAP (25, the rig's), BAD_AT (5), GOOD_AT (1),
 #      HALT (1: at the end, stop this host unless KEEP exists), KEEP (~/keep-running), MAX_STEPS (30),
 #      AB_RUNS (0; N: no bisect, N judge runs alternating the endpoints BAD, GOOD, GOOD, BAD, ...),
+#      ARMS (""; "name=<relay> ...": no bisect, RUNS judge runs over the arms, each cycle's order
+#      rotated by one so every arm takes every position; GOOD, BAD and their bins are read, then ignored),
 #      CAL_RUNS (0; N: in place of the endpoint check, N runs alternating the endpoints; unless every
 #      current relay's run evicts in more windows than every good relay's, stop; else each step sums
 #      two runs against the sum of those two extremes, a tie taking a third), CONFIRM (1: judge the
@@ -49,6 +51,8 @@ HALT=${HALT:-1}
 KEEP=${KEEP:-$HOME/keep-running}
 MAX_STEPS=${MAX_STEPS:-30}
 AB_RUNS=${AB_RUNS:-0}
+ARMS=${ARMS:-}
+RUNS=${RUNS:-12}
 CAL_RUNS=${CAL_RUNS:-0}
 CONFIRM=${CONFIRM:-1}
 WINDOWS=$((${#BURSTS[@]} * REPS))
@@ -141,6 +145,16 @@ verdict() {
 	fi
 }
 
+if [ -n "$ARMS" ]; then
+	read -ra ARM <<<"$ARMS"
+	log "arms: $RUNS runs over ${ARM[*]}, judge ${BURSTS[*]} s x $REPS, each cycle rotated"
+	for ((i = 0; i < RUNS; i++)); do
+		k=$(((i % ${#ARM[@]} + i / ${#ARM[@]}) % ${#ARM[@]}))
+		e=${ARM[$k]%%=*} r=${ARM[$k]#*=}
+		log "run$((i + 1))-$e: $(judge "run$((i + 1))-$e" "$r") of $WINDOWS"
+	done
+	exit 0
+fi
 log "start: $GOOD..$BAD, judge ${BURSTS[*]} s x $REPS, bad >= $BAD_AT, good <= $GOOD_AT of $WINDOWS"
 if [ "$AB_RUNS" -gt 0 ]; then
 	log "replication: $AB_RUNS runs alternating BAD_BIN and GOOD_BIN, ABBA"
