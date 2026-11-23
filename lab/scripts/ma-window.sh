@@ -4,7 +4,9 @@
 #   ma-window.sh up <port>     candidate: own relay on 127.0.0.1:4495, `import ts --program 1` from
 #                              the group, `export ts --delay 2s`, the lane's groomer, to 127.0.0.1:<port>
 #   ma-window.sh base <port>   the lane's own chain (standing relay, MOQ_MA) to 127.0.0.1:<port>
-#   ma-window.sh down          stop whatever this script started
+#   ma-window.sh serve <port>  as `up`, in the foreground, each stage restarted 2 s after it exits
+#                              (each exit logged to serve.log): for the `ma-window` unit
+#   ma-window.sh down          stop whatever `up` or `base` started
 #
 # The window itself: `sudo systemctl stop srt-lane-ma; ma-window.sh up 5191`; back:
 # `ma-window.sh down; sudo systemctl start srt-lane-ma`. srt-send-ma reads 127.0.0.1:5191 throughout.
@@ -52,6 +54,35 @@ up() {
 	echo $! > "$RUN/export.pid"
 }
 
+# loop <name> <cmd...>: run cmd, and again 2 s after each exit, logging each exit to serve.log
+loop() {
+	local name=$1 rc
+	shift
+	while :; do
+		"$@"
+		rc=$?
+		echo "$(date -u +%FT%TZ) $name exited $rc" >>"$RUN/serve.log"
+		sleep 2
+	done
+}
+
+# serve <port>: `up` in the foreground for a unit, each stage restarted whenever it exits
+serve() {
+	local to=$1 ver=() C
+	[ -n "$VERSION" ] && ver=(--listen-version "$VERSION")
+	C="--connect-tls-insecure --connect https://127.0.0.1:$PORT/anon --quic-gso=false"
+	[ -n "$VERSION" ] && C="$C --connect-version $VERSION"
+	loop relay bash -c "'$BIN/moq-relay' --listen 127.0.0.1:$PORT --listen-tls-generate localhost \
+		--auth-public '**' --quic-gso=false ${ver[*]} >>'$RUN/relay.log' 2>&1" &
+	sleep 2
+	loop import bash -c "tsp -I ip $GROUP --local-address 127.0.0.1 -O file - 2>>'$RUN/tsp.log' \
+		| '$BIN/moq' $C --broadcast window.hang import ts --program 1 >>'$RUN/import.log' 2>&1" &
+	sleep 3
+	loop export bash -c "'$BIN/moq' $C --broadcast window.hang export ts --delay $DELAY 2>>'$RUN/export.log' \
+		| groom $to >>'$RUN/pacer.log' 2>&1" &
+	wait
+}
+
 base() {
 	local to=$1
 	: "${SRC:?set SRC to the standing relay host}" "${BCAST:?set BCAST to the lane broadcast}"
@@ -73,10 +104,11 @@ down() {
 
 case ${1:-} in
 up) up "$2" ;;
+serve) serve "$2" ;;
 base) base "$2" ;;
 down) down ;;
 *)
-	echo "usage: $0 up <port> | base <port> | down" >&2
+	echo "usage: $0 up <port> | serve <port> | base <port> | down" >&2
 	exit 2
 	;;
 esac

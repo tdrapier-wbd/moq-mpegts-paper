@@ -11,6 +11,9 @@ behind a CDN needs and the T30 receiver lacked:
   - a media sequence going backwards with new names is flagged, the one signal T30 found for a
     namespace two packagers share, and one that skips segments never listed to it (T59's
     origin outage, behind an edge serving the last playlist) is flagged too;
+  - a name out of the playlist for more than --seen-ttl counts as new, and a sequence going
+    backwards to names none listed that recently is rejoined at the live edge: a packager that
+    numbers its segments from the source's clock reuses old names when that clock steps back;
   - every request is logged as one JSON line (status, bytes, time to first byte, total, the CDN's
     X-Cache, Age and PoP, and for a segment how long OUT took to accept it), which is the
     telemetry the lane's monitoring is built from.
@@ -58,7 +61,7 @@ does not undo; its --slice-only adds no pair.
 
 Usage:
   b8-hls-recv.py URL OUT [--seconds N, 0 for no end] [--poll MS] [--edge N] [--timeout S]
-                 [--give-up-ms MS] [--release-ms MS] [--strip-tables] [--header 'Name: value']...
+                 [--give-up-ms MS] [--seen-ttl S] [--release-ms MS] [--strip-tables] [--header 'Name: value']...
                  [--log FILE.jsonl]
                  [--cmcd headers|query] [--cmcd-cid ID] [--cmcd-collector URL] [--cmcd-interval S]
                  [--ts-counters PORT] [--ts-counters-forward URL] [--cmcd-ts-prefix PREFIX]
@@ -389,6 +392,8 @@ def main():
 	ap.add_argument("--poll", type=float, default=250.0, help="playlist poll interval, ms")
 	ap.add_argument("--edge", type=int, default=1, help="join this many segments back from the live edge")
 	ap.add_argument("--timeout", type=float, default=3.0)
+	ap.add_argument("--seen-ttl", type=float, default=600.0,
+					help="seconds a segment name must be out of the playlist before it counts as new")
 	ap.add_argument("--give-up-ms", type=float, default=4000.0,
 					help="how long a failing segment is retried before it is skipped")
 	ap.add_argument("--release-ms", type=float, default=None,
@@ -461,9 +466,14 @@ def main():
 		if counters:
 			counters.close()
 
-	# Segment identity is the URI; a restarted packager starts a new media sequence, and names
-	# derived from the wall clock make the URI unique across restarts.
-	seen = set()
+	# Segment identity is the URI, within --seen-ttl: a restarted packager starts a new media
+	# sequence, and names derived from a clock are unique across restarts unless that clock steps.
+	seen = {}  # uri -> when it was last read, passed over or listed
+	next_prune = time.time() + args.seen_ttl
+
+	def recent(u):
+		t = seen.get(u)
+		return t is not None and time.time() - t < args.seen_ttl
 	failing = {}  # uri -> first failure time
 	joined = False
 	last_msn, last_uris = None, set()
@@ -497,6 +507,17 @@ def main():
 		if last_msn is not None and msn < last_msn and not set(uris) <= last_uris:
 			log("msn-regress", was=last_msn, now=msn)
 			cmcd.event("e", ec=["msn-regress"])
+			if not any(recent(u) for u in uris):
+				joined = False
+				log("rejoin", reason="msn-regress")
+		now = time.time()
+		for u in uris:
+			if u in seen:
+				seen[u] = now
+		if time.time() >= next_prune:
+			cut = time.time() - args.seen_ttl
+			seen = {u: t for u, t in seen.items() if t >= cut}
+			next_prune = time.time() + args.seen_ttl
 		# Segments listed and withdrawn between two of our reads: an edge that served a stale
 		# playlist through an origin outage answers 200 throughout, so nothing else shows them.
 		# A restarted packager jumps the sequence too, so this is a count of events, not of loss.
@@ -512,12 +533,12 @@ def main():
 			continue
 		if not joined:
 			for u in uris[:-args.edge] if args.edge else uris:
-				seen.add(u)
+				seen[u] = time.time()
 			joined = True
 			log("join", at=uris[-args.edge] if args.edge else None)
 
 		for i, u in enumerate(uris):
-			if u in seen:
+			if recent(u):
 				continue
 			seg_url = urllib.parse.urljoin(args.url, u)
 			nxt = [relative(seg_url, urllib.parse.urljoin(args.url, uris[i + 1]))] if i + 1 < len(uris) else None
@@ -558,7 +579,7 @@ def main():
 					if not n_seg:
 						once["msd"] = round((t_write - t_start) * 1000)
 					play_state("p", msd=once.get("msd"))
-				seen.add(u)
+				seen[u] = time.time()
 				failing.pop(u, None)
 				n_seg += 1
 				log("seg", name=u, **meta)
@@ -570,7 +591,7 @@ def main():
 				break  # keep order: nothing after it until it arrives or is given up
 			log("seg-lost", name=u, **meta)
 			starved("seg-lost")
-			seen.add(u)
+			seen[u] = time.time()
 			failing.pop(u, None)
 			n_lost += 1
 
@@ -578,7 +599,7 @@ def main():
 		for u in [u for u in failing if u not in uris]:
 			log("seg-lost", name=u, reason="left playlist")
 			starved("seg-lost")
-			seen.add(u)
+			seen[u] = time.time()
 			failing.pop(u)
 			n_lost += 1
 		time.sleep(poll)
