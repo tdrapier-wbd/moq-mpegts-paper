@@ -32,9 +32,11 @@
 # Env: SRC, BCAST, MA_JWT_FILE (~/.moq-live/probe.jwt), SEG_URL_FILE (~/.srt-send/seg.url),
 #   PASSPHRASE_FILE (AES-256), STREAMID (the receiver's stream ID, if it asks one; it reaches the
 #   unit's command line, so not a secret), GROUP (239.255.0.1:5000), RATE (26000000), DELAY (2s,
-#   both exports), MA_LAT_MS (1000), SEG_LAT_MS (8000), SEG_RELEASE_MS (1500), SEG_LOG
-#   (~/.srt-send/seg-b8.jsonl; empty: the unit's journal), LANE_PORT (4490),
-#   MOQ_MA (~/bin-3c0daa21/moq, the standing relay's build), MOQ_PT (~/bin-66af7231), PACER
+#   both exports), FOLLOW (empty; set, the ma export follows a republish as a program switch,
+#   `--follow FOLLOW --stitch`; a passthrough export takes none), MA_LAT_MS (1000), SEG_LAT_MS (8000),
+#   SEG_RELEASE_MS (1500), SEG_LOG (~/.srt-send/seg-b8.jsonl; empty: the unit's journal), LANE_PORT (4490),
+#   MOQ_MA (~/bin-3c0daa21/moq, the standing relay's build), MOQ_PT (~/bin-9df4313a), LANE_PUBLIC (empty: the
+#   lane relay's anonymous grant, a prefix; `**` for builds before prefix grants, as 66af7231), PACER
 #   (~/pacer-97f3a38/mpegts-pacer), PT_RCVBUF (4194304: the pt sender's UDP receive buffer; the
 #   passthrough export writes one PCR interval at once, moq#9173, which overflows the default's
 #   ~39 ms at 25 Mb/s; the kernel caps it at net.core.rmem_max).
@@ -47,6 +49,7 @@ HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 GROUP=${GROUP:-239.255.0.1:5000}
 RATE=${RATE:-26000000}
 DELAY=${DELAY:-2s}
+FOLLOW=${FOLLOW:-}
 MA_LAT_MS=${MA_LAT_MS:-1000}
 SEG_LAT_MS=${SEG_LAT_MS:-8000}
 SEG_RELEASE_MS=${SEG_RELEASE_MS:-1500}
@@ -54,8 +57,11 @@ LANE_PORT=${LANE_PORT:-4490}
 MA_JWT_FILE=${MA_JWT_FILE:-$HOME/.moq-live/probe.jwt}
 SEG_URL_FILE=${SEG_URL_FILE:-$HOME/.srt-send/seg.url}
 MOQ_MA=${MOQ_MA:-$HOME/bin-3c0daa21/moq}
-MOQ_PT=${MOQ_PT:-$HOME/bin-66af7231}
+MOQ_PT=${MOQ_PT:-$HOME/bin-9df4313a}
+LANE_PUBLIC=${LANE_PUBLIC-}
 PACER=${PACER:-$HOME/pacer-97f3a38/mpegts-pacer}
+# A unit's Environment exports these, and moq refuses MOQ_ variables it does not know.
+export -n MOQ_MA MOQ_PT
 PT_RCVBUF=${PT_RCVBUF:-4194304}
 LOGDIR=$HOME/.srt-send
 SEG_LOG=${SEG_LOG-$LOGDIR/seg-b8.jsonl}
@@ -115,6 +121,7 @@ persist() {
 				printf 'Environment="%s"\n' "${a//%/%%}"
 				;;
 			"$HERE/srt-send.sh") cmd+=("$LIB/srt-send.sh") ;;
+			"") cmd+=('""') ;;
 			*) cmd+=("$a") ;;
 			esac
 		done
@@ -145,7 +152,7 @@ uninstall() {
 # Non-secret settings only: unit properties are readable by every local user.
 config_env() {
 	local v
-	for v in HOME SRC BCAST MA_JWT_FILE SEG_URL_FILE GROUP RATE DELAY MA_LAT_MS SEG_LAT_MS \
+	for v in HOME SRC BCAST MA_JWT_FILE SEG_URL_FILE GROUP RATE DELAY FOLLOW MA_LAT_MS SEG_LAT_MS \
 		SEG_RELEASE_MS SEG_LOG LANE_PORT MOQ_MA MOQ_PT PACER PT_RCVBUF ADDR SRT_MODE SRT_ADDR SRT_LATENCY \
 		PASSPHRASE_FILE STREAMID; do
 		printf -- '--setenv=%s=%s\n' "$v" "${!v:-}"
@@ -154,14 +161,15 @@ config_env() {
 
 # Runs inside srt-lane-LANE.
 produce() {
-	local lane=$1 to
+	local lane=$1 to follow=()
 	to=127.0.0.1:$(udp_port "$lane")
+	[ -n "$FOLLOW" ] && follow=(--follow "$FOLLOW" --stitch)
 	local groom=("$PACER" "$to" "$RATE" --stream-clock --sequence-seed 0 --stall-ms 1000
 		--on-stall mute --stats-interval-ms 10000)
 	case $lane in
 	ma)
 		MOQ_CONNECT="https://$SRC:443/anon?jwt=$(cat "$MA_JWT_FILE")" "$MOQ_MA" --connect-tls-insecure \
-			--broadcast "$BCAST" export ts --delay "$DELAY" |
+			--broadcast "$BCAST" export ts --delay "$DELAY" "${follow[@]}" |
 			"${groom[@]}" --latency-ms "$MA_LAT_MS" --max-latency-ms 8000
 		;;
 	pt)
@@ -254,7 +262,7 @@ origin() {
 	start | install)
 		[ "$1" = start ] || install_prep srt-lane-pt-pub srt-lane-relay
 		unit srt-lane-relay "$MOQ_PT/moq-relay" --listen "$ADDR:$LANE_PORT" --listen-tls-generate "$ADDR" \
-			--auth-public "**" --quic-gso=false --log-level warn
+			--auth-public "$LANE_PUBLIC" --quic-gso=false --log-level warn
 		sleep 2
 		mapfile -t envs < <(config_env)
 		unit srt-lane-pt-pub "${envs[@]}" /bin/bash "$HERE/srt-send.sh" _publish
