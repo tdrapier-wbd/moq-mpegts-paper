@@ -10,10 +10,10 @@
 #
 # The window itself: `sudo systemctl stop srt-lane-ma; ma-window.sh up 5191`; back:
 # `ma-window.sh down; sudo systemctl start srt-lane-ma`. srt-send-ma reads 127.0.0.1:5191 throughout.
-# Env: BIN (candidate bindir), VERSION (forced on the candidate's relay and clients; empty for the
-# default), BCAST, GROUP, RATE, DELAY, FOLLOW (10s: the candidate's export follows a republish as a
-# program switch, `--follow FOLLOW --stitch`; empty: it exits), MA_LAT_MS, PACER, MOQ_MA, SRC,
-# MA_JWT_FILE.
+# Env: BIN (candidate bindir), PORT (4495, its relay), RUN (~/ma-window), VERSION (forced on the
+# candidate's relay and clients; empty for the default), BCAST, GROUP, RATE, DELAY, FOLLOW (10s:
+# the candidate's export follows a republish as a program switch, `--follow FOLLOW --stitch`;
+# empty: it exits), MA_LAT_MS, PACER, MOQ_MA, SRC, MA_JWT_FILE.
 set -u
 BIN=${BIN:-$HOME/bin-9757807f}
 VERSION=${VERSION-moq-lite-07-wip}
@@ -29,7 +29,7 @@ SRC=${SRC-}
 BCAST=${BCAST-}
 MA_JWT_FILE=${MA_JWT_FILE:-$HOME/.moq-live/probe.jwt}
 RUN=${RUN:-$HOME/ma-window}
-PORT=4495
+PORT=${PORT:-4495}
 mkdir -p "$RUN"
 export PACER RATE MA_LAT_MS
 
