@@ -13,7 +13,8 @@
 # Env: BIN (candidate bindir), PORT (4495, its relay), RUN (~/ma-window), VERSION (forced on the
 # candidate's relay and clients; empty for the default), BCAST, GROUP, RATE, DELAY, FOLLOW (10s:
 # the candidate's export follows a republish as a program switch, `--follow FOLLOW --stitch`;
-# empty: it exits), MA_LAT_MS, PACER, MOQ_MA, SRC, MA_JWT_FILE.
+# empty: it exits), PUBLIC (**, the relay's anonymous grant; current main takes ''), MA_LAT_MS,
+# PACER, MOQ_MA, SRC, MA_JWT_FILE.
 set -u
 BIN=${BIN:-$HOME/bin-9757807f}
 VERSION=${VERSION-moq-lite-07-wip}
@@ -21,6 +22,7 @@ GROUP=${GROUP:-239.255.0.1:5000}
 RATE=${RATE:-26000000}
 DELAY=${DELAY:-2s}
 FOLLOW=${FOLLOW-10s}
+PUBLIC=${PUBLIC-**}
 FOLLOWS=${FOLLOW:+--follow $FOLLOW --stitch}
 MA_LAT_MS=${MA_LAT_MS:-1000}
 PACER=${PACER:-$HOME/pacer-97f3a38/mpegts-pacer}
@@ -44,7 +46,7 @@ up() {
 	local to=$1 ver=() C
 	[ -n "$VERSION" ] && ver=(--listen-version "$VERSION")
 	setsid "$BIN/moq-relay" --listen "127.0.0.1:$PORT" --listen-tls-generate localhost \
-		--auth-public "**" --quic-gso=false "${ver[@]}" > "$RUN/relay.log" 2>&1 &
+		--auth-public "$PUBLIC" --quic-gso=false "${ver[@]}" > "$RUN/relay.log" 2>&1 &
 	echo $! > "$RUN/relay.pid"
 	sleep 2
 	C="--connect-tls-insecure --connect https://127.0.0.1:$PORT/anon --quic-gso=false"
@@ -77,7 +79,7 @@ serve() {
 	C="--connect-tls-insecure --connect https://127.0.0.1:$PORT/anon --quic-gso=false"
 	[ -n "$VERSION" ] && C="$C --connect-version $VERSION"
 	loop relay bash -c "'$BIN/moq-relay' --listen 127.0.0.1:$PORT --listen-tls-generate localhost \
-		--auth-public '**' --quic-gso=false ${ver[*]} >>'$RUN/relay.log' 2>&1" &
+		--auth-public '$PUBLIC' --quic-gso=false ${ver[*]} >>'$RUN/relay.log' 2>&1" &
 	sleep 2
 	loop import bash -c "tsp -I ip $GROUP --local-address 127.0.0.1 -O file - 2>>'$RUN/tsp.log' \
 		| '$BIN/moq' $C --broadcast window.hang import ts --program 1 >>'$RUN/import.log' 2>&1" &
