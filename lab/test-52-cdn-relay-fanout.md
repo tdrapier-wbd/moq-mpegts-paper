@@ -1,6 +1,6 @@
 # Test 52 — Fan-out and permanence through a CDN-hosted relay
 
-**State: ramps on moqx v0.3.6 and v0.3.7, the agreed slot and the demultiplexed soak done; the opener's refused join reproduced on loopback, fixed in v0.3.7, and gone from both nodes on it; both lanes' soaks on v0.3.7 done; the demultiplexed lane's memory on v0.3.8 running.** On v0.3.6 the demultiplexed lane's knee is the relay's event loop, on the one thread the operator gives it: 32 subscribers of the 25 Mb/s feed at full rate, about 0.82 Gb/s, degraded at 40, where the loop is 99 % busy, with groups skipped in common from 24. There the passthrough lane had none, single sessions falling silent until QUIC's idle timeout at 2, 4 and 24 subscribers and joins failing in clusters. On v0.3.7 no join fails on either node. The passthrough lane degrades on the one-thread node at 24, by groups arriving late. On a second node, on three threads, the passthrough lane delivers 80 in full (2.16 Gb/s) and degrades at 96, its loops 84 % busy, and the demultiplexed lane 64 (1.68 Gb/s), where the subscriber host's CPU ends the ramp. At 16 subscribers the demultiplexed lane held for 72 h by its criteria, its one break the source's, while each subscriber lost video about twice an hour, which the criteria cannot see, and the node's memory grew without bound.
+**State: ramps on moqx v0.3.6 and v0.3.7, the agreed slot and the demultiplexed soak done; the opener's refused join reproduced on loopback, fixed in v0.3.7, and gone from both nodes on it; both lanes' soaks on v0.3.7 done; on v0.3.8 the one-thread node's memory no longer grows.** On v0.3.6 the demultiplexed lane's knee is the relay's event loop, on the one thread the operator gives it: 32 subscribers of the 25 Mb/s feed at full rate, about 0.82 Gb/s, degraded at 40, where the loop is 99 % busy, with groups skipped in common from 24. There the passthrough lane had none, single sessions falling silent until QUIC's idle timeout at 2, 4 and 24 subscribers and joins failing in clusters. On v0.3.7 no join fails on either node. The passthrough lane degrades on the one-thread node at 24, by groups arriving late. On a second node, on three threads, the passthrough lane delivers 80 in full (2.16 Gb/s) and degrades at 96, its loops 84 % busy, and the demultiplexed lane 64 (1.68 Gb/s), where the subscriber host's CPU ends the ramp. At 16 subscribers the demultiplexed lane held for 72 h by its criteria, its one break the source's, while each subscriber lost video about twice an hour, which the criteria cannot see, and the node's memory grew without bound.
 
 ## Objective
 
@@ -296,6 +296,14 @@ The demultiplexed lane on the one-thread node, now on moqx v0.3.8, as in the v0.
 - **H-mem8:** the one-thread node's used memory, measured as in H-mem, grows under 5.7 MiB an hour from 2 h to the end, where v0.3.7 grew 78–97 at the same load. Its anonymous pages are reported.
 - The soak's delivery criteria and H-skip are reported, not graded: 8 h is too short to set against 72.
 - If H-mem8 holds, the 72 h soaks follow with the lanes swapped between the nodes.
+
+### Memory on v0.3.8: the leak is gone
+
+_Measured, 8.0 h, the one-thread node on v0.3.8._
+
+**H-mem8 holds:** from 2 h to the end the node's used memory grew 1.3 MiB an hour (0.69 to 0.70 GiB of 3.82), its anonymous pages 2.2, at the v0.3.7 soak's load: 74 groups a second received and 4.3 million streams opened an hour, against 78–97 MiB an hour on v0.3.7.
+
+Reported: every subscriber received 102.2–104.7 % of the publisher's input over the run, at least 102.1 % in any hour, and the graded subscribers' 481 windows each flagged none. No span was skipped in common; 368 single spans, nearly all video, from 0 to 129 a subscriber (up to 54.8 s), with late frames dropped in 149 minutes, seven of them at half the subscribers. One subscriber's session ended at 7.1 h on a protocol violation, 1.5 s of one track having been skipped upstream in the ten seconds before, and it was writing output again 2.1 s later; neither v0.3.7 soak ended a session that way. The node declared 566 losses a second, 494 later spurious, its pacer timer lagged 1,736 times a second and its loop was 35 % busy, as on v0.3.7. The probe lost nothing (RTT median 10.9 ms), and the subscriber host's CPU peaked at 32 %.
 
 ## Corrections
 
