@@ -35,7 +35,7 @@
 #   both exports), FOLLOW (empty; set, the ma export follows a republish as a program switch,
 #   `--follow FOLLOW --stitch`; a passthrough export takes none), MA_LAT_MS (1000), SEG_LAT_MS (8000),
 #   SEG_RELEASE_MS (1500), SEG_LOG (~/.srt-send/seg-b8.jsonl; empty: the unit's journal), LANE_PORT (4490),
-#   MOQ_MA (~/bin-3c0daa21/moq, the standing relay's build), MOQ_PT (~/bin-9df4313a), LANE_PUBLIC (empty: the
+#   MOQ_MA (~/bin-3c0daa21/moq, the standing relay's build), MOQ_PT (~/bin-a843d23b), LANE_PUBLIC (empty: the
 #   lane relay's anonymous grant, a prefix; `**` for builds before prefix grants, as 66af7231), PACER
 #   (~/pacer-97f3a38/mpegts-pacer), PT_RCVBUF (4194304: the pt sender's UDP receive buffer; the
 #   passthrough export writes one PCR interval at once, moq#9173, which overflows the default's
@@ -57,7 +57,7 @@ LANE_PORT=${LANE_PORT:-4490}
 MA_JWT_FILE=${MA_JWT_FILE:-$HOME/.moq-live/probe.jwt}
 SEG_URL_FILE=${SEG_URL_FILE:-$HOME/.srt-send/seg.url}
 MOQ_MA=${MOQ_MA:-$HOME/bin-3c0daa21/moq}
-MOQ_PT=${MOQ_PT:-$HOME/bin-9df4313a}
+MOQ_PT=${MOQ_PT:-$HOME/bin-a843d23b}
 LANE_PUBLIC=${LANE_PUBLIC-}
 PACER=${PACER:-$HOME/pacer-97f3a38/mpegts-pacer}
 # A unit's Environment exports these, and moq refuses MOQ_ variables it does not know.

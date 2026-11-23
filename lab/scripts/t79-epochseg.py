@@ -22,7 +22,9 @@ either origin. A segment is an exact slice of the input (no PSI is inserted), so
 segments concatenate to the input stream.
 
 A packager publishes only while it is provably such a copy: a continuity-counter error, a stall in
-the input or the PTS going back withdraws the playlist at once and holds it until a full window
+the input, the PTS going back, or the PTS or PCR running more than 5 s ahead of the time it took to
+arrive (a step in the source's clock, which would otherwise close a segment as long as the step and date
+the next by it) withdraws the playlist at once and holds it until a full window
 of intact segments has been cut again. A pathway that has just joined, or lost input, therefore
 answers 404 for its playlist rather than a window its peer does not share.
 
@@ -64,6 +66,7 @@ import urllib.request
 WRAP = 1 << 33
 HALF = 1 << 32
 STALL_S = 0.5
+STEP_S = 5.0
 
 
 def pes_pts(p, off):
@@ -111,7 +114,7 @@ class Segmenter:
 		self.span = round(duration * 90000)
 		self.bound = round(cut_after * 90000)
 		self.lead = None  # PTS less the last PCR, at the last video PES (90 kHz)
-		self.last_pcr = None
+		self.last_pcr = self.last_pcr_at = self.last_rap = None
 		self.window = window
 		self.extra = extra
 		self.target = target
@@ -231,7 +234,10 @@ class Segmenter:
 	def pcr(self, base, now):
 		ref = int(now * 90000)
 		u = ref + ((base - ref + HALF) % WRAP) - HALF
-		self.last_pcr = u
+		if self.last_pcr is not None and u - self.last_pcr > (now - self.last_pcr_at + STEP_S) * 90000:
+			self.reset(f"pcr went forward {(u - self.last_pcr) / 90000:.3f}s")
+			self.edge_k = None
+		self.last_pcr, self.last_pcr_at = u, now
 		t = u / 90000
 		if self.pdt:
 			if self.settle_until is None:
@@ -271,6 +277,11 @@ class Segmenter:
 
 	def rap(self, v, now):
 		k = v // self.span
+		last, self.last_rap = self.last_rap, (v, now)
+		if last is not None and v - last[0] > (now - last[1] + STEP_S) * 90000:
+			self.reset(f"pts went forward {(v - last[0]) / 90000:.3f}s")
+			self.edge_k = k
+			return
 		prev, self.edge_k = self.edge_k, k
 		if prev is None or k == prev:
 			return

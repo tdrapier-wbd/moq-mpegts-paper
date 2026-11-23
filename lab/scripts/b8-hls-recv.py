@@ -45,7 +45,9 @@ time, as t61-epochseg.py --pdt writes it) is held until its last PCR's time plus
 receiver of the stream hands it on at the same instant, whatever path delivered it and however long
 that took (T63). The last PCR, not the last packet, because a stream-clocked groomer can place
 packets only up to the newest PCR it has seen. One that arrives later is passed on at once and
-logged as late. The host clock must be synchronised.
+logged as late; one dated more than --max-hold-ms ahead, by a packager that followed a step in
+the source's clock, is passed on at once and logged as misdated. The host clock must be
+synchronised.
 
 A segment the playlist marks with EXT-X-DISCONTINUITY (a new source, a new timeline) is handed on
 with the transport stream's own signal for it, which a groomer or an IRD reads and a playlist tag
@@ -61,7 +63,7 @@ does not undo; its --slice-only adds no pair.
 
 Usage:
   b8-hls-recv.py URL OUT [--seconds N, 0 for no end] [--poll MS] [--edge N] [--timeout S]
-                 [--give-up-ms MS] [--seen-ttl S] [--release-ms MS] [--strip-tables] [--header 'Name: value']...
+                 [--give-up-ms MS] [--seen-ttl S] [--release-ms MS] [--max-hold-ms MS] [--strip-tables] [--header 'Name: value']...
                  [--log FILE.jsonl]
                  [--cmcd headers|query] [--cmcd-cid ID] [--cmcd-collector URL] [--cmcd-interval S]
                  [--ts-counters PORT] [--ts-counters-forward URL] [--cmcd-ts-prefix PREFIX]
@@ -398,6 +400,8 @@ def main():
 					help="how long a failing segment is retried before it is skipped")
 	ap.add_argument("--release-ms", type=float, default=None,
 					help="hold each dated segment until its last PCR's time plus this")
+	ap.add_argument("--max-hold-ms", type=float, default=10000.0,
+					help="a longer hold is a misdated segment, passed on at once")
 	ap.add_argument("--header", action="append", default=[])
 	ap.add_argument("--strip-tables", action="store_true",
 					help="drop the PAT and PMT a packager adds at the head of each segment")
@@ -555,7 +559,9 @@ def main():
 					mtp = max(100, round(len(data) * 8 / meta["ms"] / 100) * 100)
 				if args.release_ms is not None and u in dated and (span := pcr_span(data)) is not None:
 					wait = dated[u] + span + args.release_ms / 1000.0 - time.time()
-					if wait > 0:
+					if wait * 1000 > args.max_hold_ms:
+						meta["misdated_ms"] = round(wait * 1000, 1)
+					elif wait > 0:
 						time.sleep(wait)
 						meta["held_ms"] = round(wait * 1000, 1)
 					else:
