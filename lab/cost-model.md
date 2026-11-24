@@ -95,6 +95,7 @@ What it costs to deliver one always-on unidirectional Mbps for a year, and the s
 | **Self-hosted** — own the egress, unmetered per GB | IP transit, 10 GigE port, competitive hub _(bandwidth only — see §10.1)_ | 0.00021 | 0.84 | 1× |
 |  | IP transit, 100 GigE port, competitive hub _(bandwidth only — see §10.1)_ | 0.00015 | 0.60 | 1× |
 |  | _Illustrative all-in PoP, 40–100 % utilised (§10.1)_ | _0.0009–0.0023_ | _3.5–9.1_ | _4–11×_ |
+|  | Rented dedicated servers, unmetered ports, sized at 10 Mb/s a session _(derived, §10.2)_ | 0.0003–0.0007 | 1.2–2.8 | 1.5–3.3× |
 | **Cloud** — own software on rented compute, metered egress | GCP premium, first tier | 0.1118 | 441 | 524× |
 |  | Azure premium backbone, first tier | 0.0870 | 343 | 408× |
 |  | AWS list, first tier | 0.0838 | 330 | 393× |
@@ -317,7 +318,46 @@ An illustrative all-in build-up shows the gap. A 10 Gbps-capable point of presen
 |                     40 % |                0.0023 |
 |                     25 % |                0.0036 |
 
-**A realistic self-hosted operation therefore lands around $0.001–0.004/GB, four to seventeen times the bandwidth-only floor** — and, notably, in the same band as commodity CDN volume pricing ($0.002–0.005/GB). That coincidence is the useful result: it suggests the published commodity CDN rates are close to the real cost of operating delivery at scale, which makes them a credible reference point for what a competitive MoQ relay market would charge, and confirms that $0.0002/GB is an asymptote nobody transacts at rather than a target anybody should quote. The colocation and hardware lines are illustrative assumptions, not published rates, and are the weakest inputs anywhere in this model.
+**A realistic self-hosted operation therefore lands around $0.001–0.004/GB, four to seventeen times the bandwidth-only floor** — and, notably, in the same band as commodity CDN volume pricing ($0.002–0.005/GB). That coincidence is the useful result: it suggests the published commodity CDN rates are close to the real cost of operating delivery at scale, which makes them a credible reference point for what a competitive MoQ relay market would charge, and confirms that $0.0002/GB is an asymptote nobody transacts at rather than a target anybody should quote. The colocation and hardware lines are illustrative assumptions, not published rates, and are the weakest inputs anywhere in this model; §10.2 prices the same delivery from published catalogues and lands below this band.
+
+### 10.2 Rented dedicated servers, priced from the catalogues
+
+**Workload.** Channels at 10 Mb/s to many subscriptions, 1+1. Every IRD merges both legs ([architecture](../docs/architecture.md) §5), so each leg carries every subscription all the time, and a leg's failure removes protection rather than moving load onto the other: the pair is two full legs with no failover headroom. Sizing is therefore per subscription and linear, and every figure below is **per 1,000 subscriptions a leg**, a normaliser rather than any estate's size; a real leg rounds up to whole boxes, which adds at most one box's price. At the live feed's 1.033× carriage ([T14](test-14-data-plane-comparison.md)) 1,000 subscriptions are 10.3 Gb/s of wire a leg.
+
+**Sizing.** Cross-host, `moq-relay` 0.15.1 costs 1.258 % of a c6in.large vCPU per 10 Mb/s subscriber with GSO on ([T43](test-43-fanout-current-build.md)), so one busy vCPU forwards about 0.78 Gb/s. The CDN-hosted moqx node of [T52](test-52-cdn-relay-fanout.md) forwarded 0.82–0.86 Gb/s on its one thread and 2.16 Gb/s on three at 84 % busy: two implementations, measured under different conditions (an internet path, 25 Mb/s, an event-loop limit), agree within about 10 % a thread. **Each 1,000 subscriptions keep about 13 threads busy, 18 at a 70 % CPU ceiling**, and with ports held to 75 % a 100 Gb/s port would need about 130, more than any 100 Gb/s box in these catalogues carries. T26's 0.806 %, on the retired quinn build, would cut each CPU-bound figure by about a third and describes no current build. Two inputs are not measured: an older thread (a pre-2021 Xeon, or Zen 2) is taken as 0.7 of the measured Ice Lake vCPU and a current EPYC thread as 1.0, _reasoned_; and the slope is extrapolated from at most 150 subscribers on two vCPUs to 360–2,800 a box. Memory does not bind: at 2.62 MB a session and about 69 MB a carried channel the largest box, carrying tens of channels, holds under 10 GB.
+
+**Rates.** Monthly list, ex-VAT, read from each catalogue on 2026-11-23; ServerRoom's dollars at an _assumed_ €1 = $1.10. Two prices are a catalogue aggregator's reading of the provider's own configurator: OVHcloud's 25 Gb/s public-bandwidth option at €1,250, and the port speed of NovoServe's "from €2,817" 25/50 Gb/s line, read as 50 Gb/s.
+
+| Provider | Box | Port, Gb/s | Sessions a box, by CPU | By port | € per 1,000 a leg-month | $/GB | Bandwidth terms |
+| --- | --- | --: | --: | --: | --: | --: | --- |
+| ServerRoom | Xeon Silver 4110, 8c/16t | 10 | 623 | 726 | 894 | 0.00029 | unshared port |
+| NovoServe | 2× Xeon E5-2650 v4, 24c/48t | 5 | 1,869 | 363 | 1,099 | 0.00036 | unmetered |
+| OVHcloud | Scale-a1, EPYC 9124, 16c/32t | 25 | 1,780 | 1,815 | 1,006 | 0.00033 | unmetered |
+| OVHcloud | Scale-a2, EPYC 9254, 24c/48t | 25 | 2,670 | 1,815 | 1,008 | 0.00033 | unmetered |
+| Melbicom | 2× Xeon E5-2680 v4, 28c/56t | 20 | 2,181 | 1,452 | 1,716 | 0.00056 | guaranteed |
+| Melbicom | 2× Xeon E5-2660 v3, 20c/40t | 10 | 1,558 | 726 | 1,886 | 0.00061 | guaranteed |
+| Melbicom | 2× Xeon E5-2680 v4, 28c/56t | 40 | 2,181 | 2,904 | 2,151 | 0.00070 | guaranteed |
+| NovoServe | EPYC 7302, 16c/32t | 50 | 1,246 | 3,630 | 2,261 | 0.00073 | unmetered |
+| Melbicom | 2× Xeon Gold 6254, 36c/72t | 100 | 2,804 | 7,260 | 5,388 | 0.00175 | guaranteed |
+
+**Both legs, on two providers as independence requires, cost €1,900–4,300 a month per 1,000 subscriptions: $0.0003–0.0007/GB, $25k–57k a year.** The low end is ServerRoom's leg beside OVHcloud's; the high end, two legs at Melbicom's dearest guaranteed configuration, is a price reference. Per destination of §6's eight-service multiplex that is $191–432 a year, and parity falls at 2,300–5,200 destinations per $1M. Per 1,000 subscriptions 1+1, a year, at other rungs:
+
+| Rung                                             | $k a year |
+| ------------------------------------------------ | --------: |
+| IP transit, bandwidth only, 100 to 10 GigE       |     12–17 |
+| **Rented dedicated servers**                     | **25–57** |
+| bunny.net volume network, 1–2 PB to under 500 TB |   163–407 |
+| MediaConnect reserved, 1500 Mbps tier            |     1,381 |
+| moq.pro MoQ relay                                |     3,258 |
+| AWS list data transfer out, tiered               |     3,839 |
+
+The ratios hold at any scale where the volume tiers are reached; below a few hundred subscriptions a leg the floor of two boxes, one a leg, dominates instead.
+
+**Shapes of a leg.** One box on a 100 Gb/s port has the cheapest port per Gb/s (ServerRoom's, $40 a Gb/s-month), but no catalogue pairs 100 Gb/s with the ~130 current threads that would fill it: Melbicom's 100 Gb/s box has 72 older ones, ServerRoom's line at most 80, OVHcloud's public bandwidth stops at 25 Gb/s and NovoServe's webshop at 50. It needs a quote, one relay process across ~100 threads is unmeasured, its failure leaves every destination on one leg, and a spare doubles the leg. A few boxes on 20–50 Gb/s, 1,500–2,700 sessions each, is the balanced shape, a current 24-core box filling 25 Gb/s at both ceilings. Many boxes on 5–10 Gb/s, 360–730 sessions each, stay closest to the measured scale, with the smallest blast radius, and are the cheapest shape on ServerRoom's catalogue; they are also the most units to operate. In every shape a box's failure leaves its share of the destinations on one leg, and a spare costs one box's share of the leg. Each box pulls every carried channel, 10 Mb/s apiece, from an origin relay in its leg, so ingest costs nothing that matters, but fan-out through a second relay tier is unmeasured ([evidence](evidence.md) §2, Cost).
+
+**What "unmetered" buys differs.** Melbicom sells guaranteed bandwidth at €100–110 for each further Gb/s, the step between a box's 1, 10, 20 and 40 Gb/s guaranteed variants; OVHcloud lists "unmetered" and "unmetered and guaranteed" as separate options; ServerRoom sells an unshared switch port with no transfer allowance, its terms reserving intervention for use that endangers the platform; NovoServe sells a dedicated unmetered port. Only the guaranteed offers commit upstream capacity in writing, and a leg holding most of its ports around the clock is the customer an oversubscribed upstream is not priced for. A provider's network protection can bind as well: T52's node ran a DDoS rule that acted above 1.5 Gb/s until its operator lifted it.
+
+**Excluded:** staffing and operations for the fleet, which at the scale where this rung matters is no longer small beside the transport line; the control plane, including assigning destinations to boxes and re-homing them; setup fees, which run from none to a month's rental on some OVHcloud lines; taxes; and the destinations' own access, which both legs share.
 
 ## 11. Limitations
 
@@ -325,6 +365,7 @@ An illustrative all-in build-up shows the gap. A 10 Gbps-capable point of presen
 - **Cloudflare's $0.05/GB is announced, not in force.** Its relays are free in beta, and no date for general availability is published. Modelling it as a firm rate is a forward assumption.
 - **No MoQ relay is priced near commodity delivery.** Both published rates (§3) sit four to ten times above it. The $0.010 and $0.005/GB relay columns apply commodity CDN _delivery_ rates to a MoQ relay, assuming one would price near them rather than at a large premium: an argument from market structure, not an observed price.
 - **The self-hosted all-in build-up in §10.1 is illustrative.** Colocation, power and hardware lines carry no published source, and no control-plane, provisioning or software-licensing cost is included on the self-hosted path — which is not free and cannot be assumed away.
+- **The rented-dedicated sizing in §10.2 is extrapolated.** The per-session slope is measured to 150 subscribers on two vCPUs and applied to 360–2,800 a box, on processors never measured, at a reasoned per-thread factor, through ports whose sustained-UDP terms only one provider puts in writing. The provider rates are published; the box counts are not measured.
 - **Both carriage multipliers are two sources on clean paths.** They are measured back-to-back, but the _size_ of MoQ's advantage is a property of the source rather than of the protocol: 5.3 % on a clip with 4.57 % null stuffing, none on a stuffing-free feed, and a loosely filled carrier would widen it. Read the input as "carriage does not count against MoQ", not as 5 % of banked egress.
 - **Carriage is modelled clean-path.** Measured at 1 % random forward loss both multipliers rose by about the loss rate and the ranking held, so loss is not a hidden reversal; no real lossy path is measured, and the sender-side retransmission cost is inferred from shaper counters rather than captured directly ([T9](test-9-performance.md)).
 - **MoQ's multiplier is the media-aware lane.** The opaque lane carries the source verbatim, stuffing included, and measured 1.054x per leg on the live feed, two points above SRT; a deployment that needs byte-verbatim carriage should price that, not this one ([T14](test-14-data-plane-comparison.md)).
@@ -352,3 +393,4 @@ The model's open inputs are [economics](../docs/economics.md) §10's questions.
 - AWS Marketplace listings: Zixi Broadcaster, Zixi ZEN Master
 - EBU Technical Review 300, Morello & Mignone, _DVB-S2 — ready for lift-off_
 - TeleGeography, _State of the Network 2026_ / IP transit price erosion analyses
+- Dedicated-server catalogues (November 2026): [NovoServe unmetered](https://portal.novoserve.com/store/unmetered), [Melbicom Amsterdam](https://bill-eu.melbicom.net/store/dedicated-servers-amsterdam), [OVHcloud Scale](https://www.ovhcloud.com/en-ie/bare-metal/scale/), [ServerRoom pricing](https://serverroom.net/pricing) and [100 Gb/s](https://serverroom.net/100g); OVHcloud's bandwidth options as listed by [servermarket.dev](https://servermarket.dev/providers/ovh/scale-a1-mxgxo0)

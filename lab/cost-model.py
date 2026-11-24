@@ -497,6 +497,76 @@ for label, chans, dests, ts in [("1 channel, 1 destination, 10 Mbps", 1, 1, 10),
     print(f"{label:<44}{cm-cs:>13,.0f}{(cm/cs - 1):>9.1%}")
 print()
 
+# ================================================================ 9. rented dedicated servers
+# cost-model.md §10.2. Each leg of the 1+1 pair carries every subscription (architecture §5:
+# every IRD merges both legs), so a leg is sized per subscription and the result is linear.
+# Figures are per 1,000 subscriptions a leg, a normaliser rather than any estate's size;
+# a real leg rounds up to whole boxes, which adds at most one box's price.
+EUR_USD = 1.10                    # assumed round rate, for comparison only
+PER = 1_000                       # subscriptions, the normaliser
+DED_WIRE = 10 * 1.033             # Mb/s a session: the stuffing-free live feed's carriage (T14)
+RELAY_VCPU_PER_SESSION = 0.01258  # T43: moq-relay 0.15.1, cross-host, GSO on, c6in.large vCPU
+CPU_CEILING, PORT_CEILING = 0.70, 0.75
+OLDER_THREAD = 0.7                # reasoned, unmeasured: a pre-2021 Xeon or Zen 2 thread
+                                  # against the measured host's Ice Lake vCPU
+# (provider, box, threads, thread factor, port Gb/s, EUR a month, bandwidth terms)
+DEDICATED = [
+    ("ServerRoom", "Xeon Silver 4110, 8c/16t", 16, OLDER_THREAD, 10, 612.67 / EUR_USD, "unshared port"),
+    ("NovoServe", "2x Xeon E5-2650 v4, 24c/48t", 48, OLDER_THREAD, 5, 399, "unmetered"),
+    ("OVHcloud", "Scale-a1, EPYC 9124, 16c/32t", 32, 1.0, 25, 539.99 + 1_250, "unmetered"),
+    ("OVHcloud", "Scale-a2, EPYC 9254, 24c/48t", 48, 1.0, 25, 579.99 + 1_250, "unmetered"),
+    ("Melbicom", "2x Xeon E5-2680 v4, 28c/56t", 56, OLDER_THREAD, 20, 2_492, "guaranteed"),
+    ("Melbicom", "2x Xeon E5-2660 v3, 20c/40t", 40, OLDER_THREAD, 10, 1_369, "guaranteed"),
+    ("Melbicom", "2x Xeon E5-2680 v4, 28c/56t", 56, OLDER_THREAD, 40, 4_692, "guaranteed"),
+    ("NovoServe", "EPYC 7302, 16c/32t", 32, OLDER_THREAD, 50, 2_817, "unmetered"),
+    ("Melbicom", "2x Xeon Gold 6254, 36c/72t", 72, OLDER_THREAD, 100, 15_107, "guaranteed"),
+]
+per_leg_mbps = PER * DED_WIRE
+per_leg_gb_month = per_leg_mbps * volume(1, GB) / 12
+print(f"=== 9. Rented dedicated servers, per {PER:,} subscriptions a leg (cost-model.md 10.2) ===\n")
+print(f"Per {PER:,} a leg: {per_leg_mbps / 1000:.1f} Gb/s of wire, "
+      f"{PER * RELAY_VCPU_PER_SESSION:.1f} measured-host vCPUs busy, "
+      f"{PER * RELAY_VCPU_PER_SESSION / CPU_CEILING:.0f} at the {CPU_CEILING:.0%} ceiling; "
+      f"a 100 Gb/s port at {PORT_CEILING:.0%} needs "
+      f"{100_000 * PORT_CEILING / DED_WIRE * RELAY_VCPU_PER_SESSION / CPU_CEILING:.0f}.\n")
+print(f"{'Provider':<11}{'Box':<31}{'Port':>5}{'By CPU':>8}{'By port':>8}"
+      f"{'EUR/1k-leg-mo':>15}{'$/GB':>9}  Bandwidth")
+rule(102)
+dedicated_legs = []
+for provider, box, threads, factor, port, eur, terms in DEDICATED:
+    by_cpu = int(threads * factor * CPU_CEILING / RELAY_VCPU_PER_SESSION)
+    by_port = int(port * 1000 * PORT_CEILING / DED_WIRE)
+    leg = eur * PER / min(by_cpu, by_port)
+    per_gb_leg = leg * EUR_USD / per_leg_gb_month
+    dedicated_legs.append((provider, leg, per_gb_leg))
+    print(f"{provider:<11}{box:<31}{port:>5}{by_cpu:>8,}{by_port:>8,}{leg:>15,.0f}"
+          f"{per_gb_leg:>9.5f}  {terms}")
+# The two legs sit with different providers; the band runs from the cheapest such pair to two
+# legs on the dearest guaranteed-bandwidth offer, excluding the 100 Gb/s outlier.
+pair_lo = min(a + b for (pa, a, _), (pb, b, _) in
+              [(x, y) for x in dedicated_legs[:-1] for y in dedicated_legs[:-1] if x[0] != y[0]])
+pair_hi = 2 * max(leg for p, leg, _ in dedicated_legs[:-1] if p == "Melbicom")
+DEDICATED_PER_GB = (pair_lo * EUR_USD / (2 * per_leg_gb_month), pair_hi * EUR_USD / (2 * per_leg_gb_month))
+print(f"\nBoth legs, two providers, per {PER:,} subscriptions: EUR {pair_lo:,.0f}-{pair_hi:,.0f} a month, "
+      f"${DEDICATED_PER_GB[0]:.5f}-{DEDICATED_PER_GB[1]:.5f}/GB, "
+      f"${pair_lo * EUR_USD * 12 / 1e3:,.0f}k-{pair_hi * EUR_USD * 12 / 1e3:,.0f}k a year.")
+per_dest_gb = CHANNELS * 10 * MOQ_CARRIAGE * 2 * volume(1, GB)
+lo_dest, hi_dest = (per_dest_gb * r for r in DEDICATED_PER_GB)
+print(f"Per destination of the 8-service multiplex: ${lo_dest:,.0f}-{hi_dest:,.0f} a year; "
+      f"parity per $1M at {1e6 / hi_dest:,.0f}-{1e6 / lo_dest:,.0f} destinations.\n")
+print(f"Per {PER:,} subscriptions 1+1, a year, at other rungs:")
+ded_mbps = 2 * per_leg_mbps
+for label, cost in [
+        ("IP transit, bandwidth only, 100-10 GigE", (ded_mbps * TRANSIT_100GE * 12, ded_mbps * TRANSIT_10GE * 12)),
+        ("Rented dedicated servers", (pair_lo * EUR_USD * 12, pair_hi * EUR_USD * 12)),
+        ("bunny.net volume network, 1-2 PB / <500 TB", (annual_cost(ded_mbps, [(None, 0.002)], GB),
+                                                      annual_cost(ded_mbps, BUNNY_VOLUME, GB))),
+        ("MediaConnect reserved, 1500 Mbps tier", (ded_mbps * MEDIACONNECT_RESERVED[1500] * HOURS_YEAR / 1500,)),
+        ("moq.pro MoQ relay", (annual_cost(ded_mbps, MOQ_PRO, GB),)),
+        ("AWS list data transfer out, tiered", (annual_cost(ded_mbps, AWS_DTO),))]:
+    print(f"  {label:<46}" + "-".join(f"${c / 1e3:,.0f}k" for c in cost))
+print()
+
 # ================================================================ chart data
 # cost-model.md §4's ladder for lab/generate_charts.py: (category, option, low, high, basis),
 # in $ per decimal GB so GiB-billed rates sit on the same axis; high is set only for a range.
@@ -509,6 +579,7 @@ PRICE_LADDER = [
     ("Self-hosted", "IP transit, 100 GigE port", TRANSIT_100GE * 12 / gb_per_mbps_year, None, "bandwidth only"),
     ("Self-hosted", "All-in PoP, 40-100 % utilised", pop_total / (10_000 * gb_per_mbps_year),
      pop_total / (10_000 * gb_per_mbps_year * 0.4), "illustrative"),
+    ("Self-hosted", "Rented dedicated servers, unmetered ports", *DEDICATED_PER_GB, "derived"),
     ("Cloud", "GCP premium, first tier", per_gb(GCP_PREMIUM[1][1], GIB), None, "published"),
     ("Cloud", "AWS list, first tier", per_gb(AWS_DTO[1][1], GIB), None, "published"),
     ("Cloud", "Azure premium backbone, first tier", per_gb(AZURE_PREMIUM[1][1], GB), None, "published"),

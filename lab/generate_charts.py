@@ -30,7 +30,7 @@ HERE = Path(__file__).resolve().parent
 CHARTS = HERE / "charts"
 
 CATEGORY_ORDER = ["Self-hosted", "Cloud", "Vendor / managed"]
-MARKERS = {"published": "o", "announced": "D", "bandwidth only": "s", "illustrative": "|"}
+MARKERS = {"published": "o", "announced": "D", "bandwidth only": "s", "illustrative": "|", "derived": "o"}
 
 
 def load_model():
