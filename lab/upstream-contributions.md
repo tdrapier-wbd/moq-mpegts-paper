@@ -272,9 +272,9 @@ Since [#8638](https://github.com/moq-dev/moq/pull/8638) `export ts` on moq-lite-
 
 The relay retained memory in proportion to content carried — ~27–31 MB/hour on a 9.3 Mbps channel — bounded by neither documented cache control. Reported as [#2745](https://github.com/moq-dev/moq/issues/2745) with a controlled GOP pair confirming causation: doubling the group rate doubled the slope.
 
-**Root-caused upstream**: it is `quinn-proto` recycling one receive-stream state, with its assembler chunk heap, per stream the connection has ever accepted — **not moq state at all**. And it **plateaus** once every slot is filled, at ~100 MB above baseline per publisher connection, reached after ~10,000 ingested groups. Confirmed: baseline +108 MB against +97 MB predicted, and capping streams cuts the ceiling only 3.3× for a 9.8× slot reduction (20–30 MB is slot-independent). **No released version of the QUIC library removes it**, so plan for the overhead.
+**Root-caused upstream**: it is `quinn-proto` recycling one receive-stream state, with its assembler chunk heap, per stream the connection has ever accepted — **not moq state at all**. And it **plateaus** once every slot is filled, at ~100 MB above baseline per publisher connection, reached after ~10,000 ingested groups. Confirmed: baseline +108 MB against +97 MB predicted. **No released version of the QUIC library removes it**, so plan for the overhead.
 
-[T8b](test-8b-congestion-control.md) C6 (14.006 h), offered on #2745, shows post-knee growth is **not** noise: another ~100 MB toward baseline +200.5 MB (**2.03×** the slot ceiling), slope decaying from +24.60 to +1.82 MB/h and still not flat at end. Pre-knee slope is flat across 0–4 subscribers, and four cost no more than two. Posted as a data point ([comment `5367857020`](https://github.com/moq-dev/moq/issues/2745#issuecomment-5367857020)).
+[T8b](test-8b-congestion-control.md) C6 (14.006 h), offered on #2745, shows post-knee growth is **not** noise: another ~100 MB toward baseline +200.5 MB (**2.03×** the slot ceiling), slope decaying from +24.60 to +1.82 MB/h and still not flat at end. Posted as a data point ([comment `5367857020`](https://github.com/moq-dev/moq/issues/2745#issuecomment-5367857020)).
 
 ### The relay's plateau is confirmed at 24 h — and the publisher is the role that actually leaks
 
@@ -282,7 +282,9 @@ The relay retained memory in proportion to content carried — ~27–31 MB/hour 
 
 **The same run found growth that is not the relay's:** over 24 h the relay grew 243 MB and **`moq import ts` grew 137 MB**, so end-point totals make the relay look worse when it is the better process. The publisher fits a **line** at +2.83 MB/h (~24 GB/year) — it ratchets rather than caching. For permanent primary distribution the publisher is the process never meant to restart. **No upstream issue describes publisher RSS over long runs** (#2745 and #3128 are relay-side).
 
-[**#3493**](https://github.com/moq-dev/moq/issues/3493) — **closed** via [#3793](https://github.com/moq-dev/moq/pull/3793) (`5d0991b9`). On upstream `main` `9d2a4f6e`, a 24 h re-soak confirms the fix: importer slope +0.23 MB/h vs original +2.83 ([T21 § _The #3493 re-soak_](test-21-permanence-soak.md#the-3493-re-soak)). Sampled per PID over 6 h, since RSS by command-line signature also matched the wrapper shell, growth is **+2.91 MB/h in `moq import ts` itself**; the issue carries fits and caveats (exporter +14.5 MB at 5 h; 6 h cannot read relay shape).
+**On the current QUIC stack the passthrough lane's relay and export grow again:** 1.73–1.92× and 1.19–1.55× over 72 h, linear, at no clock step ([T67](test-67-import-step-restart.md) SH4). Reported as [#9539](https://github.com/moq-dev/moq/issues/9539), a 24 h heap profile running.
+
+[**#3493**](https://github.com/moq-dev/moq/issues/3493) — **closed** via [#3793](https://github.com/moq-dev/moq/pull/3793) (`5d0991b9`). On upstream `main` `9d2a4f6e`, a 24 h re-soak confirms the fix: importer slope +0.23 MB/h vs original +2.83 ([T21 § _The #3493 re-soak_](test-21-permanence-soak.md#the-3493-re-soak)). Sampled per PID over 6 h, growth is **+2.91 MB/h in `moq import ts` itself**; the issue carries fits and caveats.
 
 ---
 
@@ -495,7 +497,7 @@ From the [cross-check](cross-check.md) of `moq-dev`'s [#8828](https://github.com
 
 ### T86's kit and test arms — offered as [openmoq/moq2ts#74](https://github.com/openmoq/moq2ts/issues/74), [moq-dev/moq#9315](https://github.com/moq-dev/moq/issues/9315) and [englishm/moq-interop-runner#206](https://github.com/englishm/moq-interop-runner/pull/206)
 
-[`kits/t86/`](kits/t86/README.md) reruns T86 from synthetic inputs. OpenMOQ ran every cell on arm A: all pass but `t`'s 43 s publisher restart (#73) and `v`'s start-up, now his [openmoq/moq2ts#77](https://github.com/openmoq/moq2ts/issues/77); [our reply](https://github.com/openmoq/moq2ts/issues/74#issuecomment-7110485758) fixes the two kit points he raised. #9315's three `just test ts` arms are ours: [#9392](https://github.com/moq-dev/moq/pull/9392), an unflagged splice, and [#9394](https://github.com/moq-dev/moq/pull/9394), a late join to one program, merged; [#9395](https://github.com/moq-dev/moq/pull/9395), an import restart, superseded by the maintainer's [#9385](https://github.com/moq-dev/moq/pull/9385); #206 proposes three runner scenarios.
+[`kits/t86/`](kits/t86/README.md) reruns T86 from synthetic inputs. OpenMOQ ran every cell on arm A: all pass but `t`'s 43 s publisher restart (#73) and `v`'s start-up, now his [openmoq/moq2ts#77](https://github.com/openmoq/moq2ts/issues/77); [our reply](https://github.com/openmoq/moq2ts/issues/74#issuecomment-7110485758) fixes the two kit points he raised. #9315's three `just test ts` arms are ours: [#9392](https://github.com/moq-dev/moq/pull/9392), an unflagged splice, and [#9394](https://github.com/moq-dev/moq/pull/9394), a late join to one program, merged; [#9395](https://github.com/moq-dev/moq/pull/9395), an import restart, superseded by the maintainer's [#9385](https://github.com/moq-dev/moq/pull/9385); #206's three runner scenarios (a clock step, three programs, a publisher restart) merged as proposals: neither fixture nor client case exists yet.
 
 ### moq5's relay and a late subscriber — reported as [openmoq/moq5#51](https://github.com/openmoq/moq5/issues/51)
 

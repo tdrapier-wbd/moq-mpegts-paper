@@ -154,6 +154,13 @@ _The shadow extended on `main` (`9df4313a`), 72 h: SH1–SH3 hold at three switc
 - **SH3 holds at each step.** Within 30 s of it the output's longest read gap was 231, 234 and 50 ms (the input's 492, 492 and 35); its continuity errors were the input's (15, 17 and 13); and the difference between the cumulative counts moved by −132, +360 and +48 packets across it, inside its range over the hour before (362, 444 and 368), at about 59,200, the export's 3.6 s behind the import. Over the run both taps counted 4.31 G packets and 81 continuity errors. The output's one read gap over 0.5 s, 552 ms, came in its first 20 s. The import logged nothing between start and stop; the export logged only its release clock at each step, one to eleven lines with nothing dropped, trimmed or missing.
 - **SH4 fails on the relay and the export:** from the first hour to the end the relay grew 1.73× (257 to 444 MB), the export 1.55× (259 to 402 MB) and the import 1.33× (209 to 277 MB). No step moved any of them by more than 8 MB over the 20 min around it; the relay grew 67, 37 and 83 MB in successive days, as on the branch, without levelling off.
 
+_The growth profiled, criteria fixed before running._ For 24 h on the same commit, two shadows join the group side by side ([`t67p-heap.sh`](scripts/t67p-heap.sh)): arm G on the default build, the allocator the growth was seen on, and arm J on a build with upstream's `jemalloc` feature, sampling one allocation per 64 KiB from startup (upstream's benchmark setting, without its cumulative counters) and dumping a heap profile every hour.
+
+- **HP1, validity.** Arm G's relay grows by at least 15 % from the first hour to the end (the two 72 h runs grew 26 % and 45 % in their first day); otherwise the comparison is inconclusive.
+- **HP2, the allocator.** If arm J's relay grows by less than half of arm G's growth over the same hours, the default allocator accounts for most of it.
+- **HP3, attribution.** If arm J's sampled live heap grows by at least 70 % of its relay's resident growth, the growth is held allocations, and the stacks that grew most between the first and last profiles are reported; otherwise it is the allocator's own overhead. The same for the export.
+- **HP4, the profile costs no media.** Each arm's taps count the same packets in and out (SH3's difference holding within twice arm G's range), so a profiled process that falls behind voids its arm.
+
 ## Conclusions
 
 1. **Upstream's import now carries an unflagged encoder switch in both directions**, as a marked programme switch that `export ts --stitch --follow` follows. Neither the backward step that ended T34's imports nor the forward one that ended its exports ends anything on `main`.
