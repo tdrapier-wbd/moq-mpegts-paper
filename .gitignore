@@ -3,6 +3,7 @@ INSTRUCTIONS.local.md
 lab-notes.local.md
 STATUS.md
 lab/upstream/*
+lab/feedback/*
 
 # lab/ is a public engineering notebook, but raw internal digests stay local
 *.local.md
@@ -22,6 +23,7 @@ __pycache__/
 .vale.ini
 pyproject.toml
 
+CLAUDE.md
 .prettierrc
 .prettierignore
 package-lock.json
