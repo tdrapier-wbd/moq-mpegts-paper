@@ -10,7 +10,8 @@
 #
 # Env: GROUP (239.255.0.1:5000), TGROUP (239.255.0.9:5009), RATE_IN (25000000), MA_BIN
 #   (~/bin-9757807f), PT_BIN (~/bin-a843d23b), PT_PUBLIC (empty, its relay's grant), PACER
-#   (~/pacer-97f3a38/mpegts-pacer), STEP1_MS (16845000), STEP2_MS (-20445000). Run from a copy of
+#   (~/pacer-97f3a38/mpegts-pacer), STEP1_MS (16845000), STEP2_MS (-20445000), SEG_ARGS (the
+#   packager's options beyond --pdt). Run from a copy of
 #   lab/scripts (ma-window.sh, t79-epochseg.py, b8-hls-recv.py and t83f-gaps.py beside it).
 set -u
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
@@ -61,7 +62,7 @@ run() {
 		| '$PT_BIN/moq' --connect-tls-insecure --connect https://127.0.0.1:4496/anon --quic-gso=false \
 		--broadcast t83f.hang import ts --passthrough" >"$r/pt-import.log" 2>&1 &
 	pids+=("pt-import:$!")
-	setsid python3 "$HERE/t79-epochseg.py" "$r/www/g" --group "$TGROUP" --pdt >"$r/seg-packager.log" 2>&1 &
+	setsid python3 "$HERE/t79-epochseg.py" "$r/www/g" --group "$TGROUP" --pdt ${SEG_ARGS:-} >"$r/seg-packager.log" 2>&1 &
 	pids+=("seg-packager:$!")
 	setsid python3 -m http.server 18779 --bind 127.0.0.1 --directory "$r/www" >/dev/null 2>&1 &
 	pids+=("seg-http:$!")
