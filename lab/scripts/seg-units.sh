@@ -43,7 +43,7 @@ secret() { mkdir -p "$D$ETC" && (umask 077 && cat >"$D$ETC/$1"); }
 unit() { mkdir -p "$D$UNITS" && cat >"$D$UNITS/$1"; }
 
 origin() {
-	local port=18320 group=239.255.0.1:5000 seg_args=--pdt secret_file="" rate=6m conns=4 gate tok
+	local port=18320 group=239.255.0.1:5000 seg_args="--pdt --step-window 1" secret_file="" rate=6m conns=4 gate tok
 	while [ $# -gt 0 ]; do
 		case $1 in
 		--port) port=$2; shift 2 ;;
