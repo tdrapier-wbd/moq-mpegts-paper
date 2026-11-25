@@ -277,14 +277,14 @@ Expressed as the IP rate needed to deliver the same 9.946 Mbps service:
 | Segmented HTTP, stuffing carried | 10.306 Mbps | 0.016 Mbps | 1.036x | measured, same path |
 | **MoQ, media-aware, 1200 B** | **9.765 Mbps** | 0.113 Mbps | **0.982x** | measured, same path |
 | **MoQ, media-aware, MTU discovery on** | **9.675 Mbps** | 0.112 Mbps | **0.973x** | measured, same path |
-| MoQ, opaque lane, verbatim (derived) | ~10.2 Mbps | — | ~1.03x | not measured |
-| MoQ, opaque lane, nulls stripped (derived) | ~9.8 Mbps | — | ~0.98x | not measured |
+| MoQ, passthrough lane, verbatim (derived) | ~10.2 Mbps | — | ~1.03x | not measured |
+| MoQ, passthrough lane, nulls stripped (derived) | ~9.8 Mbps | — | ~0.98x | not measured |
 
-**The three measured verbatim rows agree to within a point of each other and the two derived opaque rows land among them**, which is the useful shape: carriage cost is decided by whether a lane carries stuffing, not by which protocol carries it. SRT, segmented HTTP and an opaque verbatim MoQ lane all sit at ~1.03x; the media-aware lane sits at 0.98x because it is the only one that does not put the nulls on the path.
+**The three measured verbatim rows agree to within a point of each other and the two derived passthrough rows land among them**, which is the useful shape: carriage cost is decided by whether a lane carries stuffing, not by which protocol carries it. SRT, segmented HTTP and a passthrough verbatim MoQ lane all sit at ~1.03x; the media-aware lane sits at 0.98x because it is the only one that does not put the nulls on the path.
 
 **Not carrying stuffing is MoQ's structural bandwidth advantage over SRT**, and it is now a measured advantage rather than a derived one. It is bankable on a 1+1 pair as well: [T12](test-12-dual-path-handoff.md) arm D shows two groomers that each regenerate their own stuffing from stream position still produce byte-identical legs. What stripping costs is byte-verbatim carriage, which is a separate decision — and the saving scales with the stuffing ratio, so it is much larger on a loosely filled carrier: on the T12 profile, 1.9 Mbps of content in a 4 Mbps carrier, SRT needs 4.13 Mbps of IP where the media-aware lane needs ~2.0 Mbps.
 
-**Scope limit: both measured MoQ rows are the media-aware lane.** The opaque lane — the paper's preferred carriage for hardware IRDs — still has no measurement; its two derived rows above apply the per-byte carriage cost measured here to a verbatim and a null-stripped payload, and the verbatim case should come out marginally _cheaper_ than the arithmetic suggests because a single large track packs datagrams better than 100 short streams per second. On `main` that lane is `import ts --passthrough`, not yet run on this rig.
+**Scope limit: both measured MoQ rows are the media-aware lane.** The passthrough lane — the paper's preferred carriage for hardware IRDs — still has no measurement; its two derived rows above apply the per-byte carriage cost measured here to a verbatim and a null-stripped payload, and the verbatim case should come out marginally _cheaper_ than the arithmetic suggests because a single large track packs datagrams better than 100 short streams per second. On `main` that lane is `import ts --passthrough`, not yet run on this rig.
 
 ## Soak method
 
@@ -511,7 +511,7 @@ Nine times _less_ bitrate and a twentieth of the pixel rate cost three times _mo
 
 - **The publisher thread count**, which grows and decelerates without settling. Cheap to check: a longer run plus what the pool is sized against.
 - **Fan-out over a real path**, relay and subscribers on separate hosts. Both sweeps so far are loopback, and the Linux sweep showed why that matters: co-located subscribers cost 2.4x the relay, so the rig's knee is the host's. A cross-machine run would price the NIC and the network stack honestly and establish the relay's own knee, which neither sweep reached.
-- **Overhead on the opaque lane**, never measured: `import ts --passthrough` on the WAN rig, unchanged.
+- **Overhead on the passthrough lane**, never measured: `import ts --passthrough` on the WAN rig, unchanged.
 - **Retransmission cost measured directly rather than recovered from shaper counters.** The current rig drops packets in the origin's own qdisc, downstream of the capture tap, so the sender's push rate is inferred from `netem`'s passed/dropped counts. Shaping between two network namespaces and capturing on the sender's side of the shaper would measure it outright, and would also let the loss sweep run past 1 % without the inference. The T8b netns rig is the natural host for it.
 - **Attribute wire bytes per track.** The video-only leg separates media from audio/data and the totals leave no room for anything republishing at rate, but nothing here distinguishes the catalog and verbatim side tracks from each other. Low value now that the totals close to 0.03 points, worth doing only if a future measurement stops closing.
 - **A third source profile for the carriage figure.** On the stuffing-free live feed the advantage over SRT falls to 0.2 %, below this floor's prediction, because the lane carries no TS packet headers either ([T14](test-14-data-plane-comparison.md) § _On the live feed's profile_). A loosely filled carrier should widen it sharply — the T12 profile implies roughly 2x.

@@ -6,7 +6,7 @@
 
 Upstream is removing `export ts --sync` and its RTP egress work, naming passthrough as the mode for 2022-7 output; RTP framing is left to an external tool. This test takes two `export ts --passthrough` legs, each piped into `tsp -O ip --rtp`, and asks whether they give a pair a 2022-7 receiver can merge, and through which failures.
 
-`tsp` numbers each datagram from its own count, starting at `--start-sequence-number`, and stamps it from the stream's PCR. Two legs therefore carry the same datagrams under the same numbers only if they cut the same packets from the same first packet and neither skips nor restarts. [T12](test-12-dual-path-handoff.md)'s stream-clocked groomer instead derives each number from the datagram's slot on the source's timeline, and on the opaque lane it kept a pair mergeable through a late join, a blackout of each leg and a killed export. That is the comparison.
+`tsp` numbers each datagram from its own count, starting at `--start-sequence-number`, and stamps it from the stream's PCR. Two legs therefore carry the same datagrams under the same numbers only if they cut the same packets from the same first packet and neither skips nor restarts. [T12](test-12-dual-path-handoff.md)'s stream-clocked groomer instead derives each number from the datagram's slot on the source's timeline, and on the passthrough lane it kept a pair mergeable through a late join, a blackout of each leg and a killed export. That is the comparison.
 
 ## Hypotheses, fixed before running
 
@@ -82,11 +82,11 @@ Datagrams of leg B matching leg A's under the same number, before and after the 
 
 - **`tsp -O ip --rtp` turns two co-started passthrough legs into a 2022-7 pair**, given `--enforce-burst`, one start number and SSRC, and a bounded initial load. That protects the RTP paths beyond `tsp`.
 - **It does not protect the MoQ legs.** A late join, a restart, a skip, or a stall past the export's delay leaves a pair that no longer merges, until both legs restart together; a kill also costs a datagram. A skipped leg is the worst case: it keeps sending the right programme under the wrong numbers, which a receiver cannot tell from a healthy leg until the other fails.
-- **The stream-clocked groomer is what makes the route survive leg failure.** On the opaque lane it kept a pair merging through a late join, each leg's loss and a killed export ([T12](test-12-dual-path-handoff.md)), because it numbers each datagram by its slot on the source's timeline, not by a count. For P0-k and P1-b the legs are passthrough exports, each through a stream-clocked groomer; `tsp` serves where a pair can be restarted together.
+- **The stream-clocked groomer is what makes the route survive leg failure.** On the passthrough lane it kept a pair merging through a late join, each leg's loss and a killed export ([T12](test-12-dual-path-handoff.md)), because it numbers each datagram by its slot on the source's timeline, not by a count. For P0-k and P1-b the legs are passthrough exports, each through a stream-clocked groomer; `tsp` serves where a pair can be restarted together.
 
 ## Stream-clocked legs, started apart
 
-**Question.** T12's opaque-lane arm merged passthrough legs through stream-clocked groomers, one leg 8 s late, through blackouts and an export killed for good. Do such legs also carry this test's other events, a leg killed and restarted and an export stopped, when the two legs never start together?
+**Question.** T12's passthrough-lane arm merged passthrough legs through stream-clocked groomers, one leg 8 s late, through blackouts and an export killed for good. Do such legs also carry this test's other events, a leg killed and restarted and an export stopped, when the two legs never start together?
 
 **Rig.** The rig with `START=apart LEG=pacer`: each export into `mpegts-pacer --rtp --stream-clock` at the clip's rate, shared SSRC and sequence seed, the pacer at `ea88793` (T12's fixed pacer); leg B 8 s after leg A in every cell; `main` `66af72315`; the laptop, on loopback; 120 s; three runs per cell. Cells: `late` (the control), `kill` (A's export killed at 40 s, its export and pacer restarted 10 s later), `stall` for 1 s and for 10 s. No blackout: T12's 5 s blackouts, across which the export skipped, passed with this pacer, and the laptop has no `iptables`.
 

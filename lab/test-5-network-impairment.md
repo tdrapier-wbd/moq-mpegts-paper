@@ -9,7 +9,7 @@ The segmented-HTTP arm was added last and is the one that changes a verdict. Unt
 ## Environment
 
 - **Media-aware lane over the real EC2→home internet path.** Impairment applied on the EC2 `ens5` egress, filtered to the QUIC media flow only (UDP sport 443 → the subscriber's home IP), so the SSH control channel is never impaired. Media-aware lane uses the standing EC2 loop (`<loop-broadcast>`, `moq export ts --latency-max 5s`).
-- **The opaque lane is not graded here.** Its loss arm is the passthrough's in [T48](test-48-passthrough-export.md); an earlier opaque arm in this experiment ran a private implementation since retired, and its figures are not carried.
+- **The passthrough lane is not graded here.** Its loss arm is the passthrough's in [T48](test-48-passthrough-export.md); an earlier passthrough arm in this experiment ran a private implementation since retired, and its figures are not carried.
 - All services restored and every `netem` qdisc removed afterward; port 443, the moq-lite services and network config restored exactly as found.
 - **Controlled head-to-head (segmented HTTP against the media-aware lane), whole chain on the origin host.** Rigs: [`t5-impair-arm.sh`](scripts/t5-impair-arm.sh) and [`t5-impair-sweep.sh`](scripts/t5-impair-sweep.sh). Publisher, origin/relay and receiver are all local, so the impairment is the only variable; the fixture is `~/contrib-10m.ts` (9,945,951 bps CBR) on both arms, in a 40 s window, with a 15 ms base delay applied to the payload direction in every cell including the baselines. The media-aware arm runs against a **private** relay on a high port with the congestion controller pinned to `delay` (BBR), never the standing `:443`.
 - **Availability-window ladder (segmented HTTP only).** Rig: [`t5-availability-ladder.sh`](scripts/t5-availability-ladder.sh). The same local chain, run to 40 % loss in **120 s** windows rather than 40 s, and instrumented for HTTP status, segment-fetch order, the client's lag behind the live edge and the maximum PCR interval — the four things the 40 s ladder was too short to see. Origin retention is `--live 6 --live-extra-segments 3` at 2 s segments, so nine segments, 18 s.
@@ -144,7 +144,7 @@ _What that arithmetic does not explain is why the 10 % cell fetched 2, 3, 4 and 
 
 ## Limitations
 
-- CC-error is a weak damage metric for the media-aware lane (see obs. 2); a stronger metric (frame/GOP loss, decode errors, or the opaque lane's verbatim CC) is needed to quantify picture impact — a key reason the opaque lane matters for impairment testing.
+- CC-error is a weak damage metric for the media-aware lane (see obs. 2); a stronger metric (frame/GOP loss, decode errors, or the passthrough lane's verbatim CC) is needed to quantify picture impact — a key reason the passthrough lane matters for impairment testing.
 - Absolute Mbps reflects the subscriber's home download path (varies); the _shape_ of the degradation (recovery vs starvation vs collapse) is the robust finding.
 - `netem` models are approximations: loss here is Bernoulli (uncorrelated), while real congestion loss is bursty and RTT-coupled; netem "jitter" reorders.
 - `--latency-max 5s` is a large buffer favouring recovery; an IRD-facing egress runs a much smaller buffer. The small-buffer envelope is the more broadcast-relevant number.

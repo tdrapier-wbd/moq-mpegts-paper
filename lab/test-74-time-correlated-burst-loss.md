@@ -22,7 +22,7 @@ As [T73](test-73-long-path-budget-burst.md#environment) at the 2 s budget, with 
 
 **Before the matrix:** T73's `t73-burst-probe.py` through the scheduler, lanes idle, 60 s at 1,000 datagrams a second and 60 s at 250, on one seed. A time-based model loses the same share and the same burst durations in milliseconds at both rates, where a datagram-counted one stretches each burst fourfold at the lower rate. (At 250 a second the 4 ms spacing alone lengthens a measured 20 ms mean by about 8 %; at 100 it would by about 25 %, the width of criterion 1.) Then one segmented cell under T73's `ge:0.05,5`, to confirm the relaunched rig reproduces T73's failure. A 40 s smoke cell per lane, ungraded.
 
-**The matrix,** in three rounds, each with its own seed, the lanes in an order rotated per round: SRT, opaque, media-aware and segmented × {clean, time bursts}, 24 cells of 120 s, about 75 minutes.
+**The matrix,** in three rounds, each with its own seed, the lanes in an order rotated per round: SRT, passthrough, media-aware and segmented × {clean, time bursts}, 24 cells of 120 s, about 75 minutes.
 
 Diagnostic, labelled and not ranked: if the segmented lane loses programme, one cell each with the bursts on the media direction only and on the return direction only, on round 1's seed.
 
@@ -62,13 +62,13 @@ _Predicted._ The segmented lane whole: a 20 ms burst overlaps one of its 161 ms 
 T71's build, late October 2026 `main`, on both hosts, the far host from its image; 24 cells, none failed, plus the probe, one reproduction cell and three diagnostics.
 
 1. **The model is time-based; one probe reading misses its band by 0.2 ms.** At 1,000 datagrams a second the probe lost 0.95 % in 24 bursts of mean 23.8 ms (median 21, max 63); at 250 a second, 0.96 % in 22 bursts of mean 6.55 datagrams, 26.2 ms. The two means are within 10 %, where a datagram-counted model would differ fourfold. The 26.2 ms is 0.2 ms over the 14–26 ms band: one schedule read at a 4 ms spacing, which misses bursts shorter than the spacing (22 against 24) and lengthens the rest, as the procedure foresaw (8 % expected, 10 % read). The scheduler was not changed. In every cell every switch landed within 0.14 ms of its schedule and 0.90–1.21 % of the window was lost each way, in bursts of mean 18.1–21.3 ms; no cell is labelled.
-2. **Path, clock, picture and clean conformance hold on every cell.** Round trip 114.8–117.3 ms, clock bound at most 1.16 ms, every egress picture matched, the clean cells free of continuity errors and 40 ms PCR intervals and passing the buffer model. SRT and the opaque lane matched the clip packet for packet in every cell, impaired ones included. Under T73's `ge:0.05,5` the relaunched rig's segmented lane lost 21.4 s, reproducing T73's failure.
+2. **Path, clock, picture and clean conformance hold on every cell.** Round trip 114.8–117.3 ms, clock bound at most 1.16 ms, every egress picture matched, the clean cells free of continuity errors and 40 ms PCR intervals and passing the buffer model. SRT and the passthrough lane matched the clip packet for packet in every cell, impaired ones included. Under T73's `ge:0.05,5` the relaunched rig's segmented lane lost 21.4 s, reproducing T73's failure.
 3. **Delivered programme:**
 
 | Lane | Clean, median (range) | Time bursts: whole | Time bursts, median | What the others lost |
 | --- | --- | --- | --- | --- |
 | SRT | 2,029 ms (2,029–2,029) | 3 of 3 | 2,030 ms | — |
-| Opaque | 2,055 ms (2,051–2,060) | 3 of 3 | 2,060 ms | — |
+| Passthrough | 2,055 ms (2,051–2,060) | 3 of 3 | 2,060 ms | — |
 | Media-aware | 2,276 ms (2,275–2,276) | 3 of 3 | 2,276 ms | — |
 | Segmented | 3,595 ms (3,584–3,649) | 1 of 3 | — | round 1: a 7.8 s stall, 22 continuity errors, nothing lost; round 2: 11.3 s of video and audio, 12 errors |
 

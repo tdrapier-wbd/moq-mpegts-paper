@@ -77,7 +77,7 @@ Buyers weigh three things, in this order. **Reliability and trust** comes first,
 
 Cloud instances sustain well below headline network capacity — **relay sizing is an instance-family decision before core count.**
 
-**The carriage multiplier is 0.982 for MoQ's media-aware lane against 1.037 for SRT** on the same WAN path, because MoQ declines to carry the null stuffing the edge regenerates anyway: a 5.3 % wire saving on the reference clip, 4.57 % nulls, and none on a stuffing-free live feed (1.033 against 1.035; the opaque lane 1.054). **Treat it as a wash with upside**, not as 5 % of egress banked, because the advantage is the source's stuffing ([Evidence](../lab/evidence.md) §3.5).
+**The carriage multiplier is 0.982 for MoQ's media-aware lane against 1.037 for SRT** on the same WAN path, because MoQ declines to carry the null stuffing the edge regenerates anyway: a 5.3 % wire saving on the reference clip, 4.57 % nulls, and none on a stuffing-free live feed (1.033 against 1.035; the passthrough lane 1.054). **Treat it as a wash with upside**, not as 5 % of egress banked, because the advantage is the source's stuffing ([Evidence](../lab/evidence.md) §3.5).
 
 ---
 

@@ -9,7 +9,7 @@
 - **On upstream `main` (`2b689c24`) the refusal is gone and the loss is silent.** Independent clocks complete with exit 0 while programmes 1 and 3 lose 96–98 % of their video packets; on a common clock SCTE-35 and part of programme 1's audio are lost. The flattening is unchanged. Programme 1 alone is clean on `main`. Bisected, the two changes are two upstream commits: #3997 removed the refusal, and #4122 introduced the common-clock loss. That loss appears even when the programmes' clocks are within 40 ms of each other (median). Its cause is measured: the section clock is advanced through one lane shared by every programme's video, that lane keeps stepping back across programmes, and each step re-anchors the whole source forward. Giving the section clock one lane per video PID removes the loss.
 - **On upstream `main` at `6f1a9e33` the multiplex is refused unless a programme is selected, and a selected programme arrives clean.** `moq import ts` without `--program` exits 1 naming the three programmes. With `--program 1` or `--program all`, each broadcast carries only its programme's PIDs, PMT and PCR, with SCTE-35 at the source's rate and 0 continuity events. On the T10 rig, graded over the whole fixture, all three programmes are CARRIED in four of four runs on both fixtures, independent clocks included. Each programme's SDT still lists all three services (§ _On upstream `main` at `6f1a9e33`_, § _The split on the T10 rig_); on `f1eecd3a`, its own only.
 
-The opaque lane that criterion 1 names was not in `ffa5b81b`, where `moq import ts` takes no options, so arm A ran on the media-aware lane.
+The passthrough lane that criterion 1 names was not in `ffa5b81b`, where `moq import ts` takes no options, so arm A ran on the media-aware lane.
 
 ## Objective
 
@@ -19,7 +19,7 @@ Gate 1 (carriage fidelity) at multi-service scale is the acceptance gate. The ca
 
 ## What was already known, and what it left open
 
-**Single-programme carriage is established on both lanes.** [T3](test-3-opaque-transparency.md) confirmed bit-transparency and full service-layer carriage on the opaque lane across three clips. [T14](test-14-data-plane-comparison.md) showed single-programme carriage in TS segments is verbatim on the segmented lane. Neither result generalises to a multiplex without measurement.
+**Single-programme carriage is established on both lanes.** [T3](test-3-opaque-transparency.md) confirmed bit-transparency and full service-layer carriage on the passthrough lane across three clips. [T14](test-14-data-plane-comparison.md) showed single-programme carriage in TS segments is verbatim on the segmented lane. Neither result generalises to a multiplex without measurement.
 
 **Multi-service SI cost is extrapolated, not measured.** [T17](test-17-si-snapshot-tracks.md) priced snapshot-track carriage at ~29,912 B and four tracks per service, and scaled that to 40 services (~1.1 MiB across 160 tracks) by multiplication from one service — not by running an MPTS. Whether an exporter resolves 160 tracks from a real multiplex, whether join blocking scales linearly, and whether sparse EIT reconstruction holds per service are all open. This run does not close them: its three services are too few to fit a scaling curve, and on the MoQ lane the multiplex did not survive intact long enough to price.
 
@@ -30,7 +30,7 @@ Gate 1 (carriage fidelity) at multi-service scale is the acceptance gate. The ca
 |  |  |
 | --- | --- |
 | Fixture | `mpts3.ts`, built by [`make-real-mpts.sh`](scripts/make-real-mpts.sh) from three single-programme clips in the lab inventory: 60 s, 19,891,902 b/s CBR, three programmes on independent clocks (analysis below). A common-clock variant, `mpts3-cc.ts`, re-times programmes 2 and 3 onto programme 1's clock. Each run is identified by its fixture's md5, because two builds of the recipe are not byte-identical. |
-| MoQ lane | `moq 0.12.1` / `moq-relay 0.15.1`, build `ffa5b81b`, noq backend: `moq import ts` → `moq-relay` → `moq export ts`, the media-aware lane with SI snapshot tracks, relay on loopback with GSO off and `--auth-public` granted via [`moq-cli-flags.sh`](scripts/moq-cli-flags.sh). There is no opaque lane on this build. |
+| MoQ lane | `moq 0.12.1` / `moq-relay 0.15.1`, build `ffa5b81b`, noq backend: `moq import ts` → `moq-relay` → `moq export ts`, the media-aware lane with SI snapshot tracks, relay on loopback with GSO off and `--auth-public` granted via [`moq-cli-flags.sh`](scripts/moq-cli-flags.sh). There is no passthrough lane on this build. |
 | Segmented lane | TSDuck 3.44: `tsp -O hls` packager (2 s segments, live window of 6) → `python3 -m http.server` origin → `tsp -I hls` receiver. The rig of [T3](test-3-opaque-transparency.md) / [T14](test-14-data-plane-comparison.md), except that the receiver starts at the first listed segment rather than the live edge (no `--live`), so the capture covers the whole source. |
 | Grading | [`t10-grade.py`](scripts/t10-grade.py), per programme at P1: PAT entry, PMT sections (bit identity, then parsed structure), SDT entry, EIT p/f section set per service, continuity from `tsp -P continuity` data, PCR count and intervals per PCR PID, `pcrverify --pid <p> --absolute --jitter-max 13`, and every source elementary stream traced to the egress programme that lists it. |
 | Topology | One Linux host; publisher, relay (or origin) and subscriber co-resident on loopback. Not a sizing topology, and nothing here is quoted as one. |
@@ -101,7 +101,7 @@ Recovery time and session events are recorded for diagnosis but are not headline
 
 ## Pass criteria, fixed before running
 
-1. **Per-programme Gate 1 on MoQ opaque (Arm A).** For every programme in the fixture: PSI/SI bit-identical to source at P1, 0 continuity errors, PCR intervals with 0 % > 40 ms on each PCR PID, and every elementary stream present with correct `stream_type` and descriptors.
+1. **Per-programme Gate 1 on MoQ passthrough (Arm A).** For every programme in the fixture: PSI/SI bit-identical to source at P1, 0 continuity errors, PCR intervals with 0 % > 40 ms on each PCR PID, and every elementary stream present with correct `stream_type` and descriptors.
 2. **Per-programme Gate 1 on segmented local (Arm D).** If the packager emits a multiplex, the same criteria as (1) per programme at the HLS receiver egress. If the packager refuses or splits the MPTS, that outcome is reported as a lane limitation — not a failure of the rig — provided the behaviour is documented with the exact tool flags used.
 3. **No cross-talk (Arm C).** Each of the K concurrent broadcasts delivers only its own programme's PAT/PMT set; any PAT referencing another broadcast's TSID is a fail.
 4. **Fan-out linearity (Arm C).** Relay CPU and RSS versus K remain linear within the confidence of the fit (r² ≥ 0.95 on ≥ 5 points) until a stated stopping condition from [T26](test-26-cross-host-fanout.md) (per-subscriber delivery < 95 % of K = 1, or relay CPU saturation). Superlinear growth in relay cost with channel count is a finding.
@@ -288,7 +288,7 @@ With null, PAT and PMT-100 packets excluded, the egress packet sequence equals t
 - **One host, P1 only.** No cross-host, wide-area or impaired path, and no hardware IRD (P2 remains [T7](test-7-timing-integrity.md)/P2).
 - **One synthetic multiplex.** Three programmes built from three clips: one real contribution feed and two single-service clips re-addressed. Programmes 2 and 3 carry no SCTE-35 or teletext, the NIT is programme 1's own and names service 1 only, and nothing is scrambled. A commercial MPTS exercises more of the service layer than this; the MoQ result would not improve on it, because both defects are structural — one section clock and one program record.
 - **The common clock is approximate.** Merge's start varies by up to ~0.8 s between builds, so A′'s clocks agree to 0.82 s, not exactly. The refusal disappearing on that input shows that clocks 25,628 s apart trigger it on `ffa5b81b`. On `main`, no tested offset is safe: SCTE-35 is lost even on b7, whose programmes sit within 40 ms of each other (median). Tighter alignment than b7's is not reachable with the fixture builder, so whether any cross-programme offset is safe is not established.
-- **The media-aware lane only.** No arm here ran `import ts --passthrough`; opaque carriage of this multiplex is [T86](test-86-moq2ts-evaluation.md#p2-v--multi-programme-streams) P2-v's, which carries it whole.
+- **The media-aware lane only.** No arm here ran `import ts --passthrough`; passthrough carriage of this multiplex is [T86](test-86-moq2ts-evaluation.md#p2-v--multi-programme-streams) P2-v's, which carries it whole.
 - **Join cost is not measured.** Criterion 5's comparison with T17's cold-join baseline needs its instrument. A′'s time-to-first-byte (2.28 and 2.33 s) lies outside the controls' 0.48–1.65 s, and that difference cannot be attributed to SI join from this run.
 
 ## What remains open

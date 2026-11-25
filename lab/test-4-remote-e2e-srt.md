@@ -21,7 +21,7 @@ A lane is not required to pass. The purpose is to record _which_ criteria each o
 
 ## Environment
 
-- **Deployed cloud path = the `moq-dev` media-aware lane, not the opaque lane.** SSH inspection established this as a material fact: the relay is `moq-relay` on UDP 443 and both publishers use `moq import ts` (a loop and the SRT-fed live broadcast).
+- **Deployed cloud path = the `moq-dev` media-aware lane, not the passthrough lane.** SSH inspection established this as a material fact: the relay is `moq-relay` on UDP 443 and both publishers use `moq import ts` (a loop and the SRT-fed live broadcast).
 - **Build under test: `moq-relay 0.14.11-eab96019` / `moq 0.9.11-eab96019`**, a source build at `main` `eab960192`. All three units point at it and none has restarted.
 - EC2 services (already running; relay never restarted during this test):
   - `moq-relay.service` → `moq-relay --server-bind 0.0.0.0:443 --tls-generate … --auth-public`
@@ -51,7 +51,7 @@ stage 2  moq-live-publisher.service  tsp -I ip 239.255.0.1:5000 -O file -
 | `ffmpeg -c copy -f mpegts` | `0 17 256 257 4096` | NIT, TDT/TOT, second audio, teletext, **all three SCTE-35 PIDs**; video/audio renumbered to 256/257, PMT to 4096 |
 | `tsp` passthrough | `0 16 17 20 100 111 121 123 131 141 142 143 8191` | nothing — byte-identical to the source |
 
-That is the same defect the loop leg was moved off ffmpeg for, and it is unrecoverable downstream: no lane, opaque or media-aware, can carry a PID that never arrived. It also disqualifies the retired unit from carrying the feed for the splice, subtitle and DVB-table work the live source exists to unblock.
+That is the same defect the loop leg was moved off ffmpeg for, and it is unrecoverable downstream: no lane, passthrough or media-aware, can carry a PID that never arrived. It also disqualifies the retired unit from carrying the feed for the splice, subtitle and DVB-table work the live source exists to unblock.
 
 **The two stages are separate processes joined by a loopback multicast group, not one pipeline**, and that is a deliberate choice with three consequences. Restarting the MoQ side — which every experiment does — leaves the contribution session untouched. Stage 2's input is UDP now and can be real multicast later, so moving the source off SRT is a change to stage 1 only, and disappears entirely if the publisher is ever placed inside the multicast domain. And the group is a tap point a reference recorder or a TSDuck analyser can join without opening a second SRT session.
 
@@ -294,7 +294,7 @@ Over the public internet the data planes fail **different halves of the same que
 
 The live contribution chain works end to end: SRT contribution into EC2, MoQ publish, relay and local subscribe, with 0 continuity errors.
 
-Opaque-remote (leg C) is [T48](test-48-passthrough-export.md)'s internet leg: the passthrough's output over this kind of path is the source's bytes. Recorded as a permanent finding in [`evidence.md`](evidence.md) §1.
+Passthrough-remote (leg C) is [T48](test-48-passthrough-export.md)'s internet leg: the passthrough's output over this kind of path is the source's bytes. Recorded as a permanent finding in [`evidence.md`](evidence.md) §1.
 
 ## Still open
 
@@ -315,7 +315,7 @@ Opaque-remote (leg C) is [T48](test-48-passthrough-export.md)'s internet leg: th
 
 - Deployed cloud path and end-to-end result: [`evidence.md`](evidence.md) §1.
 - Three-lane rig: [`scripts/t4-three-lane.sh`](scripts/t4-three-lane.sh); shared instrument: [`scripts/t3-transparency.py`](scripts/t3-transparency.py).
-- Same criteria on loopback, and the P2-gate degeneracy: [test-3-opaque-transparency.md](test-3-opaque-transparency.md).
+- Same criteria on loopback, and the P2-gate degeneracy: [test-3-passthrough-transparency.md](test-3-opaque-transparency.md).
 - Full-rate confirmation and the SRT-vs-MoQ delivery comparison: [test-8-srt-vs-moq.md](test-8-srt-vs-moq.md).
 - Media-aware fingerprint origin, and the lane's PCR impairment as first measured locally: [test-2-media-aware-transparency.md](test-2-media-aware-transparency.md).
 - What a groomer puts back: [test-13-downstream-grooming.md](test-13-downstream-grooming.md), [test-16-grooming-segmented-http.md](test-16-grooming-segmented-http.md).

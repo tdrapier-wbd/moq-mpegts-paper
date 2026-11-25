@@ -16,7 +16,7 @@ Four kinds of thing are recorded: defects verified against before-and-after buil
 
 A real contribution capture published and subscribed back produced continuously undecodable H.264 (`non-existing PPS 0 referenced`), because the import/export path kept a single SPS and a single PPS and a source carrying several lost all but the last seen. PES **DTS was not authored at all**, so B-frame content emitted a decode timeline a player had to be told to ignore. Reported as [#1798](https://github.com/moq-dev/moq/issues/1798) and [#1836](https://github.com/moq-dev/moq/issues/1836), fixed by [#1812](https://github.com/moq-dev/moq/pull/1812) and [#1843](https://github.com/moq-dev/moq/pull/1843).
 
-The larger carriage question went to [#1799](https://github.com/moq-dev/moq/issues/1799), which asked, **neutrally**, for a direction between media-aware and byte-opaque carriage. Upstream chose verbatim per-PID carriage under an `mpegts` catalog section ([#1815](https://github.com/moq-dev/moq/pull/1815)), so ancillary PIDs — DVB teletext, AC-3, all three SCTE-35 PIDs — survive as opaque tracks while video and audio stay typed and playable without TS support.
+The larger carriage question went to [#1799](https://github.com/moq-dev/moq/issues/1799), which asked, **neutrally**, for a direction between media-aware and passthrough carriage. Upstream chose verbatim per-PID carriage under an `mpegts` catalog section ([#1815](https://github.com/moq-dev/moq/pull/1815)), so ancillary PIDs — DVB teletext, AC-3, all three SCTE-35 PIDs — survive as opaque tracks while video and audio stay typed and playable without TS support.
 
 ### The harness that found most of what follows
 
@@ -318,7 +318,7 @@ The questline settles the _mechanism_; open is where the **convention** is writt
 
 Two vendors at IBC 2026 proposed BISS-CA on top of MoQ for conditional access. Assessed from the specifications; **nothing about scrambling is measured here** — the Gate 2 pass table records "Not exercised: nothing in the campaign scrambles" against its scrambled-packet rows. The question is whether the platform operator must be unable to _see_ the content. Admission works — eight refusing arms delivered zero payload bytes ([T36](test-36-entitlement-enforcement.md)) — and the key estate scales ([T38](test-38-entitlement-estate.md)). But the relay terminates the session and sees plaintext, so the native mechanism decides _who may subscribe_, not _who may comprehend_; the transport stream on UDP or RTP into an IRD has no MoQ protection on its final hop. BISS-CA, in-content and receiver-terminated, covers that gap.
 
-**The decisive constraint is that BISS-CA forecloses the media-aware lane:** CISSA scrambles TS payloads, so the demuxing importer cannot produce media tracks; it requires opaque carriage, which `moq-dev` carries byte-transparently on `main` ([T48](test-48-passthrough-export.md)). **Verdict: do not build it** unless a rights deal requires operator-blind carriage; MSFTS §10 already permits BISS-CA on transparent carriage. The paper's statement is [`control-plane.md`](../docs/control-plane.md) §7.3 and §10.
+**The decisive constraint is that BISS-CA forecloses the media-aware lane:** CISSA scrambles TS payloads, so the demuxing importer cannot produce media tracks; it requires passthrough carriage, which `moq-dev` carries byte-transparently on `main` ([T48](test-48-passthrough-export.md)). **Verdict: do not build it** unless a rights deal requires operator-blind carriage; MSFTS §10 already permits BISS-CA on transparent carriage. The paper's statement is [`control-plane.md`](../docs/control-plane.md) §7.3 and §10.
 
 ### FEC is a transport question, and the campaign's contribution to it is the comparison
 
@@ -633,8 +633,8 @@ Four early requirements, filed before most measurements; three were closed by us
 
 | Filed | Asked for | What we did | What forced it |
 | --- | --- | --- | --- |
-| [#1799](https://github.com/moq-dev/moq/issues/1799) | direction: media-aware vs byte-opaque | **closed by us** when children resolved | direction settled by children |
-| [#1861](https://github.com/moq-dev/moq/issues/1861) | second byte-verbatim opaque lane | **retracted by us** | #2440 → EIT-only gap; wire economics reversed; 1+1 byte identity another way |
+| [#1799](https://github.com/moq-dev/moq/issues/1799) | direction: media-aware vs passthrough | **closed by us** when children resolved | direction settled by children |
+| [#1861](https://github.com/moq-dev/moq/issues/1861) | second byte-verbatim passthrough lane | **retracted by us** | #2440 → EIT-only gap; wire economics reversed; 1+1 byte identity another way |
 | [#1839](https://github.com/moq-dev/moq/issues/1839) | generic TS egress sink with PCR-aware pacing | **partly landed, remainder retracted** | [#1845](https://github.com/moq-dev/moq/pull/1845); maintainer declined per-transport modules |
 | [#1838](https://github.com/moq-dev/moq/issues/1838) | TR 101 290 monitoring | **corrected in place**; closed via [#4496](https://github.com/moq-dev/moq/pull/4496); liveness and ingest counters merged since (§2) | half the original checks targeted moq egress timing; programme presence and moq-layer counters still open |
 

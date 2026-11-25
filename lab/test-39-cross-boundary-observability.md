@@ -128,7 +128,7 @@ Source verified before publishing: part 1 132,427 packets carrying 2,689 audio p
 | Delivery latency and jitter | **No** — byte and frame counts only, no timing |
 | Congestion and loss indicators | **No** |
 | Control-plane operation latency | **No** |
-| TR 101 290 P1/P2 status, PCR statistics, continuity integrity, service presence | **No, and not possible** — the payload is opaque |
+| TR 101 290 P1/P2 status, PCR statistics, continuity integrity, service presence | **No, and not possible** — the payload is passthrough |
 
 The last row is the load-bearing one and it is not a gap to be filled: it is what [T36](test-36-entitlement-enforcement.md) established by construction. **No amount of relay telemetry reaches a T24-class fault**, so the broadcast-domain half of §9 is only ever satisfiable at tier 1 or tier 3, and across this boundary that means tier 3.
 

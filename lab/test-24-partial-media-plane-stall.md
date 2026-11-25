@@ -23,7 +23,7 @@ They are not obviously sufficient for a structural reason. **PCR rides on the vi
 Two questions, and the second matters more than the first:
 
 1. **Is a partial failure observable anywhere in the delivered stream?**
-2. **Does the lane contain it or amplify it?** This is the one that could count against the architecture. Opaque carriage cannot amplify a partial stall, because it does not know what a track is; a demuxing lane reassembles a mux from tracks, and a mux that waits for a track that will never arrive converts one dead elementary stream into a dead service. That would be _worse_ than not detecting it.
+2. **Does the lane contain it or amplify it?** This is the one that could count against the architecture. Passthrough carriage cannot amplify a partial stall, because it does not know what a track is; a demuxing lane reassembles a mux from tracks, and a mux that waits for a track that will never arrive converts one dead elementary stream into a dead service. That would be _worse_ than not detecting it.
 
 ## Method
 
@@ -155,7 +155,7 @@ The `es` arm is worth separating: recovering from a total 60 s outage the groome
 
 ## What this does not establish
 
-- **Nothing about a frozen picture.** Every arm here removes access units. An encoder that keeps emitting _valid_ access units carrying an unchanging or looping picture would advance PCR, PTS, DTS and the continuity counters, hold its bitrate and defeat **every** detector in the table, including per-stream liveness. That failure is undetectable without decoding and comparing pictures, it is equally undetectable under opaque carriage or over SDI, and so it is a limit of transport monitoring in general rather than of this architecture. It is not tested here and should not be claimed either way.
+- **Nothing about a frozen picture.** Every arm here removes access units. An encoder that keeps emitting _valid_ access units carrying an unchanging or looping picture would advance PCR, PTS, DTS and the continuity counters, hold its bitrate and defeat **every** detector in the table, including per-stream liveness. That failure is undetectable without decoding and comparing pictures, it is equally undetectable under passthrough carriage or over SDI, and so it is a limit of transport monitoring in general rather than of this architecture. It is not tested here and should not be claimed either way.
 - **Nothing about stale timestamps**, the other half of T22's limit. A source emitting PCR that advances at the wrong rate is [T23](test-23-pcr-discontinuity-classes.md)'s territory and partly measured there.
 - **One clip, one PID layout.** PCR shares a PID with the video here. A mux carrying PCR on its own PID would behave the same way for the detectors — that is the point, PCR is independent of the video either way — but the proportional-sensitivity figures are specific to this programme's bitrate split.
 - **Detection is measured; response is not.** Nothing here says how long an operations system takes to act, only when the signal becomes available.

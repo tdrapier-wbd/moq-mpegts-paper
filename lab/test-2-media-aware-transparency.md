@@ -2,11 +2,11 @@
 
 ## Objective
 
-Exercise the upstream `moq-dev` **media-aware** lane (`moq import ts` → `moq-relay` → `moq export ts`) end-to-end on localhost: prove the non-opaque transport works against the public reference implementation, enumerate exactly which components (per the [T1](test-1-baseline-ts.md) component inventory) are carried, and measure the impairments the lane introduces. The opaque lane (T3) is the byte-for-byte counterpart; the direct contrast is in T3.
+Exercise the upstream `moq-dev` **media-aware** lane (`moq import ts` → `moq-relay` → `moq export ts`) end-to-end on localhost: prove the non-passthrough transport works against the public reference implementation, enumerate exactly which components (per the [T1](test-1-baseline-ts.md) component inventory) are carried, and measure the impairments the lane introduces. The passthrough lane (T3) is the byte-for-byte counterpart; the direct contrast is in T3.
 
 ## Environment
 
-- Binaries: `moq` / `moq-relay` built from `github.com/moq-dev/moq` (`moq-native` 0.18.3), carrying the #1979 catalog-reservation fix (#2072) and open-GOP recovery-point detection (#2066). Protocol negotiated **moq-lite-04** (moq-lite, the forwards-compatible subset — not the draft-14 transport the opaque platform pins). Binary supports moq-lite-01…04, moq-transport-14…17.
+- Binaries: `moq` / `moq-relay` built from `github.com/moq-dev/moq` (`moq-native` 0.18.3), carrying the #1979 catalog-reservation fix (#2072) and open-GOP recovery-point detection (#2066). Protocol negotiated **moq-lite-04** (moq-lite, the forwards-compatible subset — not the draft-14 transport the passthrough platform pins). Binary supports moq-lite-01…04, moq-transport-14…17.
 - Relay config `demo/relay/localhost.toml` (QUIC + HTTP on `[::]:4443`, self-signed `localhost`, anonymous auth).
 - Feed pacing: TSDuck `regulate` (real-time, PCR-based). TSDuck 3.44-4676.
 - Downstream groomer: [`mpegts-pacer`](https://github.com/tdrapier-wbd/mpegts-pacer) 0.1.0 via its offline `cbr_file` example — byte-locks PCR to output byte position (`PcrMode::Regenerate`), re-inserts byte-locked PCR-only packets on the PCR PID, strips input nulls, stuffs to the target mux rate. Not a muxer: PID structure, continuity counters and PSI/PES payloads pass through untouched.
@@ -193,7 +193,7 @@ The `ffmpeg`-loop feed (A) additionally showed two ingest-side artefacts that ar
 - As shipped, the media-aware lane is _media-faithful_ (elementary streams, continuity, PCR PID intact) but **not broadcast-transparent**: it dropped the DVB service layer, renumbered the PMT, and emitted non-CBR bursty egress violating TR 101 290 P2 on 13.7 % and 25.5 % of intervals for the two clips whose native PCR cadence is coarser than the exporter's group boundaries, and on 0.10 % for the 27.5 Mbps mux whose own 27 ms cadence is already inside the limit. **Quote the range as 0–26 % across the four clips T7 measured, not as 13–26 %.**
 - The timing/CBR half is closed downstream of _any_ VBR source by `mpegts-pacer`; the service-layer half was closed upstream by #2440 except for **TDT/TOT and EIT**, and the two were never one gap: EIT revises rarely enough to fit catalog carriage at ~12 updates per ten minutes, while every TDT/TOT section is new content. Both are carried on later builds, on snapshot tracks. TDT/TOT is proxied from the source rather than regenerated at the exporter, because a locally minted clock would misplace the relayed EPG and TOT carries the operator's DST policy ([`upstream-contributions.md`](upstream-contributions.md) § _TDT/TOT_).
 - The open-GOP round-trip requires **both** #2072 and #2066 on the same tree: with #2072 alone an IDR-less feed's video never resolves, so the reservation gate stays shut and the catalog never publishes.
-- `mpegts-pacer` fixes PCR/stuffing/CBR but restores neither SI nor PMT identity (the opaque lane's job), and its P1 result is arithmetic, not a wire (P2) pass.
+- `mpegts-pacer` fixes PCR/stuffing/CBR but restores neither SI nor PMT identity (the passthrough lane's job), and its P1 result is arithmetic, not a wire (P2) pass.
 - This is loopback only (isolates the lane, not network effects — those are T4/T5), moq-lite-04 not draft-14, and uses live-join captures (so PCR-interval _maxima_ include boundary artefacts; the `% > 40 ms` metric is the reliable one).
 
 ## Conclusion
@@ -203,6 +203,6 @@ The media-aware lane carries all elementary streams and PMT descriptors with 0 C
 ## References
 
 - Media-aware lane as the preferred path: [`docs/architecture.md`](../docs/architecture.md) §4.2.
-- Byte-for-byte counterpart and the decisive contrast: [test-3-opaque-transparency.md](test-3-opaque-transparency.md).
+- Byte-for-byte counterpart and the decisive contrast: [test-3-passthrough-transparency.md](test-3-opaque-transparency.md).
 - Upstream: [#1979](https://github.com/moq-dev/moq/issues/1979), #2072, #2066, [#2440](https://github.com/moq-dev/moq/pull/2440).
 - Findings: [`evidence.md`](evidence.md) §3.1, §3.2.

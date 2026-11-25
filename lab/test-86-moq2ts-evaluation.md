@@ -124,7 +124,7 @@ _Results._ `moq2ts` `main` `be3a18d` on the `moqxr` v0.4.25 SDK and moq5 `main` 
 
 [T10](test-10-mpts-multiservice.md)'s fixtures, rebuilt by [`make-real-mpts.sh`](scripts/make-real-mpts.sh): `mpts3.ts`, three programmes on independent clocks (programme 1 the news contribution with seven elementary streams, 2 video only, 3 video and audio), and `mpts3-cc.ts`, the same on one clock. 60 s at 19.9 Mb/s. [`t86-mpts.sh`](scripts/t86-mpts.sh) releases the fixture once through `tsp -P regulate --pcr-synchronous` into the publisher's stdin, every receiver started first. Two cells, each on both implementations:
 
-- **Unmodified multiplex (U).** Arm A: `moq2ts-cli --unmodified`, one `unmodified-multiplex` track, read by `moq2ts-receiver`. Arm M: `import ts --passthrough` → `export ts --passthrough`. T10 never ran opaque carriage of a multiplex.
+- **Unmodified multiplex (U).** Arm A: `moq2ts-cli --unmodified`, one `unmodified-multiplex` track, read by `moq2ts-receiver`. Arm M: `import ts --passthrough` → `export ts --passthrough`. T10 never ran passthrough carriage of a multiplex.
 - **Per programme (P).** Arm A: `moq2ts-cli --config` with programmes 1, 2 and 3 keeping all DVB SI, one `moq2ts-receiver --track program-<n>` per programme. Arm M: `import ts --program all` → one `export ts` per programme broadcast, T10's split, on `moq-lite-07` so that #9081 does not touch programme 1's field-coded video.
 
 `moq2ts` on draft 22; one run per fixture, cell and arm. Graded by [`t10-grade.py`](scripts/t10-grade.py), per programme, and in cell U also by `ts-passthrough-identity.py`.
@@ -151,7 +151,7 @@ _Results._ Both fixtures are valid: 0 continuity events, every checked PCR withi
 
 _Conclusions._
 
-1. **Both implementations carry a multiplex whole on MoQ**: `moq2ts --unmodified` and `moq-dev`'s passthrough deliver the fixture's own bytes from the join, every programme with its PAT entry, PMT, PCR and SI, on independent and common clocks. This is the opaque carriage of a multiplex that T10 left unrun.
+1. **Both implementations carry a multiplex whole on MoQ**: `moq2ts --unmodified` and `moq-dev`'s passthrough deliver the fixture's own bytes from the join, every programme with its PAT entry, PMT, PCR and SI, on independent and common clocks. This is the passthrough carriage of a multiplex that T10 left unrun.
 2. **Both carry each programme as its own track.** `moq2ts` forwards a programme's packets unchanged, PMT included, and adds nothing; `moq-dev` rebuilds programme 1's PMT and pads every programme to the multiplex's rate. Neither loses anything after its join. `moq2ts`'s start-up join is the longer: 4.3–4.6 s on programmes 1 and 2, where `moq-dev`'s video shares imply under 3 s. A late join to a running broadcast is P2-u's.
 3. **Nothing to file.** The late PMT is handled as `moq2ts` documents it, and the start-up join is a property of reading the PSI before publishing, not a defect.
 
@@ -232,7 +232,7 @@ _Results._ Every criterion holds.
 
 _Conclusions._
 
-1. **`moq2ts` carries the live feed unchanged, its unflagged splice included.** The 300 s of a hardware encode, and T34's switch to a second encode 16,844.6 s behind with no `discontinuity_indicator`, cross `moq-relay` byte for byte on draft 22. `moq-dev`'s passthrough on `main` does the same, as [T67](test-67-import-step-restart.md) found on the same capture. Where T34's design lost 9.8 s at this step (2.8 s at best), neither opaque lane now loses anything.
+1. **`moq2ts` carries the live feed unchanged, its unflagged splice included.** The 300 s of a hardware encode, and T34's switch to a second encode 16,844.6 s behind with no `discontinuity_indicator`, cross `moq-relay` byte for byte on draft 22. `moq-dev`'s passthrough on `main` does the same, as [T67](test-67-import-step-restart.md) found on the same capture. Where T34's design lost 9.8 s at this step (2.8 s at best), neither passthrough lane now loses anything.
 2. **Nothing to file.**
 
 ## Corrections

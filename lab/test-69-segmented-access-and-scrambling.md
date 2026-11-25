@@ -98,7 +98,7 @@ Without `--intra-close`, the capture's head is the pacer dropping 12,703 late pa
 | Protection ends | at the descrambler before the IRD | at the viewer, which decrypts; the CDN serves the keys in the clear |
 | Entitlement | in-band, per receiver; not exercised | per token at every request: measured exact |
 | Revocation | by entitlement message; not exercised | tens of seconds through the edge's store; expiry exact |
-| What it needs of the lane | byte-faithful carriage, measured here and on MoQ's opaque lane | a programmable edge and a key service |
+| What it needs of the lane | byte-faithful carriage, measured here and on MoQ's passthrough lane | a programmable edge and a key service |
 
 ## Limits
 
