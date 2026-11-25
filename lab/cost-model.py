@@ -340,21 +340,20 @@ for statmux_avg in (5.9, 7.3, 9.8):
 CHANNELS = 8
 print(f"\nModelled multiplex: {CHANNELS} HD services.\n")
 
-print(f"{'Destinations':<14}{'Aggregate':>12}{'MC reserved':>14}{'Cloud 70% priv':>16}"
+print(f"{'Destinations':<14}{'Aggregate':>12}{'MC reserved':>14}"
       f"{'CDN $0.010':>14}{'CDN $0.005':>14}{'Transit':>12}")
-rule(96)
-MULTIPLEX_FANOUT = []     # (destinations, MediaConnect, cloud less 70 %, CDN $0.010, CDN $0.005, transit)
+rule(80)
+MULTIPLEX_FANOUT = []     # (destinations, MediaConnect, CDN $0.010, CDN $0.005, transit)
 for dests in (1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024):
     moq_wire = CHANNELS * 10 * MOQ_CARRIAGE * 2 * dests
     srt_wire = CHANNELS * 10 * SRT_CARRIAGE * 2 * dests
     flows = 2 * CHANNELS * max(1, -(-dests // 20))   # a TS flow carries up to 20 outputs
     mc = mediaconnect_egress(srt_wire) + flows * MEDIACONNECT_FLOW_HOUR * HOURS_YEAR
-    priv = annual_cost(moq_wire, AWS_DTO) * 0.30
     cdn = annual_cost(moq_wire, CDN_MOQ_RELAY_ASSUMED, GB)
     cdn_lo = annual_cost(moq_wire, CDN_MOQ_RELAY_FLOOR, GB)
     tr = moq_wire * TRANSIT_10GE * 12
-    MULTIPLEX_FANOUT.append((dests, mc, priv, cdn, cdn_lo, tr))
-    print(f"{dests:<14}{moq_wire:>9,.0f} Mb{mc:>14,.0f}{priv:>16,.0f}"
+    MULTIPLEX_FANOUT.append((dests, mc, cdn, cdn_lo, tr))
+    print(f"{dests:<14}{moq_wire:>9,.0f} Mb{mc:>14,.0f}"
           f"{cdn:>14,.0f}{cdn_lo:>14,.0f}{tr:>12,.0f}")
 
 marginal_moq = CHANNELS * 10 * MOQ_CARRIAGE * 2
@@ -379,22 +378,17 @@ PARITY = [(name, basis, annual_cost(marginal_moq, tiers, unit)) for name, basis,
     ("AWS deepest tier", "published", [(None, AWS_DTO[-1][1])], GIB),
     ("MediaConnect reserved, 1500 Mbps tier", "published",
      [(None, MEDIACONNECT_RESERVED[1500] * HOURS_YEAR / 1500 / volume(1, GB))], GB),
-    ("AWS deepest tier less 70 %", "hypothetical", [(None, AWS_DTO[-1][1] * 0.30)], GIB),
     ("CDN MoQ relay @ $0.010/GB", "assumed", CDN_MOQ_RELAY_ASSUMED, GB),
     ("CDN MoQ relay @ $0.005/GB", "assumed", CDN_MOQ_RELAY_FLOOR, GB),
     ("IP transit, 10 GigE", "bandwidth only", [(None, TRANSIT_10GE * 12 / volume(1, GB))], GB),
 ]]
 
-# Enterprise procurement is the largest single lever on the dominant line, so model it
-# as a ladder of hypothetical discounts off first-tier list rather than a single guess.
-print("\n--- Procurement: hypothetical discount off first-tier list egress ---\n")
-print(f"{'Discount':<12}{'$/GiB':>10}{'$/destination-yr':>20}{'Destinations to parity per $1M/yr':>36}")
-rule(78)
-for pct in range(0, 100, 5):
-    rate = 0.09 * (1 - pct / 100)
-    per_dest = annual_cost(marginal_moq, [(None, rate)])
-    label = "list" if pct == 0 else f"{pct} %"
-    print(f"{label:<12}{rate:>10.4f}{per_dest:>20,.0f}{1_000_000/per_dest:>36,.0f}")
+# Any discount scales the per-destination cost by the share of list still paid, so parity
+# rises in inverse proportion to that share; no rate is modelled.
+list_per_dest = annual_cost(marginal_moq, [(None, 0.09)])
+print(f"\nAt first-tier list, ${list_per_dest:,.0f} per destination-year, parity per $1M/yr is "
+      f"{1_000_000/list_per_dest:,.1f} destinations; a discount multiplies the first by the share of "
+      "list still paid and divides the second by it.\n")
 
 # ================================================================ 5. sizing constraint
 for dests in range(1, 200):

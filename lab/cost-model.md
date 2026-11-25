@@ -191,19 +191,19 @@ Note the profile mismatch and do not conflate the two: the transponder sets the 
 
 On-demand cloud list is deliberately not a column here: a transponder is leased for years, so the honest counterpart is committed or commodity capacity, not a rate that assumes the traffic could stop tomorrow. Eight services × 10 Mbps × 1+1, delivery cost only, no relay compute, annual USD:
 
-| Destinations | Aggregate wire | MediaConnect reserved | Cloud at 70 % private _(hypothetical)_ | CDN @ $0.010/GB _(assumed)_ | CDN @ $0.005/GB _(assumed)_ | IP transit _(bandwidth only)_ |
-| --: | --: | --: | --: | --: | --: | --: |
-| 1 | 157 Mbps | 52,404 | 14,861 | 6,194 | 3,097 | 132 |
-| 2 | 314 Mbps | 79,138 | 27,144 | 12,387 | 6,194 | 264 |
-| 4 | 628 Mbps | 108,376 | 48,586 | 24,775 | 12,387 | 528 |
-| 8 | 1,257 Mbps | 122,675 | 83,196 | 49,549 | 24,775 | 1,056 |
-| 16 | 2,514 Mbps | 222,924 | 152,415 | 99,099 | 49,549 | 2,112 |
-| 32 | 5,028 Mbps | 445,849 | 290,855 | 198,197 | 99,099 | 4,223 |
-| 64 | 10,056 Mbps | 816,274 | 567,733 | 396,395 | 198,197 | 8,447 |
-| 128 | 20,111 Mbps | 1,610,123 | 1,121,490 | 792,790 | 396,395 | 16,894 |
-| 256 | 40,223 Mbps | 3,155,229 | 2,229,005 | 1,585,580 | 792,790 | 33,787 |
-| 512 | 80,445 Mbps | 6,297,284 | 4,444,034 | 3,171,159 | 1,585,580 | 67,574 |
-| 1024 | 160,891 Mbps | 12,551,030 | 8,874,092 | 6,342,318 | 3,171,159 | 135,148 |
+| Destinations | Aggregate wire | MediaConnect reserved | CDN @ $0.010/GB _(assumed)_ | CDN @ $0.005/GB _(assumed)_ | IP transit _(bandwidth only)_ |
+| --: | --: | --: | --: | --: | --: |
+| 1 | 157 Mbps | 52,404 | 6,194 | 3,097 | 132 |
+| 2 | 314 Mbps | 79,138 | 12,387 | 6,194 | 264 |
+| 4 | 628 Mbps | 108,376 | 24,775 | 12,387 | 528 |
+| 8 | 1,257 Mbps | 122,675 | 49,549 | 24,775 | 1,056 |
+| 16 | 2,514 Mbps | 222,924 | 99,099 | 49,549 | 2,112 |
+| 32 | 5,028 Mbps | 445,849 | 198,197 | 99,099 | 4,223 |
+| 64 | 10,056 Mbps | 816,274 | 396,395 | 198,197 | 8,447 |
+| 128 | 20,111 Mbps | 1,610,123 | 792,790 | 396,395 | 16,894 |
+| 256 | 40,223 Mbps | 3,155,229 | 1,585,580 | 792,790 | 33,787 |
+| 512 | 80,445 Mbps | 6,297,284 | 3,171,159 | 1,585,580 | 67,574 |
+| 1024 | 160,891 Mbps | 12,551,030 | 6,342,318 | 3,171,159 | 135,148 |
 
 Marginal cost of one additional destination for the whole 8-service 1+1 multiplex (157.1 Mbps):
 
@@ -213,10 +213,11 @@ Marginal cost of one additional destination for the whole 8-service 1+1 multiple
 | Cloudflare MoQ, announced | 30,968 | 32.3 |
 | AWS deepest tier | 28,842 | 34.7 |
 | MediaConnect reserved, 1500 Mbps tier | 10,501 | 95.2 |
-| AWS deepest tier less 70 % _(hypothetical)_ | 8,653 | 115.6 |
 | CDN MoQ relay @ $0.010/GB _(assumed)_ | 6,194 | 161.5 |
 | CDN MoQ relay @ $0.005/GB _(assumed)_ | 3,097 | 322.9 |
 | IP transit, 10 GigE _(bandwidth only, §10)_ | 132 | 7,577 |
+
+No discount off list is modelled (§11, _List prices only_): one would scale a row's cost by the share of list still paid, and its parity by the inverse.
 
 ![Destinations to parity per $1M/yr](charts/cost_parity.svg)
 

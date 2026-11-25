@@ -131,7 +131,6 @@ def cost_destinations(model, palette):
 
     mux = list(zip(*model["MULTIPLEX_FANOUT"]))
     for i, (label, style) in enumerate([("MediaConnect reserved", "-"),
-                                        ("Cloud list less 70 % (hypothetical)", "--"),
                                         ("CDN MoQ relay @ $0.010/GB (assumed)", "--"),
                                         ("CDN MoQ relay @ $0.005/GB (assumed)", "--"),
                                         ("IP transit (bandwidth only)", ":")]):
@@ -164,7 +163,7 @@ def cost_parity(model, palette):
     ax.invert_yaxis()
     ax.xaxis.set_major_formatter(FuncFormatter(plain))
     ax.set_title("Parity per $1M/yr of incumbent cost, eight-service 1+1 multiplex\n"
-                 "solid = published · hatched = announced · grey = assumed, hypothetical or bandwidth only",
+                 "solid = published · hatched = announced · grey = assumed or bandwidth only",
                  fontsize=9)
     footnote(fig, "Source: lab/cost-model.py.")
     return fig
