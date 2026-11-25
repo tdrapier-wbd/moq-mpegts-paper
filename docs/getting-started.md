@@ -9,7 +9,6 @@ Status: working draft. Layer: hands-on. Scope: three recipes on one machine, wit
 - [Recipe 1: MoQ](#recipe-1-moq)
 - [Recipe 2: Segmented HTTP](#recipe-2-segmented-http)
 - [Recipe 3: Multicast to an IRD](#recipe-3-multicast-to-an-ird)
-- [What the recipes show](#what-the-recipes-show)
 - [Limits](#limits)
 
 ## In brief
@@ -43,11 +42,13 @@ mkdir -p /tmp/gs && cd /tmp/gs
 "$REPO/lab/interop/make-fixture.sh" fixture.ts
 ```
 
-The fixture is synthetic: 20 s of one service with one video and one audio stream at a constant 2 Mb/s. The checker, `lab/interop/validate-ts.sh`, reads only TSDuck's analysis of the two files: continuity counters, sync bytes, transport errors, PAT and PMT, and the service and elementary-stream inventory against the source ([`lab/interop`](../lab/interop/README.md) explains why that is enough to detect loss).
+The fixture is synthetic: 20 s of one service, one video and one audio stream, at a constant 2 Mb/s. The checker, `lab/interop/validate-ts.sh`, compares TSDuck's analysis of the two files: continuity, sync bytes, transport errors, PAT and PMT, and the service and stream inventory ([`lab/interop`](../lab/interop/README.md) says why that detects loss).
 
 Open three terminals, each with `REPO` exported and in `/tmp/gs`.
 
 ## Recipe 1: MoQ
+
+**This is MoQ's media-aware lane, the only one released**: the subscriber rebuilds the multiplex from its elementary streams. The passthrough lane, which carries the source's own packets and leads in [Comparison](comparison.md) §11, is on upstream `main` only and gets a recipe once released.
 
 **Terminal 1, the relay.** It generates a self-signed certificate for `localhost` and lets any anonymous session publish and subscribe on any path, so keep it to a test machine:
 
@@ -69,7 +70,7 @@ tsp -I file fixture.ts -P regulate --pcr-synchronous -O file \
   | moq --connect https://localhost:4443/anon --connect-tls-insecure import --broadcast demo ts
 ```
 
-After 20 s both clients exit. `--connect-tls-insecure` skips certificate verification, which suits a self-signed relay on this machine and nothing else.
+After 20 s both clients exit. `--connect-tls-insecure` skips certificate checks: fine for a self-signed relay here, nowhere else.
 
 **Check:**
 
@@ -77,7 +78,7 @@ After 20 s both clients exit. `--connect-tls-insecure` skips certificate verific
 "$REPO/lab/interop/validate-ts.sh" received-moq.ts --reference fixture.ts
 ```
 
-Expect every `CHECK` line `pass` and a final `RESULT pass`. The `byte-identical` line is `info` and reports a smaller file: the released client carries the elementary streams, not the source's packets, and the subscriber builds a new multiplex without the source's null stuffing ([Primer](primer.md) §4).
+Expect every `CHECK` line `pass` and a final `RESULT pass`. The `byte-identical` line is `info` and reports a smaller file: the new multiplex has none of the source's null stuffing ([Primer](primer.md) §4).
 
 Stop the relay with Ctrl-C.
 
@@ -89,7 +90,7 @@ Stop the relay with Ctrl-C.
 mkdir -p hls && cd hls && python3 -m http.server 8080 --bind 127.0.0.1
 ```
 
-**Terminal 2, the packager.** It paces the source as before and cuts it into 2 s segments behind a live playlist of the latest twelve, more than the fixture's ten, so no segment leaves the playlist before the receiver reads it; at the end of the input it marks the playlist ended:
+**Terminal 2, the packager.** It paces the source as before and cuts it into 2 s segments behind a live playlist of the latest twelve, more than the fixture's ten, so none leaves it before the receiver reads it; at the input's end it marks the playlist ended:
 
 ```bash
 tsp -I file fixture.ts -P regulate --pcr-synchronous \
@@ -116,7 +117,7 @@ Stop the origin with Ctrl-C.
 
 ## Recipe 3: Multicast to an IRD
 
-**A live source usually arrives as UDP or RTP multicast, and an IRD expects the same: a constant mux rate, with every PCR on time.** Neither subscriber's output arrives like that, so it goes through `mpegts-pacer`, which holds a cushion, pads to a constant rate and restamps each PCR from its byte position.
+**A live source usually arrives as UDP or RTP multicast, and an IRD expects the same: a constant mux rate, with every PCR on time.** Neither subscriber's output arrives like that, so it goes through `mpegts-pacer`, which holds a cushion, pads to a constant rate and restamps each PCR from its byte position. The pacer is needed only where the receiver holds the stream to broadcast timing: an IRD, or a hand-off monitored against TR 101 290. A recorder, transcoder or software player takes the subscriber's output as it is. The passthrough lane needs none either: it releases the source's own packets on the source's schedule.
 
 The groups here are in 239.255.0.0/16 on this machine, and loopback carries multicast only with a route. On macOS (remove it afterwards with `delete` in place of `add`), or on Linux (with `del` and `multicast off`):
 
@@ -163,12 +164,8 @@ When the check has run, expect `0 with jitter > 13` (every PCR within about 500 
 
 Stop everything with Ctrl-C, remove the route, and clean up with `rm -rf /tmp/gs`.
 
-## What the recipes show
-
-**Both paths deliver the service intact**: the same services and elementary streams, no continuity error, no transport error, PAT and PMT present; after the pacer, every PCR is accurate and frequent enough at a constant mux rate.
-
 ## Limits
 
 **The checks test interoperability, not conformance**: the rest of TR 101 290, and the pacing of a production output ([Architecture](architecture.md) §4), go unexamined. One machine, no loss, no congestion and one 20 s file exercise none of what the paper measures: latency, redundancy, behaviour under loss, or capacity. Those results, and the conditions under which they hold, are in [Evidence](../lab/evidence.md).
 
-The commands were tested with the fixture alone. What each path does with a real feed's other components, such as SI tables, data streams and scrambled content, is examined lane by lane in the [Comparison](comparison.md) §2.
+The commands were tested with the fixture alone; what each lane does with a real feed's SI tables, data streams and scrambled content is in [Comparison](comparison.md) §2.
