@@ -296,7 +296,7 @@ Its presentation latency is §3.11's. At 500 ms **which track anchors its clock 
 
 ## 4. The limits of the evidence
 
-**No IRD.** Nothing has reached a hardware IRD. The receiving site's monitors have read all four hand-offs over the internet for minutes at a time: no media loss but one alarm, from the passthrough lane's bursts, and late tables on the media-aware lane alone, since fixed at the sender ([T83](test-83-mixed-plane-pair.md) Part E). Every other figure is graded from bytes or by a software receiver, none at an IRD's input.
+**No IRD.** Nothing has reached a hardware IRD. The receiving site's monitors have watched all four hand-offs over the internet for about a week, graded in windows of minutes: no media loss but one alarm, from the passthrough lane's bursts, and late tables on the media-aware lane alone, since fixed at the sender ([T83](test-83-mixed-plane-pair.md) Part E). Every other figure is graded from bytes or by a software receiver, none at an IRD's input.
 
 **Delivery latency, not glass to glass, and one long path.** Encoder and decoder delay are unmeasured and do not differ between planes, so the comparison holds while the total does not. Every ordering but one is loopback or a 12.8 ms path; the 116 ms one is one clip, two budgets and three loss models (§3.11).
 
