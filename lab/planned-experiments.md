@@ -43,6 +43,7 @@ Untaken quests on upstream `main` whose result would move an entry above, ranked
 | Quest | Size | Would move | Why it ranks here | Gate |
 | --- | --- | --- | --- | --- |
 | `qos-publisher-timeliness` | M | P1-l | A health verdict per publisher from the relay alone; the per-subscriber verdict is on `main` | None: it now defines the histogram type the lag histogram reuses; not taken |
+| `ts-export-select` | L | the lane choice ([Architecture](../docs/architecture.md) §6.1) | The media-aware lane's per-track subscription, which the opaque lane cannot offer, unmeasured at a TS hand-off: `export ts --track <filter>`, SI kept, unpadded unless `--mux-rate` | `ts-export-pace` first, unclaimed; the maintainer will ask us to try its pull request on our hand-off |
 
 Set aside: the QoS line's lag histogram (R8 only), the E2EE line beyond P1-ae's gate (a contract option, not a requirement: [Control](../docs/control-plane.md) §7.3), `broadcast-fairness` (tenants sharing a cluster link; one operator's channels until P1-j's second hop), `perf/shard-default` (our relay's knee, which P1-j's supersedes) and `ts-si-grid` (SI repeated on wire time; after #9185 the live feed's SDT peaks at 1,246 ms against its 2 s limit).
 
