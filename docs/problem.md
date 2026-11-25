@@ -1,6 +1,6 @@
 # The Problem, and What a Successor Must Do
 
-Status: working draft. Layer: **the requirement.** Scope: what primary distribution is, the incumbent architectures and where the IP one stops, the pressures eroding them, what a successor has to change, and the requirement set R1–R8 (§5) that every later document is scored against. Reads with: [Comparison](comparison.md), which scores the data planes against it.
+Status: working draft. Layer: **the requirement.** Scope: what primary distribution is, the incumbent architectures and where the IP one stops, the pressures eroding them, what a successor has to change, and the requirement set R1–R9 (§5) that every later document is scored against. Reads with: [Comparison](comparison.md), which scores the data planes against it.
 
 **Contents**
 
