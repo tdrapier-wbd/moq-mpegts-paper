@@ -84,7 +84,7 @@ _Prediction falsified_ for the segmented lane, which was to be whole; SRT and bo
 | return direction only | round 1's seed | whole | 0.98 s |
 | both directions, again | round 2's seed | 0.36 s lost, 7 errors, one 536 ms stall | 1.56 s |
 
-**What a burst costs a fetch, captured.** A response leaves the origin at line rate in about 40 ms each second. A loss with later segments behind it is resent within 6–96 ms; one at the tail is probed about 240 ms after the origin's last send. A burst that takes most of a response leaves nothing to probe from: both slow recoveries began with a 333–338 ms silence, a retransmission timeout, and continued in rounds of one round trip as the window regrew, 1.16 s and 1.56 s for a 1.5 MB segment, 555 segments resent in the slower. The 2 s cushion absorbed the 1.16 s fetch; the 1.56 s one stalled the groomer for 536 ms. The matrix's failing fetches, 3.9 s and 6.2 s in round 1 and 8.2 s in round 2, each with its first byte in one round trip, were not captured, and the re-run on round 2's seed did not repeat the 8.2 s: where a burst meets a fetch depends on the cell's phase against the schedule. None tripped the receiver's 3 s timeout, which bounds each read, not the fetch.
+**What a burst costs a fetch, captured.** A response leaves the origin at line rate in about 40 ms each second. A loss with later segments behind it is resent within 6–96 ms; one at the tail is probed about 240 ms after the origin's last send. A burst that takes most of a response leaves nothing to probe from: both slow recoveries began with a 333–338 ms silence, a retransmission timeout, and continued in rounds of one round trip as the window regrew, 1.16 s and 1.56 s for a 1.5 MB segment, 555 segments resent in the slower. The 2 s cushion absorbed the 1.16 s fetch; the 1.56 s one stalled the pacer for 536 ms. The matrix's failing fetches, 3.9 s and 6.2 s in round 1 and 8.2 s in round 2, each with its first byte in one round trip, were not captured, and the re-run on round 2's seed did not repeat the 8.2 s: where a burst meets a fetch depends on the cell's phase against the schedule. None tripped the receiver's 3 s timeout, which bounds each read, not the fetch.
 
 ## Conclusions
 
@@ -104,7 +104,7 @@ DEADLINE_MS=1000 CAPTURE=<origin-nic> ORIGIN_IP=<EC2_IP> ORIGIN=<origin-host> FA
 python3 lab/scripts/t74-tcp-recovery.py <cell>/origin.pcap --slow-ms 600
 ```
 
-**The deadline, set before running.** In the diagnostics a 1.16 s fetch was absorbed and a 1.56 s one stalled the groomer for 536 ms, so a fetch has about 1 s of slack at this budget; past 1,000 ms it has already cost programme. A new connection then pays a poll, a handshake and slow start on the 116 ms path, about 1.5 s for a 1.5 MB segment.
+**The deadline, set before running.** In the diagnostics a 1.16 s fetch was absorbed and a 1.56 s one stalled the pacer for 536 ms, so a fetch has about 1 s of slack at this budget; past 1,000 ms it has already cost programme. A new connection then pays a poll, a handshake and slow start on the 116 ms path, about 1.5 s for a 1.5 MB segment.
 
 **Pass criteria, fixed before running:**
 
@@ -123,7 +123,7 @@ _Predicted._ A failing fetch begins with a retransmission timeout on a response'
 
 | Round | Without the deadline | With it: firings | With it: longest wait for a segment | With it: programme |
 | --- | --- | --- | --- | --- |
-| 1 | whole, 2 groomer stalls, 12 continuity errors | 0 | 1.72 s | whole, no stall |
+| 1 | whole, 2 pacer stalls, 12 continuity errors | 0 | 1.72 s | whole, no stall |
 | 2 | 11.44 s lost; waits up to 6.73 s | 4 | 5.73 s | 5.84 s lost |
 | 3 | 0.20 s lost; waits up to 3.01 s | 4 | 5.04 s | 4.98 s lost |
 
@@ -160,9 +160,9 @@ python3 lab/scripts/t74-tcp-recovery.py <cell>/origin.pcap --slow-ms 600
 
 | Round | Without the hedge | With it: hedges, re-request first | With it: longest wait after the join | With it: bytes added | With it: programme |
 | --- | --- | --- | --- | --- | --- |
-| 1 | 3.48 s lost, 16 continuity errors, 2 groomer stalls; waits up to 3.86 s | 9, 5 | 0.75 s | 14.6 MB (9.1 %) | whole |
+| 1 | 3.48 s lost, 16 continuity errors, 2 pacer stalls; waits up to 3.86 s | 9, 5 | 0.75 s | 14.6 MB (9.1 %) | whole |
 | 2 | whole; waits up to 0.62 s | 2, 0 | 0.67 s | 5.1 MB (3.2 %) | whole |
-| 3 | 5 continuity errors, one groomer stall, no content lost; waits up to 1.81 s | 1, 1 | 0.75 s | 2.9 MB (1.8 %) | whole |
+| 3 | 5 continuity errors, one pacer stall, no content lost; waits up to 1.81 s | 1, 1 | 0.75 s | 2.9 MB (1.8 %) | whole |
 
 The bytes added are the unused responses, the join's included; every one completed. The slowest original a re-request overtook took 5.47 s. 4. **The clean control:** whole. The hedge fired once, on the joining fetch (968 ms), whose re-request, the second connection's first, took 967 ms. Met.
 

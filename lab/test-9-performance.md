@@ -6,7 +6,7 @@ The growth **plateaus** once every uni slot is filled — `moq-relay` sets 10,00
 
 ## Objective
 
-Per role (publisher / relay / subscriber + groomer-pacer), establish the steady-state resource envelope (CPU, RSS, fds, threads) and how it scales, prove **stability over long runs** (no memory leak / unbounded growth — a production blocker, not a characterisation note), and record protocol overhead. The priority dimension is a **hours→days soak** with an RSS-vs-time slope ≈ 0.
+Per role (publisher / relay / subscriber + pacer), establish the steady-state resource envelope (CPU, RSS, fds, threads) and how it scales, prove **stability over long runs** (no memory leak / unbounded growth — a production blocker, not a characterisation note), and record protocol overhead. The priority dimension is a **hours→days soak** with an RSS-vs-time slope ≈ 0.
 
 ### Pass criteria (agreed in advance)
 
@@ -133,7 +133,7 @@ Measured on a WAN path (origin relay and publisher on EC2, subscriber at home, ~
 
 **MoQ carries this service in 5.3 % less bandwidth than SRT — 6.2 % less with MTU discovery on** — and in slightly less than the source TS rate itself. Two independent legs of the default configuration agreed to 0.03 points, so the figure repeats.
 
-The mechanism is entirely visible in the delivered column. SRT hands over 9.979 Mbps, the source verbatim. MoQ hands over 9.500 Mbps, 4.5 % less, which is the null stuffing it declined to carry and which the downstream groomer regenerates locally. That saving is larger than everything QUIC charges for carrying the rest.
+The mechanism is entirely visible in the delivered column. SRT hands over 9.979 Mbps, the source verbatim. MoQ hands over 9.500 Mbps, 4.5 % less, which is the null stuffing it declined to carry and which the downstream pacer regenerates locally. That saving is larger than everything QUIC charges for carrying the rest.
 
 ### Segmented HTTP lands on SRT, for SRT's reason
 
@@ -282,7 +282,7 @@ Expressed as the IP rate needed to deliver the same 9.946 Mbps service:
 
 **The three measured verbatim rows agree to within a point of each other and the two derived passthrough rows land among them**, which is the useful shape: carriage cost is decided by whether a lane carries stuffing, not by which protocol carries it. SRT, segmented HTTP and a passthrough verbatim MoQ lane all sit at ~1.03x; the media-aware lane sits at 0.98x because it is the only one that does not put the nulls on the path.
 
-**Not carrying stuffing is MoQ's structural bandwidth advantage over SRT**, and it is now a measured advantage rather than a derived one. It is bankable on a 1+1 pair as well: [T12](test-12-dual-path-handoff.md) arm D shows two groomers that each regenerate their own stuffing from stream position still produce byte-identical legs. What stripping costs is byte-verbatim carriage, which is a separate decision — and the saving scales with the stuffing ratio, so it is much larger on a loosely filled carrier: on the T12 profile, 1.9 Mbps of content in a 4 Mbps carrier, SRT needs 4.13 Mbps of IP where the media-aware lane needs ~2.0 Mbps.
+**Not carrying stuffing is MoQ's structural bandwidth advantage over SRT**, and it is now a measured advantage rather than a derived one. It is bankable on a 1+1 pair as well: [T12](test-12-dual-path-handoff.md) arm D shows two pacers that each regenerate their own stuffing from stream position still produce byte-identical legs. What stripping costs is byte-verbatim carriage, which is a separate decision — and the saving scales with the stuffing ratio, so it is much larger on a loosely filled carrier: on the T12 profile, 1.9 Mbps of content in a 4 Mbps carrier, SRT needs 4.13 Mbps of IP where the media-aware lane needs ~2.0 Mbps.
 
 **Scope limit: both measured MoQ rows are the media-aware lane.** The passthrough lane — the paper's preferred carriage for hardware IRDs — still has no measurement; its two derived rows above apply the per-byte carriage cost measured here to a verbatim and a null-stripped payload, and the verbatim case should come out marginally _cheaper_ than the arithmetic suggests because a single large track packs datagrams better than 100 short streams per second. On `main` that lane is `import ts --passthrough`, not yet run on this rig.
 
@@ -515,7 +515,7 @@ Nine times _less_ bitrate and a twentieth of the pixel rate cost three times _mo
 - **Retransmission cost measured directly rather than recovered from shaper counters.** The current rig drops packets in the origin's own qdisc, downstream of the capture tap, so the sender's push rate is inferred from `netem`'s passed/dropped counts. Shaping between two network namespaces and capturing on the sender's side of the shaper would measure it outright, and would also let the loss sweep run past 1 % without the inference. The T8b netns rig is the natural host for it.
 - **Attribute wire bytes per track.** The video-only leg separates media from audio/data and the totals leave no room for anything republishing at rate, but nothing here distinguishes the catalog and verbatim side tracks from each other. Low value now that the totals close to 0.03 points, worth doing only if a future measurement stops closing.
 - **A third source profile for the carriage figure.** On the stuffing-free live feed the advantage over SRT falls to 0.2 %, below this floor's prediction, because the lane carries no TS packet headers either ([T14](test-14-data-plane-comparison.md) § _On the live feed's profile_). A loosely filled carrier should widen it sharply — the T12 profile implies roughly 2x.
-- **Per-role envelope for the groomer/pacer**, which the objective asks for and none of these runs covers.
+- **Per-role envelope for the pacer/pacer**, which the objective asks for and none of these runs covers.
 - **The segmented lane's resource envelope and fan-out knee.** Its carriage overhead is now measured; its CPU, memory and scaling are not, and the gap is deliberate rather than an oversight. The origin used throughout this campaign is `python3 -m http.server`, which is single-threaded and would price Python rather than HTTP — a fan-out sweep against it would produce a knee that means nothing. Doing this honestly needs a production origin (nginx or similar) and, to test the claim that actually matters architecturally, a cache in front of it, because segmented HTTP's scaling argument is a CDN argument and an origin-only measurement does not engage it. That is a rig build, not a run.
 - **A segmented-lane soak.** The stability question that dominates this experiment for MoQ — does any role's RSS slope reach zero over ≥ 24 h — has not been asked of the packager, origin or client. Worth pairing with whichever soak comes next rather than running alone.
 - **Isolate the live-source `moq import` CPU cost** (~3x the file-paced case, bitrate-independent). Profile it and re-test with the live source staged through a file; if it holds up, it is an upstream report, and it affects the normal live contribution topology.

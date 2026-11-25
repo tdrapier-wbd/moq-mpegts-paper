@@ -1,12 +1,12 @@
 # T23 — which PCR discontinuity classes the media-aware lane survives
 
-> **State: re-graded twice, against both fixes these measurements prompted. All six arms now match the control and both residues are closed — and a seventh stimulus none of them runs is failing.** The results below were measured on `f8236680b`, which contained #3351 but not [#3375](https://github.com/moq-dev/moq/pull/3375). That PR opened citing this campaign, merged as `0e61e3520`, and closed [#2833](https://github.com/moq-dev/moq/issues/2833). Re-running all six arms unchanged against `d88c2ee99` — which contains it — is in [§ Against the fix](#against-the-fix-3375); re-running them again against current `main` `fd4f5d82e`, which contains [#3529](https://github.com/moq-dev/moq/pull/3529), is in [§ Against #3529](#against-3529-current-main). **On current `main` the forward arm's missing `discontinuity_indicator` is emitted, and the arm C starvation this file attributed to groomer sizing turns out to have been the exporter's and goes with it.** **This verdict holds for the six arms measured here.** It does **not** extend to a continuous timeline whose content restarts: no arm below runs one, and [T27](test-27-liveness-detector.md) has bisected a permanent video and primary-audio stall on exactly that stimulus to `0e61e3520` itself. The stall is fixed from `5d0991b9`, where the importer exits at the same restart instead, still on `ffa5b81b` ([T40](test-40-continuous-join-through-srt.md), [T41](test-41-import-reanchor-coverage.md)), so a deployment must still pin or patch the client. Read everything before § Against the fix as the behaviour of builds earlier than `0e61e3520`.
+> **State: re-graded twice, against both fixes these measurements prompted. All six arms now match the control and both residues are closed — and a seventh stimulus none of them runs is failing.** The results below were measured on `f8236680b`, which contained #3351 but not [#3375](https://github.com/moq-dev/moq/pull/3375). That PR opened citing this campaign, merged as `0e61e3520`, and closed [#2833](https://github.com/moq-dev/moq/issues/2833). Re-running all six arms unchanged against `d88c2ee99` — which contains it — is in [§ Against the fix](#against-the-fix-3375); re-running them again against current `main` `fd4f5d82e`, which contains [#3529](https://github.com/moq-dev/moq/pull/3529), is in [§ Against #3529](#against-3529-current-main). **On current `main` the forward arm's missing `discontinuity_indicator` is emitted, and the arm C starvation this file attributed to pacer sizing turns out to have been the exporter's and goes with it.** **This verdict holds for the six arms measured here.** It does **not** extend to a continuous timeline whose content restarts: no arm below runs one, and [T27](test-27-liveness-detector.md) has bisected a permanent video and primary-audio stall on exactly that stimulus to `0e61e3520` itself. The stall is fixed from `5d0991b9`, where the importer exits at the same restart instead, still on `ffa5b81b` ([T40](test-40-continuous-join-through-srt.md), [T41](test-41-import-reanchor-coverage.md)), so a deployment must still pin or patch the client. Read everything before § Against the fix as the behaviour of builds earlier than `0e61e3520`.
 
 ## Objective
 
 T21 found the exporter's timebase failing after a source PCR discontinuity, but its only stimulus was `tsp --infinite` looping a clip: one event, of one class, arriving by accident, at one magnitude, in one direction. That cannot say which discontinuities the lane survives, and it cannot support an upstream report — a maintainer could fairly read the whole result as an artefact of the looper.
 
-This grades the timeline event as a controlled variable. Each arm places exactly one event, of a known class, size and direction, at a known point, and the same quantity is read at all three points of the lane: at the source, after the MoQ round trip, and after grooming.
+This grades the timeline event as a controlled variable. Each arm places exactly one event, of a known class, size and direction, at a known point, and the same quantity is read at all three points of the lane: at the source, after the MoQ round trip, and after pacing.
 
 The question the campaign exists to answer for primary distribution is narrower than "does a discontinuity work". A permanent feed does not get to avoid these. **The 33-bit PCR base wraps every 26.51 h unconditionally**, in every conformant stream that has ever existed, so a lane that cannot cross that boundary cannot run permanently at all, whatever else it does.
 
@@ -16,7 +16,7 @@ The question the campaign exists to answer for primary distribution is narrower 
 | --- | --- |
 | Host | primary laptop, single host, loopback relay |
 | MoQ | `~/bin-3351/` — `moq` 0.10.0-f8236680b, `moq-relay` 0.14.15-f8236680b (merged #3351) |
-| Groomer | `mpegts-pacer` `5ab84cd` (carrying the T21 rate-estimator fix) |
+| Pacer | `mpegts-pacer` `5ab84cd` (carrying the T21 rate-estimator fix) |
 | Source | 150 s synthetic clip, H.264 + MP2, 4,000,000 b/s mux, 20 ms PCR period |
 | Lane | `tsp regulate --pcr-synchronous` → `import ts` → relay → `export ts --latency-max 3s` → `mpegts-pacer - 4000000` |
 | Window | 105 s per arm; the event is placed at 45 s |
@@ -78,7 +78,7 @@ Arm B is lifted clear of zero first. Subtracting 600 s from a clip starting at z
 
 Graded on the paced wire. `gap` is the longest interval with no programme content.
 
-| Arm | continuity errors | PCR > 40 ms | worst PCR | programme gap | groomer drops | verdict |
+| Arm | continuity errors | PCR > 40 ms | worst PCR | programme gap | pacer drops | verdict |
 | --- | --- | --- | --- | --- | --- | --- |
 | A backward 1 s | 0 | 0 | 30.08 ms | 268 ms | 0 | recovers |
 | B backward 600 s | 0 | 0 | 30.08 ms | **62,760 ms** | 0 | **fails** |
@@ -99,22 +99,22 @@ Sweeping the magnitude with everything else held:
 
 The gap tracks the jump one-for-one, to within about half a second, across three orders of magnitude. This is not a threshold, a budget or a timeout — it is a linear law, and it identifies the mechanism without needing to read the source: **the exporter's scheduler is monotonic in media time.** A frame stamped earlier than one already sent is not evidence of a new time base, it is simply not due yet, so the exporter withholds output until the new timeline overtakes the old and then releases the backlog in one burst.
 
-That burst is what does the extra damage in arm E: 97,225 packets (18.3 MB) arriving at once against a groomer cushion of 8,000 ms, which is where the 54,168 drops and 103 continuity errors come from. A backward jump alone (`bk2`–`bk10`, arm B) drops nothing; it is the _recovery_ from one, when the jump is large enough to build a substantial backlog, that overruns the groomer.
+That burst is what does the extra damage in arm E: 97,225 packets (18.3 MB) arriving at once against a pacer cushion of 8,000 ms, which is where the 54,168 drops and 103 continuity errors come from. A backward jump alone (`bk2`–`bk10`, arm B) drops nothing; it is the _recovery_ from one, when the jump is large enough to build a substantial backlog, that overruns the pacer.
 
-### The recovery burst is a groomer sizing choice; the programme hole is not
+### The recovery burst is a pacer sizing choice; the programme hole is not
 
 > **Superseded by [#3375](#against-the-fix-3375), which removes the burst.** Kept because the attribution it establishes is the reusable part, and because it was the live reading for every build before `0e61e3520`.
 
-The encoder-restart arm lost two different things and they have different owners. Sweeping the groomer's hard cap — the depth past which input is dropped oldest-first — with the same arm E stimulus separates them:
+The encoder-restart arm lost two different things and they have different owners. Sweeping the pacer's hard cap — the depth past which input is dropped oldest-first — with the same arm E stimulus separates them:
 
-| groomer hard cap | drops | continuity errors | programme gap | buffer high water |
+| pacer hard cap | drops | continuity errors | programme gap | buffer high water |
 | --- | --- | --- | --- | --- |
 | 8,000 ms (adaptive ceiling, the default) | 54,168 | 103 | 44,049 ms | 42,555 |
 | 20,000 ms | 43,170 | 107 | 44,079 ms | 53,193 |
 | 50,000 ms | **0** | **0** | 44,009 ms | 96,179 |
 | 90,000 ms | **0** | **0** | 44,046 ms | 96,231 |
 
-The threshold falls between 20 s and 50 s against a 44.69 s rewind, which is the prediction recorded before the sweep: the withheld backlog is exactly the rewind, so a cap that can hold the rewind absorbs it and a cap that cannot discards the difference. **The drops and the continuity errors are ours and they are a configuration, not a defect.** The programme gap is unmoved at ~44 s by any cap, because it is the exporter withholding rather than the groomer discarding, and nothing downstream can return media that was never sent.
+The threshold falls between 20 s and 50 s against a 44.69 s rewind, which is the prediction recorded before the sweep: the withheld backlog is exactly the rewind, so a cap that can hold the rewind absorbs it and a cap that cannot discards the difference. **The drops and the continuity errors are ours and they are a configuration, not a defect.** The programme gap is unmoved at ~44 s by any cap, because it is the exporter withholding rather than the pacer discarding, and nothing downstream can return media that was never sent.
 
 **The headroom is free when it is not needed.** Pinning the cushion at 1 s — the operating point, as distinct from the cap — and varying only the cap:
 
@@ -154,11 +154,11 @@ Both are the exporter failing to act on a declared new time base, and they may w
 1. **The 26.51 h PCR rollover does not threaten permanent operation.** Carried correctly at all three points; arm D programme gap **27 ms** against control **27 ms**.
 2. **Forward, backward and encoder-restart discontinuities all recover to the control's programme gap (~27 ms).** Arm C: **27 ms** (pre-fix: **238 ms**). Arms A and B: **26–27 ms** (pre-fix: **268 ms** and **62,760 ms**). Arm E: **37 ms**, **0** drops, **0** continuity errors (pre-fix: **44,049 ms**, **54,168** drops, **103** CC).
 3. **The durable mechanism (pre-fix behaviour that identified it):** a signalled **rewind** cost its own duration in programme, linearly from 1 s to 600 s, with the wire showing nothing — arm B held **0** continuity errors and exact CBR across a **62.8 s** hole. The exporter withheld until the new timeline overtook the old; [#3375](#against-the-fix-3375) makes it follow instead.
-4. **The _rewind × bitrate_ groomer provisioning rule is discharged post-fix** — no backlog to absorb, buffer high water **1,102–1,417** packets against pre-fix **98,035**. The cap-sweep attribution (drops are configuration when the cap is below the rewind) remains valid as pre-fix reading.
+4. **The _rewind × bitrate_ pacer provisioning rule is discharged post-fix** — no backlog to absorb, buffer high water **1,102–1,417** packets against pre-fix **98,035**. The cap-sweep attribution (drops are configuration when the cap is below the rewind) remains valid as pre-fix reading.
 5. **`discontinuity_indicator` is emitted on the exported wire for every signalled arm.** Rewinds and the encoder restart from [#3375](#against-the-fix-3375) (arms A, B, E); the forward jump from [#3529](#against-3529-current-main) (arm C), which also brings its exported jump to within **11 ms** of the source instead of **961 ms** short. The rollover is correctly unflagged throughout.
 6. **Wire conformance again fails to see a programme failure** — the pre-fix arms B and E passed every P1 check over programme holes of **62.8 s** and **44 s**; the T21/T22 monitoring lesson stands.
 
-**Pre-fix (`f8236680b`) — the behaviour that motivated [#3375](#against-the-fix-3375):** conclusions 2–4 above state the post-fix numbers; the pre-fix media-outcome table in [Results](#results) and the [recovery-burst sizing sweep](#the-recovery-burst-is-a-groomer-sizing-choice-the-programme-hole-is-not) record the mechanism. T21's counter degeneration at the `tsp --infinite` wrap remains **UNRESOLVED** against T23's withhold-and-burst — see [Corrections](#corrections).
+**Pre-fix (`f8236680b`) — the behaviour that motivated [#3375](#against-the-fix-3375):** conclusions 2–4 above state the post-fix numbers; the pre-fix media-outcome table in [Results](#results) and the [recovery-burst sizing sweep](#the-recovery-burst-is-a-pacer-sizing-choice-the-programme-hole-is-not) record the mechanism. T21's counter degeneration at the `tsp --infinite` wrap remains **UNRESOLVED** against T23's withhold-and-burst — see [Corrections](#corrections).
 
 ## Pass criteria, fixed before the runs
 
@@ -171,7 +171,7 @@ Both are the exporter failing to act on a declared new time base, and they may w
 
 ## Against the fix (#3375)
 
-Same six stimulus files, same rig, same groomer binary, same 105 s window and same 45 s event placement; the only variable is the MoQ build — `d88c2ee99`, which contains `0e61e3520`, against the `f8236680b` above. Nothing was re-generated, so the comparison is of one build against another and nothing else.
+Same six stimulus files, same rig, same pacer binary, same 105 s window and same 45 s event placement; the only variable is the MoQ build — `d88c2ee99`, which contains `0e61e3520`, against the `f8236680b` above. Nothing was re-generated, so the comparison is of one build against another and nothing else.
 
 | arm | event | gap before | **gap after** | drops before | **after** | CC before | **after** | flag before | **after** |
 | --- | --- | --: | --: | --: | --: | --: | --: | --: | --: |
@@ -191,9 +191,9 @@ The exporter now **follows** the new timeline instead of waiting it out. Read at
 **Two residues on this build, both of them upstream's, and both closed on current `main`** — see [§ Against #3529](#against-3529-current-main). They are recorded here as the measured state of `d88c2ee99`:
 
 - **The forward jump propagates unflagged.** Arm C's export reproduces the source's timebase change as `unsignalled +29.050 s`: the media outcome is the control's, but a downstream device is given a 29 s jump with no announcement. Upstream recorded this as `quest/m0/ts-forward-discontinuity.md`, built on this campaign and pointing its implementer at these stimuli. **A stream error for any third-party receiver on this build.**
-- **A small cushion starves on a forward jump.** Arm C took 3,300 underruns against 4–6 in the others, at a 200 ms adaptive cushion — the smallest any arm chose. No programme was lost (0 drops, 27 ms gap): the carrier emitted stuffing where content was momentarily unavailable. This file first read that as groomer sizing at a small cushion. **It was not ours**: at a cushion pinned to the same 200 ms it disappears when the exporter is fixed, and the mechanism was the exporter reconstructing the jump 1 s short.
+- **A small cushion starves on a forward jump.** Arm C took 3,300 underruns against 4–6 in the others, at a 200 ms adaptive cushion — the smallest any arm chose. No programme was lost (0 drops, 27 ms gap): the carrier emitted stuffing where content was momentarily unavailable. This file first read that as pacer sizing at a small cushion. **It was not ours**: at a cushion pinned to the same 200 ms it disappears when the exporter is fixed, and the mechanism was the exporter reconstructing the jump 1 s short.
 
-**The buffer requirement collapses, which supersedes the sizing result above.** With no backlog to absorb, the groomer's adaptive cushion settles at 200–348 ms rather than 8,000 ms, and the buffer high water falls from 98,035 packets to **1,102–1,417**. The _rewind × bitrate_ provisioning rule derived from the cap sweep — about 82 MB per feed for a 60 s rewind at 11 Mb/s — is therefore **discharged for builds containing `0e61e3520`**. It was a correct reading of the build it was measured on, and that build is superseded. What remains true is the shape of the argument: a stage downstream of an exporter that withholds must be sized for what it withholds.
+**The buffer requirement collapses, which supersedes the sizing result above.** With no backlog to absorb, the pacer's adaptive cushion settles at 200–348 ms rather than 8,000 ms, and the buffer high water falls from 98,035 packets to **1,102–1,417**. The _rewind × bitrate_ provisioning rule derived from the cap sweep — about 82 MB per feed for a 60 s rewind at 11 Mb/s — is therefore **discharged for builds containing `0e61e3520`**. It was a correct reading of the build it was measured on, and that build is superseded. What remains true is the shape of the argument: a stage downstream of an exporter that withholds must be sized for what it withholds.
 
 ## Against #3529 (current `main`)
 
@@ -203,7 +203,7 @@ The exporter now **follows** the new timeline instead of waiting it out. Read at
 | --- | --- |
 | Under test | `moq` 0.11.0-`fd4f5d82e`, current `main`, containing the #3529 merge `d4b5349` |
 | Baseline | `moq` 0.10.0-`d88c2ee99`, rebuilt from the same worktree as § Against the fix |
-| Held constant | the six stimulus files unchanged, `t23-discontinuity.sh`, `t23-grade.py`, groomer `5ab84cd`, same host and loopback relay |
+| Held constant | the six stimulus files unchanged, `t23-discontinuity.sh`, `t23-grade.py`, pacer `5ab84cd`, same host and loopback relay |
 | Raw | [`lab/results/t23-3529/`](results/t23-3529/) |
 
 ### The forward arm's flag is emitted, and the exported jump becomes faithful
@@ -217,13 +217,13 @@ The exporter now **follows** the new timeline instead of waiting it out. Read at
 | E encoder restart | 1 | 1 | `signalled −43.850 s` | `signalled −44.075 s` |
 | F control | 0 | 0 | — | — |
 
-Two quantities move materially, both on arm C. The flag arrives, and the **reconstructed jump matches the source to 11 ms** (`+30.000 s` against the source's `+30.011 s`) where it was previously 961 ms short at a rate ratio of 1.006. The other signalled arms shift by 25–225 ms between the two runs, which is run-to-run variation of the same behaviour and leaves every classification unchanged; against arm C's 961 ms it is not a competing explanation. Arm D is the arm that must _not_ move and does not: a 33-bit wrap is still carried as ordinary modulo arithmetic and still unflagged, which upstream now also asserts as a unit test (`a_timestamp_rollover_is_not_a_timebase_break`). Rewinds and the encoder restart are unchanged. **0 continuity errors, 0 drops, 0 late drops, 0 stalls and 0 resyncs on every arm of both builds**, and each event arm's groomed output carries exactly one PCR leap and two PTS leaps — one per elementary stream — against the control's zero.
+Two quantities move materially, both on arm C. The flag arrives, and the **reconstructed jump matches the source to 11 ms** (`+30.000 s` against the source's `+30.011 s`) where it was previously 961 ms short at a rate ratio of 1.006. The other signalled arms shift by 25–225 ms between the two runs, which is run-to-run variation of the same behaviour and leaves every classification unchanged; against arm C's 961 ms it is not a competing explanation. Arm D is the arm that must _not_ move and does not: a 33-bit wrap is still carried as ordinary modulo arithmetic and still unflagged, which upstream now also asserts as a unit test (`a_timestamp_rollover_is_not_a_timebase_break`). Rewinds and the encoder restart are unchanged. **0 continuity errors, 0 drops, 0 late drops, 0 stalls and 0 resyncs on every arm of both builds**, and each event arm's paced output carries exactly one PCR leap and two PTS leaps — one per elementary stream — against the control's zero.
 
 ### One source marker becomes one exported flag per rendition
 
-Arm C's export carries **two** `discontinuity_indicator`s for the source's one, 12 packets apart: a `+30.000 s` step and then a `−0.025 s` step. This is deliberate and upstream asserts it as `a_shared_forward_boundary_resets_once_per_rendition`. A forward marker reaches each rendition at that rendition's own media position, and a local consumer counter cannot distinguish one program break from two independent gaps, so the exporter re-anchors for each. The clip has two elementary streams (AVC video PID 256, MPEG-1 audio PID 257) and produces two flags. **The cost scales with rendition count, and it is a redundant re-acquisition per peer for a receiver, not a media loss**: the groomed output carries both flags with 0 continuity errors and 0 drops. A 25 ms backward step on a program clock is legal because it is signalled, but it is a second re-acquisition a receiver did not need.
+Arm C's export carries **two** `discontinuity_indicator`s for the source's one, 12 packets apart: a `+30.000 s` step and then a `−0.025 s` step. This is deliberate and upstream asserts it as `a_shared_forward_boundary_resets_once_per_rendition`. A forward marker reaches each rendition at that rendition's own media position, and a local consumer counter cannot distinguish one program break from two independent gaps, so the exporter re-anchors for each. The clip has two elementary streams (AVC video PID 256, MPEG-1 audio PID 257) and produces two flags. **The cost scales with rendition count, and it is a redundant re-acquisition per peer for a receiver, not a media loss**: the paced output carries both flags with 0 continuity errors and 0 drops. A 25 ms backward step on a program clock is legal because it is signalled, but it is a second re-acquisition a receiver did not need.
 
-### The arm C starvation was the exporter's, not the groomer's
+### The arm C starvation was the exporter's, not the pacer's
 
 The adaptive cushion is not a fixed quantity across sessions — it settled at 200 ms in § Against the fix and at ~347 ms here, control included — so the underrun counts of the two sessions are not comparable and the arm C figure had to be re-measured with the cushion **pinned** at 200 ms on both builds:
 
@@ -236,11 +236,11 @@ The adaptive cushion is not a fixed quantity across sessions — it settled at 2
 
 **The evidence is the ratio to the control, not the absolute count.** The control's own figure also moves between the two builds, 189 to 6, so the absolute counts still carry something the arm does not isolate — a pinned 200 ms cushion is tighter than either build's adaptive choice, and the control is sensitive to it. What survives that is the _excess over the control measured within the same build_: arm C is **17× its control on `d88c2ee99` and below it on current `main`**. That comparison holds whatever else moved, because both rows share a build, a cushion and a session.
 
-The mechanism for the excess is the 961 ms the old exporter dropped from the jump: the groomer was asked for content that never arrived. It is not a cushion-sizing property, because the cushion is pinned to the same value in every row. Whether a pinned cushion _below_ 200 ms starves on some other arm is still untested, and the control's own sensitivity at 200 ms is a reason to think a production cushion should not be pinned that low.
+The mechanism for the excess is the 961 ms the old exporter dropped from the jump: the pacer was asked for content that never arrived. It is not a cushion-sizing property, because the cushion is pinned to the same value in every row. Whether a pinned cushion _below_ 200 ms starves on some other arm is still untested, and the control's own sensitivity at 200 ms is a reason to think a production cushion should not be pinned that low.
 
-### What the groomer was hiding
+### What the pacer was hiding
 
-Counted directly on the wire rather than through the grader, `d88c2ee99` puts **0** flags on the exported TS and **1** on the groomed TS: `mpegts-pacer` was inferring the break from the PCR step and declaring it itself. On `fd4f5d82e` the counts are **2 and 2** — pure propagation. Conformance to ISO 13818-1 §2.4.3.4 on a signalled forward jump therefore **no longer depends on our groomer**, which matters because the groomer is ours and a third party's carriage stage would not have done it. Note the direction of the upstream decision: the exporter now reports what the source declared and **will not infer a break from a timestamp step** (`"a leap the source did not declare must not be flagged"`). An _unsignalled_ source jump consequently still reaches the wire unflagged by design, and in this lane it is our groomer, not upstream, that would flag it.
+Counted directly on the wire rather than through the grader, `d88c2ee99` puts **0** flags on the exported TS and **1** on the paced TS: `mpegts-pacer` was inferring the break from the PCR step and declaring it itself. On `fd4f5d82e` the counts are **2 and 2** — pure propagation. Conformance to ISO 13818-1 §2.4.3.4 on a signalled forward jump therefore **no longer depends on our pacer**, which matters because the pacer is ours and a third party's carriage stage would not have done it. Note the direction of the upstream decision: the exporter now reports what the source declared and **will not infer a break from a timestamp step** (`"a leap the source did not declare must not be flagged"`). An _unsignalled_ source jump consequently still reaches the wire unflagged by design, and in this lane it is our pacer, not upstream, that would flag it.
 
 ### #3529 does not fix the #3533 fence
 
@@ -260,7 +260,7 @@ Rewind classes, the rollover and the control are unchanged, so nothing in § Aga
 
 ## Corrections
 
-**Believed:** arm C's 3,300 underruns were a groomer sizing behaviour at a small adaptive cushion. **True:** they were the exporter's. With the cushion pinned identically on both builds the count falls from 3,219 to 5 — its own control's level — because #3529 stopped the exporter reconstructing the forward jump 961 ms short. **Rule:** an adaptively sized stage is a free variable, not a constant. Before attributing a downstream count to a build, pin the adaptation, or the comparison measures the session.
+**Believed:** arm C's 3,300 underruns were a pacer sizing behaviour at a small adaptive cushion. **True:** they were the exporter's. With the cushion pinned identically on both builds the count falls from 3,219 to 5 — its own control's level — because #3529 stopped the exporter reconstructing the forward jump 961 ms short. **Rule:** an adaptively sized stage is a free variable, not a constant. Before attributing a downstream count to a build, pin the adaptation, or the comparison measures the session.
 
 **Believed:** the exporter's response to a source PCR discontinuity is to latch the last PCR and emit a counter (T21). **True:** that is what T21 measured, but it is not what a deliberate signalled discontinuity produces. Five arms across three classes and six magnitudes produce a withhold-and-burst with a healthy clock either side, and none reproduces the counter. **Rule:** an upstream report drawn from an incidental stimulus states the stimulus's behaviour, not the class's. Characterise the class before filing, or the report describes a symptom the maintainer cannot reproduce and the defect that is actually there goes unfixed.
 
@@ -269,7 +269,7 @@ Rewind classes, the rollover and the control are unchanged, so nothing in § Aga
 ## Open
 
 - Whether T21's counter degeneration and T23's withhold-and-burst share a root cause. The T21 captures are no longer on disk, and both behaviours are now absent from the current build, so this is unlikely ever to be settled and no longer blocks anything.
-- ~~Whether the arm E burst overruns the groomer at larger cushions.~~ **Answered**: a hard cap above the rewind absorbs it losslessly and the headroom is free when unused — then **superseded** by #3375, which removes the burst, so the requirement no longer arises.
+- ~~Whether the arm E burst overruns the pacer at larger cushions.~~ **Answered**: a hard cap above the rewind absorbs it losslessly and the headroom is free when unused — then **superseded** by #3375, which removes the burst, so the requirement no longer arises.
 - ~~**The forward jump's missing `discontinuity_indicator`.**~~ **Closed** by #3529 and verified by re-running arm C, which is the check this entry anticipated: the flag is emitted and the exported jump is faithful to 11 ms.
 - ~~Whether the arm C cushion starvation matters at a pinned production cushion.~~ **Answered for 200 ms** — it was the exporter's, not the cushion's, and it is gone. Whether a pinned cushion _below_ 200 ms starves on any arm is still untested.
 - **Whether a non-PCR elementary-PID flag or a duplicate PCR packet behaves in this lane as upstream's unit tests assert.** Both are new guarantees in #3529 with no arm here; each needs a stimulus the generator does not yet produce.

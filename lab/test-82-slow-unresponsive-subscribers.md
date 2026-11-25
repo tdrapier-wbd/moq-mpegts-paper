@@ -262,7 +262,7 @@ A subscriber slower than the stream cannot be served at the live edge with all i
 **Defects, each with a measured trigger.** Defects 1, 2 and 4 are the implementation's; defect 3 is the `moq-lite-06` wire's (Part F).
 
 1. **Resumed sessions hang (main).** When 32 resume after a freeze longer than a 30 s idle timeout, 18 of 96 sessions hang for 18–60 s. The 20 ms endpoint-wide stateless-reset interval gates it: the hung sessions end in 9 s keep-alive steps, and the 1 ms interval a secret sets removes it. That in-phase keep-alives are what make the interval bind is inferred. The previous stack does not do this. Remedy tested: `--listen-reset-secret`, with which none of 64 hung. At 64 clients none hung even without it (Part C′), for a reason not established. Reported as [#8382](https://github.com/moq-dev/moq/issues/8382); fixed by [#8442](https://github.com/moq-dev/moq/pull/8442), with which none of 96 resumed sessions was late (Part G).
-2. **Padding back-fill.** The export writes a stalled output's missed padding all at once: 60 s of PCR in 0.5 s. Remedy tested: `--mux-rate 0` (a 2.5× peak). Behind a padded export, a PCR-regulating remultiplexer passes the burst on at 54× the line rate, where the groomer, which strips padding, absorbs it (Part B). Neither sits a stall behind live, as had been inferred. Reported with defect 4 as [#8383](https://github.com/moq-dev/moq/issues/8383); fixed by [#8449](https://github.com/moq-dev/moq/pull/8449), with which no receiver's first second after a stall or a followed return exceeds the line rate (Part G).
+2. **Padding back-fill.** The export writes a stalled output's missed padding all at once: 60 s of PCR in 0.5 s. Remedy tested: `--mux-rate 0` (a 2.5× peak). Behind a padded export, a PCR-regulating remultiplexer passes the burst on at 54× the line rate, where the pacer, which strips padding, absorbs it (Part B). Neither sits a stall behind live, as had been inferred. Reported with defect 4 as [#8383](https://github.com/moq-dev/moq/issues/8383); fixed by [#8449](https://github.com/moq-dev/moq/pull/8449), with which no receiver's first second after a stall or a followed return exceeds the line rate (Part G).
 3. **Follow cannot tell its own reconnect on `moq-lite-06`.** After the subscriber's own reconnect, `--follow` takes the unchanged publisher for a replacement and the export exits. `--stitch` works around it (live 2.8 s after a 30 s freeze) at the price of a flagged program switch. The cause is the wire, which carries no publisher instance, so the exit is the safe reading; closed upstream as intended ([#8384](https://github.com/moq-dev/moq/issues/8384)). On `moq-lite-07` the follow holds (Part F).
 4. **A padded export does not shed on a slow output.** It blocks instead of shedding to the live edge, and after about 80 s at half rate exits with a clock-drift error that blames the source. Unpadded, it sheds, and its lag holds at about 4 s (Part E). With #8449 a padded export sheds too, and its lag holds at 3.7 s, but it keeps 11–12 % of the video, against 47 % unpadded (Part G).
 
@@ -285,7 +285,7 @@ In each cell, abuser `a1`'s export feeds a _valve_ (`t82-reader.py` with the `st
 The two receivers:
 
 - `tsp -P regulate --pcr-synchronous` (TSDuck 3.45), which forwards every packet, nulls included, at the pace of its PCR;
-- the campaign's groomer, `mpegts-pacer` at `97f3a38`, the build in T76's soak: `stdout 9950000 --latency-ms 1000 --max-latency-ms 8000 --stall-ms 1000 --on-stall mute`.
+- the campaign's pacer, `mpegts-pacer` at `97f3a38`, the build in T76's soak: `stdout 9950000 --latency-ms 1000 --max-latency-ms 8000 --stall-ms 1000 --on-stall mute`.
 
 The arms are `stop-tsp`, `stop-np-tsp`, `stop-pacer` and `stop-np-pacer`, one cell each, on main. L_a and L_k are the lags of `a1`'s and `k1`'s receiver output behind victim 1's video DTS. B is k1's median L_k over 20–45 s, and te is 105 s, when the valve resumes.
 
@@ -401,12 +401,12 @@ Parts B–E ran fourteen counted cells, all on main except one `storm30` on the 
 | --- | --- | --- | --: | --- | --: | --: | --: |
 | `stop-tsp` | `tsp regulate` | padded | 6.8 s | 6.7 / 6.8 / 6.6 s | 7.3 s | 539 Mb/s | 96 % |
 | `stop-np-tsp` | `tsp regulate` | unpadded | 7.1 s | 7.1 / 7.0 / 7.2 s | 7.6 s | 20 Mb/s | 96 % |
-| `stop-pacer` | groomer | padded | 1.1 s | 3.7 / 2.3 / 1.3 s | 67 s | 8.8 Mb/s | 100 % |
-| `stop-np-pacer` | groomer | unpadded | 1.1 s | 4.8 / 3.4 / 1.5 s | 85 s | 9.8 Mb/s | 100 % |
+| `stop-pacer` | pacer | padded | 1.1 s | 3.7 / 2.3 / 1.3 s | 67 s | 8.8 Mb/s | 100 % |
+| `stop-np-pacer` | pacer | unpadded | 1.1 s | 4.8 / 3.4 / 1.5 s | 85 s | 9.8 Mb/s | 100 % |
 
 `tsp -P regulate --pcr-synchronous` does not play the back-filled padding out in real time. Those packets reach it with PCRs already behind its clock, and it forwards them as they come: 539 Mb/s over the first second, against the export's 606 Mb/s. The burst passes through to whatever it feeds. Unpadded, its first second carries 20 Mb/s, then almost nothing for 6 s, and it resumes at its baseline lag.
 
-The groomer strips the back-fill's 440,000 null packets and keeps its output at the line rate throughout, muting through the stall. It resumes 3.7 s behind live (4.8 s unpadded) and drains to its cushion over a minute or more. Its 9.95 Mb/s output leaves it about 3.6 % over the 9.6 Mb/s of media to drain with (inferred). That lag comes from the stall, not from the padding. The uncounted pilot agreed: 3.8 / 2.3 / 1.3 s, back after 67 s.
+The pacer strips the back-fill's 440,000 null packets and keeps its output at the line rate throughout, muting through the stall. It resumes 3.7 s behind live (4.8 s unpadded) and drains to its cushion over a minute or more. Its 9.95 Mb/s output leaves it about 3.6 % over the 9.6 Mb/s of media to drain with (inferred). That lag comes from the stall, not from the padding. The uncounted pilot agreed: 3.8 / 2.3 / 1.3 s, back after 67 s.
 
 **Part E.** The unpadded export sheds to the live edge, dropping frames that miss their deadline, and its lag stays flat instead of growing.
 
@@ -466,7 +466,7 @@ Each `slow` cell's export shed 29 times, every 2.0–2.2 s and each time 1.00–
 
 | Part | Hypothesis | Verdict |
 | --- | --- | --- |
-| B | a PCR-paced receiver sits a stall behind live | **fails** for both receivers; the remedy holds for `tsp`, not for the groomer, whose lag after a stall does not depend on padding |
+| B | a PCR-paced receiver sits a stall behind live | **fails** for both receivers; the remedy holds for `tsp`, not for the pacer, whose lag after a stall does not depend on padding |
 | C | the reset drain grows with clients (light abusers) | **void**: the light abusers did not reproduce the hang |
 | C′ | the same, full abusers | **fails**: none of 128 hung at 64; the remedy holds |
 | D | a killed peer costs main about what a frozen one does | **fails**: 1.3–1.6 MB per held session, three times a frozen one's, and not T25's retention, which the previous stack reproduces at 23 MB |

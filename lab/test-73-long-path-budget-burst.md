@@ -12,8 +12,8 @@ As [T71](test-71-long-lossy-path.md#environment), with these differences:
 
 |  |  |
 | --- | --- |
-| Budget | 2 s on every lane: SRT `--latency 2000` both ends; `moq export ts --delay 2s` on both MoQ lanes; the segmented lane's groomer cushion `--latency-ms 2000`. The segmented lane also runs T71's 1 s budget |
-| Segmented lane | [T70](test-70-segmented-latency-budget.md)'s chain at its floor: on the origin, the paced clip to a loopback multicast group, `t61-epochseg.py --duration 1 --window 6 --extra 3 --target 2 --pdt`, and its own `nginx` on TCP 18731; on the receiver, `b8-hls-recv.py --poll 250` (no release hold) into `mpegts-pacer` (`97f3a38`) `stdout 11438000 --stream-clock --latency-ms <budget> --max-latency-ms 14000 --stall-ms 1000 --on-stall mute`. It carries a groomer and the other lanes do not, because its receiver has no playout clock of its own; its latency includes the epoch and the fetch |
+| Budget | 2 s on every lane: SRT `--latency 2000` both ends; `moq export ts --delay 2s` on both MoQ lanes; the segmented lane's pacer cushion `--latency-ms 2000`. The segmented lane also runs T71's 1 s budget |
+| Segmented lane | [T70](test-70-segmented-latency-budget.md)'s chain at its floor: on the origin, the paced clip to a loopback multicast group, `t61-epochseg.py --duration 1 --window 6 --extra 3 --target 2 --pdt`, and its own `nginx` on TCP 18731; on the receiver, `b8-hls-recv.py --poll 250` (no release hold) into `mpegts-pacer` (`97f3a38`) `stdout 11438000 --stream-clock --latency-ms <budget> --max-latency-ms 14000 --stall-ms 1000 --on-stall mute`. It carries a pacer and the other lanes do not, because its receiver has no playout clock of its own; its latency includes the epoch and the fetch |
 | Segmented transport | HTTP/1.1 over TCP, kept alive. The origin's sender runs Linux `tcp_bbr` for the receiver's address only (a host route with `congctl bbr`, removed after), to match the MoQ relay's BBR; slow start after idle stays at the host default. Diagnostic: the host default, CUBIC |
 | Impairment | T71's qdiscs, also on TCP 18731. Random: Bernoulli at 1 % (and 0.1 % for the segmented lane's 1 s cells). Burst: `netem loss gemodel 0.05% 5% 100% 0%`, a Gilbert model of mean loss 0.99 % in bursts of mean 20 datagrams, each way. In datagrams, so a burst lasts about 20 ms on the media direction and longer on the sparse return direction |
 
@@ -45,8 +45,8 @@ python3 ~/t71/scripts/t71-grade.py ~/t71/runs/<cell> --lane <lane> [--tstd]
 1. **The path and the loss are the ones asked for.** T71's criterion 1 on every cell (round trip 80–150 ms; zero drops clean; the applied rate each way within ±30 % of the commanded mean, or the cell labelled). The burst probe reads a mean loss of 0.7–1.3 % and a mean burst of 14–26 datagrams, or the model is re-parameterised before any cell runs.
 2. **The clock is bounded**, as T71's criterion 2.
 3. **The same picture, proved**, as T71's criterion 3.
-4. **Equal conformance on the clean path**, as T71's criterion 4; the segmented lane is graded on its groomer's output.
-5. **Delivered programme**, as T71's criterion 5, adding the segmented lane's groomer stalls and the receiver's abandoned fetches.
+4. **Equal conformance on the clean path**, as T71's criterion 4; the segmented lane is graded on its pacer's output.
+5. **Delivered programme**, as T71's criterion 5, adding the segmented lane's pacer stalls and the receiver's abandoned fetches.
 6. **The ordering, graded either way**, as T71's criterion 6, separately for 1 % random and for burst.
 7. **The budget answer.** A lane is whole at 1 % at 2 s if all three replicates are. Against T71's 1 s result, only a change between "whole in all three" and "programme lost in at least one" counts; anything else is reported as not separated.
 
@@ -71,7 +71,7 @@ _Predicted._ Clean: SRT and the passthrough lane about 2.03–2.05 s and the med
 | Segmented, 2 s | 3,219.3 (3,171.4–3,284.0) | 2,746.0 (2,586.2–3,366.4), whole | 3,302.9; **0 of 3 whole**: 53.5, 1.2 and 44.4 s of video lost |
 | Segmented, 1 s | 2,417.9 (2,401.0–2,458.7) | 2,788.5, 2 of 3 whole | not run; at 0.1 % random 2,517.1, 2 of 3 whole |
 
-SRT and the passthrough lane are byte-identical to the clip on every 2 s cell, burst included (0 gaps, 0 foreign packets). Within a cell SRT drifts +24 to +26 ms, the passthrough lane −11 to −21 ms, the media-aware lane −27 ms and the segmented lane under 2 ms. The segmented lane's latency is set in its opening seconds: its groomer discards as late the opening backlog older than its cushion, 9,883 packets in every clean 2 s cell and 17,488, a further second of stream, in the two 1 % cells that read 2,586 and 2,746 ms; the third, at 3,366 ms, discarded 9,883. At 1 s the discard is 8,429–8,894 in every cell while latency spans 2,366–2,899 ms, so it accounts for part of the spread only. Its 1 s figure is 186 ms below [T70](test-70-segmented-latency-budget.md)'s 2,604 ms for the same chain on a 12.8 ms path; this test does not attribute the difference. The two 1 s segmented cells that are not whole each carry 7 continuity errors from one or two groomer stalls and lose under 0.2 s of content.
+SRT and the passthrough lane are byte-identical to the clip on every 2 s cell, burst included (0 gaps, 0 foreign packets). Within a cell SRT drifts +24 to +26 ms, the passthrough lane −11 to −21 ms, the media-aware lane −27 ms and the segmented lane under 2 ms. The segmented lane's latency is set in its opening seconds: its pacer discards as late the opening backlog older than its cushion, 9,883 packets in every clean 2 s cell and 17,488, a further second of stream, in the two 1 % cells that read 2,586 and 2,746 ms; the third, at 3,366 ms, discarded 9,883. At 1 s the discard is 8,429–8,894 in every cell while latency spans 2,366–2,899 ms, so it accounts for part of the spread only. Its 1 s figure is 186 ms below [T70](test-70-segmented-latency-budget.md)'s 2,604 ms for the same chain on a 12.8 ms path; this test does not attribute the difference. The two 1 s segmented cells that are not whole each carry 7 continuity errors from one or two pacer stalls and lose under 0.2 s of content.
 
 **The segmented lane under burst loss.** In r1 a segment fetch timed out 12 s in, the receiver's playlist requests then timed out every 3.2 s, and when one succeeded 12.3 s later 12 segments had left the playlist; two more outages, of 4.9 and 14.6 s, skipped 5 and 17. nginx logged every request that reached it as written within 0.71 s, so the time went on the path. The diagnostics, one cell each unless stated:
 
@@ -96,5 +96,5 @@ Either direction alone costs programme. The Gilbert chain advances per datagram,
 - One path, one clip, 120 s cells, three replicates.
 - Burst loss is netem's per-datagram Gilbert model only, which stretches a burst over an idle flow's gaps; loss correlated in time, as a congested queue or a fading link produces, is not run.
 - The segmented receiver is the campaign's `b8-hls-recv.py`, with a 3 s request timeout and a 4 s give-up; a receiver that waits longer or opens a second connection is not tested.
-- The budgets are equal as receive buffers: the segmented lane's latency also carries its epoch and fetch, and it alone runs a groomer.
+- The budgets are equal as receive buffers: the segmented lane's latency also carries its epoch and fetch, and it alone runs a pacer.
 - Software receivers only.

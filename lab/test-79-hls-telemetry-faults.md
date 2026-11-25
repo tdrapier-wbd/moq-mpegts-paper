@@ -140,7 +140,7 @@ _Prediction:_ failed. The keys v2 shares with v1 fill no field when the payload 
 1. **A segmenter that cuts only at random-access points amplifies a dead video into a dead service**, where [T24](test-24-partial-media-plane-stall.md) found the media-aware lane contains it. One that also cuts at a content-time bound contains it too: the audio goes on, and every packager cuts the same segments.
 2. **CMCD v2's own keys express a transport fault at once and nothing inside the stream; the receiver's TR 101 290 counters, as custom keys, add what TSDuck sees.** Dead audio then reaches CMCD by cause, and a continuity hole on resumption. A stalled source still appears only as records that stop; a buffer level, which B-8 does not send, would carry it. **Through CloudFront none of it reaches a dedicated field**: the real-time logs parse only CMCD version 1 and keep a v2 payload raw.
 3. **TR 101 290 at the receiver gives the cause for dead audio** (`PID_error`) and marks a hole on resumption, but reports nothing while its input is stopped.
-4. **Per-PID liveness detects every fault**, dead audio in 2.1–3.6 s, dead video in 3.4 s once the segmenter cuts at a bound, and the rest at its 6 s clock timeout. Its timeout must exceed the gap between segment deliveries, since an ungroomed receiver hands on whole segments.
+4. **Per-PID liveness detects every fault**, dead audio in 2.1–3.6 s, dead video in 3.4 s once the segmenter cuts at a bound, and the rest at its 6 s clock timeout. Its timeout must exceed the gap between segment deliveries, since an unpaced receiver hands on whole segments.
 5. **For a NOC**, three faults are named by cause: the origin outage within 0.2 s, dead audio within 2.1–8.2 s (liveness, then TR 101 290 and CMCD with its counters), and, with the time-bound cut, dead video within 3.4 s (liveness alone). Without the cut, dead video reads only as an absence, as does a stalled source, timed at three segment durations or more; the stalled source has no explicit signal in any source until it resumes, as [T32](test-32-observability-survey.md) found at the origin.
 
 ## Limits, stated in advance
@@ -148,4 +148,4 @@ _Prediction:_ failed. The keys v2 shares with v1 fill no field when the payload 
 - One clip and a local origin; CloudFront saw one run's requests replayed through one edge, not a session through it.
 - TSDuck reports TR 101 290 counters, not a vendor probe's alarms; P2-a's survey asks the vendors.
 - The counters ride in custom keys no specification defines, so a collector must know their names.
-- The campaign's own segmenter alone, in its two variants, and no groomer after the receiver: the deployed lane grooms before the IRD, which smooths what TR 101 290 and liveness see.
+- The campaign's own segmenter alone, in its two variants, and no pacer after the receiver: the deployed lane paces before the IRD, which smooths what TR 101 290 and liveness see.

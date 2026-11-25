@@ -7,9 +7,9 @@
 | Same 60 s video suppression | Instrument | Delivered outage |
 | --- | --- | --- |
 | [T24](test-24-partial-media-plane-stall.md) | offline grader, capture, loopback | 57.22 s |
-| this test | live detector, cross-host lane, after the CBR groomer | **57.212 s** |
+| this test | live detector, cross-host lane, after the CBR pacer | **57.212 s** |
 
-Different topology, different code, different measurement method, three decimal places apart. The fine structure a liveness detector depends on **crosses a relay on another machine, the exporter's PCR regeneration and a CBR groomer intact.**
+Different topology, different code, different measurement method, three decimal places apart. The fine structure a liveness detector depends on **crosses a relay on another machine, the exporter's PCR regeneration and a CBR pacer intact.**
 
 The other results that matter:
 
@@ -24,7 +24,7 @@ Rig: [`ts-liveness.py`](scripts/ts-liveness.py) is the detector, [`t27-liveness-
 
 T24 left the recommendation one step short of usable. Three things were unproven, and each of them could have invalidated it:
 
-1. **That the signal survives the lane.** T24 graded the delivered stream, so it knew the outage arrived. It did not ask whether the _evidence a detector needs_ — access-unit spacing, which is exactly the fine structure a store-and-forward hop is entitled to rearrange — is still legible at the monitoring point, on the far side of a relay, an exporter that regenerates PCR, and a groomer that rebuilds the wire.
+1. **That the signal survives the lane.** T24 graded the delivered stream, so it knew the outage arrived. It did not ask whether the _evidence a detector needs_ — access-unit spacing, which is exactly the fine structure a store-and-forward hop is entitled to rearrange — is still legible at the monitoring point, on the far side of a relay, an exporter that regenerates PCR, and a pacer that rebuilds the wire.
 2. **That a threshold can be set at all in a real lane.** Delivered access-unit spacing is far more variable than a file's. A detector whose threshold is set by lane jitter rather than by media cadence is either insensitive or false-positive prone.
 3. **That it is a detector rather than a grader.** Constant memory, no disk, no foreknowledge of the PID layout, and useful while the stream is still running.
 
@@ -50,7 +50,7 @@ Five design decisions are load-bearing. Each is a correctness matter, and three 
 - **Build:** `moq` / `moq-relay` at the merge that closed [#3491](https://github.com/moq-dev/moq/issues/3491) via [#3515](https://github.com/moq-dev/moq/pull/3515); `mpegts-pacer` `5ab84cd`.
 - **Chain, in-lane arms:** `ts-partial-stall.py` → `tsp -P regulate --pcr-synchronous` → `moq import ts` → relay (other host) → `moq export ts --latency-max 500ms` → `mpegts-pacer - 11000000 --latency-ms 1000 --max-latency-ms 2500 --stall-ms 1000 --on-stall mute` → `ts-liveness.py`. `--latency-max 500ms` matches T24 so the two are comparable.
 - **Local synthetic arms:** `contrib-5m.ts`, 1,983,892 packets, 299.976 s of media, graded from file.
-- **Measurement point: after the groomer.** That is where an operator monitors, and it is not the same as the exporter's output — see the placement result below.
+- **Measurement point: after the pacer.** That is where an operator monitors, and it is not the same as the exporter's output — see the placement result below.
 
 ## Arms and results
 
@@ -98,7 +98,7 @@ Taking media time as the absolute distance from the first PCR lets a single bad 
 
 ### In-lane, cross-host — the arms that decide the question
 
-Injection at t = 60 s of media time for 60 s, 180 s per arm, detector after the groomer.
+Injection at t = 60 s of media time for 60 s, 180 s per arm, detector after the pacer.
 
 | Arm | Alarms | Detected, relative to injection | Delivered outage vs 60 s |
 | --- | --- | --- | --- |
@@ -114,20 +114,20 @@ Three things follow.
 
 **The audio case works, and that is the whole point.** T24's verdict on the stuffing ratio was that it "works for video, **fails for audio**" — a dead audio stream moved the peak stuffing ratio to 27.0 % against a control peaking at 27.1 %, which is not a detection. Here the two audio streams and the teletext each alarm inside 1.4 s, and the video PID does not alarm, so the detector also _localises_ the fault. Nothing in the delivered stream's whole-stream statistics does either.
 
-**Detection latency is the threshold, and the lane sets it.** For the same content, the achievable thresholds are 1.0–1.8 s from a file and 1.0–3.1 s at the groomed monitoring point: the lane widens the small streams' thresholds by up to 1.7×. That is a real cost in sensitivity on exactly the streams that need a per-PID detector, and it is stated rather than averaged away.
+**Detection latency is the threshold, and the lane sets it.** For the same content, the achievable thresholds are 1.0–1.8 s from a file and 1.0–3.1 s at the paced monitoring point: the lane widens the small streams' thresholds by up to 1.7×. That is a real cost in sensitivity on exactly the streams that need a per-PID detector, and it is stated rather than averaged away.
 
 ### Where the detector is placed changes what it can see
 
-The exporter's output is not a groomed wire, and the same content measured at the two points learns different thresholds:
+The exporter's output is not a paced wire, and the same content measured at the two points learns different thresholds:
 
-| PID          | From file | Raw `moq export ts` | After the CBR groomer |
-| ------------ | --------- | ------------------: | --------------------: |
-| 111 video    | 1,482 ms  |            1,950 ms |          **1,000 ms** |
-| 121 mp1a     | 1,374 ms  |            1,000 ms |              2,084 ms |
-| 123 ac3      | 1,818 ms  |            1,800 ms |              2,936 ms |
-| 131 teletext | 1,000 ms  |            1,000 ms |              2,031 ms |
+| PID          | From file | Raw `moq export ts` | After the CBR pacer |
+| ------------ | --------- | ------------------: | ------------------: |
+| 111 video    | 1,482 ms  |            1,950 ms |        **1,000 ms** |
+| 121 mp1a     | 1,374 ms  |            1,000 ms |            2,084 ms |
+| 123 ac3      | 1,818 ms  |            1,800 ms |            2,936 ms |
+| 131 teletext | 1,000 ms  |            1,000 ms |            2,031 ms |
 
-Neither point is uniformly better and the honest summary is that they trade: grooming tightens the video threshold to the floor and loosens the small streams'. Measured directly on the exporter's output, 102 media-time gaps over 0.3 s appeared in 39 s, simultaneously on every PID — PCR-only stretches between bursts of PES, which is the exporter delivering by group rather than by packet. **The monitoring point must be stated with any threshold figure**, and the operational point is the groomed wire, because that is what leaves the building.
+Neither point is uniformly better and the honest summary is that they trade: pacing tightens the video threshold to the floor and loosens the small streams'. Measured directly on the exporter's output, 102 media-time gaps over 0.3 s appeared in 39 s, simultaneously on every PID — PCR-only stretches between bursts of PES, which is the exporter delivering by group rather than by packet. **The monitoring point must be stated with any threshold figure**, and the operational point is the paced wire, because that is what leaves the building.
 
 ### The soak that was meant to be a false-positive test, and found a regression instead
 
@@ -150,7 +150,7 @@ Video-only control (five joins): **1.88–2.02 Mb/s** on both builds — multi-t
 
 ## What this establishes
 
-1. **T24's recommendation is implementable and works in the distribution path.** Per-PID access-unit liveness, running live at the groomed monitoring point behind a cross-host relay, caught every arm at its true length and fired nothing on either control. The outage length agrees with T24's independent offline measurement to three decimal places.
+1. **T24's recommendation is implementable and works in the distribution path.** Per-PID access-unit liveness, running live at the paced monitoring point behind a cross-host relay, caught every arm at its true length and fired nothing on either control. The outage length agrees with T24's independent offline measurement to three decimal places.
 2. **The media-aware lane preserves the evidence that per-PID monitoring needs.** This is the architectural result. A demuxing carriage layer could have destroyed access-unit spacing while still delivering conformant bytes, which would have made the only sufficient detector unusable in the very architecture that needs it. It does not.
 3. **A dead audio stream is detectable in about a second.** The failure mode T24's graded detectors missed — 4 % of the mux, invisible to the stuffing ratio, seen by P1 only as `PID_error` after 7 s ([T79](test-79-hls-telemetry-faults.md)) — is caught and localised to the PID.
 4. **Detection latency is bounded and knowable in advance.** It equals the learned threshold, the detector reports its thresholds when it arms, and an operator can therefore be told what their detection time will be per stream before a fault occurs.

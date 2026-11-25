@@ -18,7 +18,7 @@ The question is **whether an IP path can serve hundreds to low thousands of deli
 
 **For an IRD estate, MoQ's passthrough lane leads and segmented HTTP is the hedge.** The passthrough lane carries the source's bytes, scrambled and multi-programme feeds included, so an IRD is judged on the source's own conformance, and its legs merge hitlessly when started apart; what it lacks is evidence of permanence. MoQ's media-aware lane, which rebuilds the multiplex, is held for routes that need per-track delivery ([Comparison](docs/comparison.md) §11).
 
-**Segmented HTTP has a mature cache-delivery model and, at classic segment durations, an off-the-shelf receive path.** Free tools reassemble and groom it into a transport stream to TR 101 290 P1/P2 in software, but none survives an origin failure, and the commercial receivers that take HLS align on nothing beyond HLS itself. Its recovery advantage is real in the protocol and conditional on a resilient, observable receive stage ([Comparison](docs/comparison.md) §6.2, §4, §9.1; [Economics](docs/economics.md) §8.5).
+**Segmented HTTP has a mature cache-delivery model and, at classic segment durations, an off-the-shelf receive path.** Free tools reassemble and pace it into a transport stream to TR 101 290 P1/P2 in software, but none survives an origin failure, and the commercial receivers that take HLS align on nothing beyond HLS itself. Its recovery advantage is real in the protocol and conditional on a resilient, observable receive stage ([Comparison](docs/comparison.md) §6.2, §4, §9.1; [Economics](docs/economics.md) §8.5).
 
 **The two Internet-native planes are level on latency at the configurations measured TR 101 290-conformant in software**, so latency does not make MoQ's case on a multi-second route, and nothing below about one second was conformant over a whole capture on any lane ([Comparison](docs/comparison.md) §5.1, [Evidence](lab/evidence.md) §3.11).
 
@@ -28,7 +28,7 @@ The question is **whether an IP path can serve hundreds to low thousands of deli
 
 ## What constrains it
 
-- **In software, both planes' hand-offs meet TR 101 290 P1/P2, and the passthrough lane delivers the source's own packet schedule**, so an IRD sees what the source sent; segmented HTTP's groomed wire also passes the 13818-1 buffer model. The media-aware lane's rebuilt multiplex fails it, one reason that lane is held ([Evidence](lab/evidence.md) §3.2, §3.16).
+- **In software, both planes' hand-offs meet TR 101 290 P1/P2, and the passthrough lane delivers the source's own packet schedule**, so an IRD sees what the source sent; segmented HTTP's paced wire also passes the 13818-1 buffer model. The media-aware lane's rebuilt multiplex fails it, one reason that lane is held ([Evidence](lab/evidence.md) §3.2, §3.16).
 - **A fully Internet-native path is not the only answer to the same pressure.** Satellite-hybrid architectures keep the space segment as the fan-out and use IP only to repair what an individual site lost. They concede latency and footprint, need a hybrid-capable receiver at every site that is to benefit, and nothing here measures them — but they are the live alternative on exactly the large, single-footprint estates where both planes above are weakest ([Problem](docs/problem.md) §4, [Comparison](docs/comparison.md) §1.2, [Economics](docs/economics.md) §6.1).
 
 ---
@@ -49,7 +49,7 @@ The question is **whether an IP path can serve hundreds to low thousands of deli
 
 **The engineering record** is the laboratory notebook in [`lab/`](lab/README.md): the campaign plan with pass criteria fixed before the numbers, per-experiment procedures and results, the measurement rules in [`lab/method-notes.md`](lab/method-notes.md), and what was reported and verified in other projects in [`lab/upstream-contributions.md`](lab/upstream-contributions.md).
 
-**Code contributed back** is a media-level test client for the community [MOQ Interop Runner](https://github.com/englishm/moq-interop-runner), in [`lab/interop/`](lab/interop/README.md), and the grooming component, a separate public crate, [`mpegts-pacer`](https://github.com/tdrapier-wbd/mpegts-pacer).
+**Code contributed back** is a media-level test client for the community [MOQ Interop Runner](https://github.com/englishm/moq-interop-runner), in [`lab/interop/`](lab/interop/README.md), and the pacing component, a separate public crate, [`mpegts-pacer`](https://github.com/tdrapier-wbd/mpegts-pacer).
 
 ---
 

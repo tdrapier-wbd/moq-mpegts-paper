@@ -22,7 +22,7 @@ Cells: **cf at 5.91 s**, control and all five shapes; **cf at 11.87 s**, control
 ## Pass criteria, fixed before running
 
 1. **Rig.** The direct arm reproduces T68's CUBIC row at 5.91 s: 5 % loss costs 50–75 s (T68: 62.88 s) and the outage 8–13 s (T68: 10.58 s). Otherwise the cf arm is not compared with T68.
-2. **Control.** Each arm's control loses no content at the groomer, gives up no segment, and matches its column within 100 ms (T68's criteria 7, first half, and 9).
+2. **Control.** Each arm's control loses no content at the pacer, gives up no segment, and matches its column within 100 ms (T68's criteria 7, first half, and 9).
 3. **Control leg.** In every cell the unimpaired leg has no hole and gives up no segment. A cell where it does is void for the impaired leg, since the edge and not the path lost it, and is run once more.
 4. **Single-packet loss.** The impaired netem's mean packet over each cell is at most 1,514 bytes.
 5. **Conservation.** As T68: a cell with no hole conserves to its control's offset.
@@ -32,7 +32,7 @@ The edge's point of presence and the viewer protocol are recorded with each arm.
 
 ## Results
 
-Every request in both edge arms was served by one Dublin point of presence, in the origin's region, over HTTPS/1.1. Median video lost at the groomer's output over three replicates, conserved against the arm's control (range in brackets), beside T68's and T28's rows at the same columns:
+Every request in both edge arms was served by one Dublin point of presence, in the origin's region, over HTTPS/1.1. Median video lost at the pacer's output over three replicates, conserved against the arm's control (range in brackets), beside T68's and T28's rows at the same columns:
 
 | Shape | 5.91 s, edge | 5.91 s, direct (CUBIC) | T68 5.91 s, CUBIC / BBR | 11.87 s, edge | T68 11.87 s, CUBIC / BBR | T28 MoQ / SRT, 5.91 s; 11.87 s |
 | --- | --- | --- | --- | --- | --- | --- |

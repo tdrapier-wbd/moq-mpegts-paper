@@ -12,11 +12,11 @@ Source: [P0-d](planned-experiments.md#p0--could-change-a-viability-conclusion) (
 
 ## Objective
 
-Convert Gate 2 boundary questions from **hardware-day unknowns** into **software-day confirmations**, so when the analyser and IRD arrive the window is spent on receiver behaviour rather than discovering an untested precondition in the pipeline ([T19](test-19-pcr-grid-verification.md) found the groomer assumed PCR value and byte position advance together — nothing exposed it until upstream changed).
+Convert Gate 2 boundary questions from **hardware-day unknowns** into **software-day confirmations**, so when the analyser and IRD arrive the window is spent on receiver behaviour rather than discovering an untested precondition in the pipeline ([T19](test-19-pcr-grid-verification.md) found the pacer assumed PCR value and byte position advance together — nothing exposed it until upstream changed).
 
 Three deliverables:
 
-- **Part A** — synthesised PCR/PSI boundary stimuli through MoQ + groomer, graded at P1.
+- **Part A** — synthesised PCR/PSI boundary stimuli through MoQ + pacer, graded at P1.
 - **Part B** — scripted acceptance harness dry-run against the software reference receiver.
 - **Part C** — real-source capture rig and honest substitution map for what still needs a live encoder.
 
@@ -42,25 +42,25 @@ Three deliverables:
 | Real-source rig (Part C) | Capture at source ingress; same TSDuck instruments; grade source **before** it becomes an input. |
 | Hardware | **Not required** for Parts A and B. Part C benefits from a live encoder but lists substitutable stimuli. |
 
-## Part A — Boundary-condition fixtures, and the groomer dry-run against them
+## Part A — Boundary-condition fixtures, and the pacer dry-run against them
 
 ### Procedure
 
-Run each fixture **through MoQ round trip + groomer** and grade at P1. Precede each with `ts-pcr-selftest.py` on the raw fixture file. In leverage order:
+Run each fixture **through MoQ round trip + pacer** and grade at P1. Precede each with `ts-pcr-selftest.py` on the raw fixture file. In leverage order:
 
-1. **PCR 33-bit wrap, placed.** Base clock wraps every **26.51 h** ([method-notes](method-notes.md) §3); `ts-pcr-fixtures.py wrap` starts 20 slots below the boundary and crosses 400 ms in. `mpegts-pacer` unit-tests modular arithmetic (`Slot::slots_per_wrap`, `forward_delta_handles_wrap`); **what is proven is arithmetic, not the pipeline** through scheduler run-closing, discontinuity threshold, and the importer's timeline. Feeding the fixture to the groomer after MoQ is the outstanding step.
+1. **PCR 33-bit wrap, placed.** Base clock wraps every **26.51 h** ([method-notes](method-notes.md) §3); `ts-pcr-fixtures.py wrap` starts 20 slots below the boundary and crosses 400 ms in. `mpegts-pacer` unit-tests modular arithmetic (`Slot::slots_per_wrap`, `forward_delta_handles_wrap`); **what is proven is arithmetic, not the pipeline** through scheduler run-closing, discontinuity threshold, and the importer's timeline. Feeding the fixture to the pacer after MoQ is the outstanding step.
 
 2. **Source-clock drift via mis-rated replay.** The pacer locks output rate and cushion once from a two-PCR warmup ([`pacer.rs`](https://github.com/tdrapier-wbd/mpegts-pacer)); every long run paced on the same host never met a source whose clock differed from the sink's. ISO 13818-1 permits **±30 ppm** on 27 MHz (2.6 s offset per day). Substitute: replay at nominal × (1 ± 30 ppm) with `tsp -P regulate`; sample **buffer occupancy and derived latency**, not throughput alone. Margin should hold arithmetically; registering the prediction before the run is the point.
 
 3. **Signalled discontinuity.** Campaign carried only the loop wrap's _unsignalled_ splice ([T23](test-23-pcr-discontinuity-classes.md)). `ts-pcr-fixtures.py discontinuity` supplies a flagged splice; the fixture already caught analyser false rejects on legal signalled splices.
 
-4. **Mid-stream PID change, PCR-PID change, PMT version increment.** `ts-pcr-fixtures.py pid-change` moves PCR to a second PID; PMT version increment still to be added to the generator. Exercises importer track model and groomer; exporter has logged "TS track layout changed after PAT/PMT was emitted" mid-run in prior work.
+4. **Mid-stream PID change, PCR-PID change, PMT version increment.** `ts-pcr-fixtures.py pid-change` moves PCR to a second PID; PMT version increment still to be added to the generator. Exercises importer track model and pacer; exporter has logged "TS track layout changed after PAT/PMT was emitted" mid-run in prior work.
 
-A failure in any arm is **our defect** if it fails before MoQ; if it fails only after MoQ, classify upstream versus groomer before the hardware window ([upstream-contributions.md](upstream-contributions.md) for filing latency).
+A failure in any arm is **our defect** if it fails before MoQ; if it fails only after MoQ, classify upstream versus pacer before the hardware window ([upstream-contributions.md](upstream-contributions.md) for filing latency).
 
 ### Metrics (Part A)
 
-Per fixture: continuity errors; PCR interval stats; `pcrverify` violations; discontinuity indicator honoured; PID/PMT consistency; groomer buffer occupancy and underrun count through the event; MoQ session survival.
+Per fixture: continuity errors; PCR interval stats; `pcrverify` violations; discontinuity indicator honoured; PID/PMT consistency; pacer buffer occupancy and underrun count through the event; MoQ session survival.
 
 ### The fixtures cannot reach the pipeline, and finding out cost one probe
 
@@ -78,11 +78,11 @@ That change is not a workaround, and it moves what the arm measures. The media-a
 
 ### Part A results
 
-Source: the first 26,596 packets of `~/t12_vidonly.ts` — 20 s of 2.000 Mbps CBR, AVC on PID 0x0100, PMT 0x1000, graded clean before use. Lane: `moq import ts` → relay → `moq export ts` → `mpegts-pacer`, all on loopback, `moq` 0.11.0-`fd4f5d82e` and groomer `5ab84cd`. **Domain: file. Measurement point: P1.** Three captures per arm, so a failure can be attributed rather than argued about: the source, the exporter's own output with no groomer in the path, and the groomed egress.
+Source: the first 26,596 packets of `~/t12_vidonly.ts` — 20 s of 2.000 Mbps CBR, AVC on PID 0x0100, PMT 0x1000, graded clean before use. Lane: `moq import ts` → relay → `moq export ts` → `mpegts-pacer`, all on loopback, `moq` 0.11.0-`fd4f5d82e` and pacer `5ab84cd`. **Domain: file. Measurement point: P1.** Three captures per arm, so a failure can be attributed rather than argued about: the source, the exporter's own output with no pacer in the path, and the paced egress.
 
 The continuity counter is matched on the plugin's _data_ (`missing N packets`), and [`t33-grade.py --selftest`](scripts/t33-grade.py) was shown reading both ways — 0 events on a clean capture, 3 events and 8 packets on one with 40 packets excised — before any zero below was recorded.
 
-| Arm | Condition | Continuity, all three captures | PCR intervals at groomed egress | Verdict |
+| Arm | Condition | Continuity, all three captures | PCR intervals at paced egress | Verdict |
 | --- | --- | --- | --- | --- |
 | A0 | control, clean, nominal rate | 0 events | min 0.75 / mean 21.41 / max 30.08 ms, 0 over 40 ms | pass |
 | A1 | 33-bit PCR wrap, placed 5 s in | 0 events | min 0.75 / mean 21.52 / max 30.08 ms, 0 over 40 ms | pass |
@@ -91,11 +91,11 @@ The continuity counter is matched on the plugin's _data_ (`missing N packets`), 
 | A3 | signalled discontinuity, +500 ms | 0 events | min 1.50 / mean 21.75 / max 30.08 ms, 0 over 40 ms | pass |
 | A4 | PMT version increment | 0 events | min 1.50 / mean 22.00 / max 30.08 ms, 0 over 40 ms | pass |
 
-**The wrap crosses the whole lane.** The boundary is present exactly once in the source, once in the exporter's output and once at groomed egress, with no continuity error, no interval past the repetition limit and no backwards step anywhere. The importer's timeline arithmetic, the exporter's PCR regeneration and the groomer's slot arithmetic all carry it.
+**The wrap crosses the whole lane.** The boundary is present exactly once in the source, once in the exporter's output and once at paced egress, with no continuity error, no interval past the repetition limit and no backwards step anywhere. The importer's timeline arithmetic, the exporter's PCR regeneration and the pacer's slot arithmetic all carry it.
 
-**A signalled discontinuity survives as signalling and not as a clock jump.** Exactly one packet carries `discontinuity_indicator` at the source, at the exporter and at groomed egress — and none does in the control, so the check discriminates. The 500 ms jump itself behaves differently at each stage: 519.55 ms at the source, **amplified to 1500.00 ms at the exporter**, and absorbed entirely by the groomer, whose worst interval is 30.08 ms. A groomer regenerating PCR against output byte position necessarily emits its own continuous clock; what matters operationally is that it does so **without discarding the flag**, so a downstream decoder is still told a splice happened.
+**A signalled discontinuity survives as signalling and not as a clock jump.** Exactly one packet carries `discontinuity_indicator` at the source, at the exporter and at paced egress — and none does in the control, so the check discriminates. The 500 ms jump itself behaves differently at each stage: 519.55 ms at the source, **amplified to 1500.00 ms at the exporter**, and absorbed entirely by the pacer, whose worst interval is 30.08 ms. A pacer regenerating PCR against output byte position necessarily emits its own continuous clock; what matters operationally is that it does so **without discarding the flag**, so a downstream decoder is still told a splice happened.
 
-**An exporter figure is not a lane figure, and the gap is three orders of magnitude.** The exporter's PCR sits on an exact 25.00 ms grid — min, mean and max all 25.00 — and **every one of its samples fails the 481 ns TR 101 290 accuracy gate** (790 of 790 on the control arm; 753 of 790 fail even the 1000× looser 500 µs pre-check). The groomer's output passes both on every arm (0 of 927). This restates [T13](test-13-downstream-grooming.md) and [T19](test-19-pcr-grid-verification.md) rather than adding to them, and it is repeated here because a Gate 2 rig that captures at the wrong point would report the lane as grossly non-conformant.
+**An exporter figure is not a lane figure, and the gap is three orders of magnitude.** The exporter's PCR sits on an exact 25.00 ms grid — min, mean and max all 25.00 — and **every one of its samples fails the 481 ns TR 101 290 accuracy gate** (790 of 790 on the control arm; 753 of 790 fail even the 1000× looser 500 µs pre-check). The pacer's output passes both on every arm (0 of 927). This restates [T13](test-13-downstream-grooming.md) and [T19](test-19-pcr-grid-verification.md) rather than adding to them, and it is repeated here because a Gate 2 rig that captures at the wrong point would report the lane as grossly non-conformant.
 
 **`pid-change` did not run**, and is the one arm outstanding. The synthetic version cannot reach the pipeline for the reason above, and moving the PCR to a second PID inside real coded video means synthesising a second elementary stream rather than editing an existing one. It is the only Part A condition that needs apparatus that does not exist.
 
@@ -103,7 +103,7 @@ The continuity counter is matched on the plugin's _data_ (`missing N packets`), 
 
 **At ±30 ppm the criterion cannot reach its own failure mode.** A 30 ppm offset moves a buffer by 30 µs per second, so against the 1000 ms cushion the rail is 1000/30×10⁻⁶ ≈ **9.3 hours** away, and the 30-minute run the criterion asks for sees 54 ms of movement — indistinguishable from the burstiness the arrival process already has. A run that cannot reach the condition it is testing returns a null whatever the mechanism does.
 
-So the mechanism was measured instead, across a ladder wide enough for a slope to resolve ([`t33-drift-ladder.sh`](scripts/t33-drift-ladder.sh)): 115 s per arm on the full 120 s clip, the groomer emitting at the nominal rate with `--stats-interval-ms 1000`, the publisher mis-rated.
+So the mechanism was measured instead, across a ladder wide enough for a slope to resolve ([`t33-drift-ladder.sh`](scripts/t33-drift-ladder.sh)): 115 s per arm on the full 120 s clip, the pacer emitting at the nominal rate with `--stats-interval-ms 1000`, the publisher mis-rated.
 
 | Imposed offset | Cushion high-water | Stuffing | Underruns | Fitted occupancy slope | r² |
 | --- | --- | --- | --- | --- | --- |
@@ -116,7 +116,7 @@ So the mechanism was measured instead, across a ladder wide enough for a slope t
 
 **The mis-rating did take effect**, which a separate control establishes rather than assumes: replaying 30,000 packets at `--bitrate 2000000` and `--bitrate 2040000` measured 1,990,685 b/s and 2,032,398 b/s, a ratio of 1.0210 against an imposed 1.02. So the null is a property of the lane, not of the stimulus.
 
-**What this does and does not establish.** It establishes that the groomer's cushion stays bounded and does not walk to its rail, at offsets three orders of magnitude beyond the ISO 13818-1 ±30 ppm limit — which is what criterion 3 asks. It does **not** establish where the surplus goes. The groomer reads its input on demand, so a fast source's excess can accumulate upstream of it — in the pipe, the exporter or the relay — where this instrument cannot see it. **Buffer occupancy at the groomer is therefore not a drift detector**, which matters for §9's monitoring design as much as for this arm, and attributing the surplus needs the upstream buffers instrumented. That is recorded under _Open_.
+**What this does and does not establish.** It establishes that the pacer's cushion stays bounded and does not walk to its rail, at offsets three orders of magnitude beyond the ISO 13818-1 ±30 ppm limit — which is what criterion 3 asks. It does **not** establish where the surplus goes. The pacer reads its input on demand, so a fast source's excess can accumulate upstream of it — in the pipe, the exporter or the relay — where this instrument cannot see it. **Buffer occupancy at the pacer is therefore not a drift detector**, which matters for §9's monitoring design as much as for this arm, and attributing the surplus needs the upstream buffers instrumented. That is recorded under _Open_.
 
 ## Part B — The acceptance harness, dry-run against the software reference receiver
 
@@ -139,7 +139,7 @@ Harness checklist completion; control pass before each subject; capture file non
 
 The harness is [`t33-acceptance.sh`](scripts/t33-acceptance.sh), and the pass definition it enforces is [`t33-pass-table.json`](scripts/t33-pass-table.json) — **6 TR 101 290 P1 sub-errors, 8 P2, and 4 analyser-specific fields**, the last kept in their own block so that a PLL lock state or a T-STD buffer verdict is never quoted as conformance. Each entry carries a `measurable_in_software` flag, so the list of things that will happen for the first time on hardware day is explicit in advance rather than discovered on it. The harness reads the table from the file; it does not assemble one from what a run produced.
 
-The rehearsal ran 13 graded arms unattended in 4m26s: a control, then `wrap`, `discontinuity` and `pmt-version` as subjects with a control re-check after each, then a soak, each subject graded at both the exporter and the groomed egress, all of it into one `results.csv`.
+The rehearsal ran 13 graded arms unattended in 4m26s: a control, then `wrap`, `discontinuity` and `pmt-version` as subjects with a control re-check after each, then a soak, each subject graded at both the exporter and the paced egress, all of it into one `results.csv`.
 
 **Both halves of the control gate were exercised, not just the passing half.** Run normally the control passes and the subjects proceed. Run with a deliberately damaged clip as the control, the harness aborts before any subject starts — one row in `results.csv`, the failed control, and a non-zero exit. A gate that has only ever returned "clean" has not been shown to work ([method-notes](method-notes.md) §2).
 
@@ -194,10 +194,10 @@ The capture chain is documented in the script's own header with `<SOURCE_INGEST>
 
 **Part A — pipeline dry-run**
 
-1. Each of wrap, ±30 ppm drift, signalled discontinuity, and pid-change: **0 continuity errors** at groomed P1 egress after MoQ round trip, unless the fixture is designed to expect a flagged discontinuity — then the flag and PCR behaviour match ISO 13818-1 intent.
+1. Each of wrap, ±30 ppm drift, signalled discontinuity, and pid-change: **0 continuity errors** at paced P1 egress after MoQ round trip, unless the fixture is designed to expect a flagged discontinuity — then the flag and PCR behaviour match ISO 13818-1 intent.
 2. Wrap: no backwards PCR step at egress; pacer slot index monotonic across boundary (grade with `pcrextract` + interval script from [lab README](README.md)).
 3. Drift: buffer occupancy remains bounded over ≥ 30 min at ±30 ppm without underrun storm; no monotonic walk to rail ([T21](test-21-permanence-soak.md) method lesson on transient versus trend).
-4. Any failure **only on MoQ path** is bisected (file → groomer-only → full lane) before hardware week.
+4. Any failure **only on MoQ path** is bisected (file → pacer-only → full lane) before hardware week.
 
 **Part B — harness rehearsal**
 
@@ -223,7 +223,7 @@ The capture chain is documented in the script's own header with `<SOURCE_INGEST>
 
 | # | Criterion | Verdict |
 | --- | --- | --- |
-| A1 | 0 continuity errors at groomed P1 egress after MoQ round trip, per condition | **met** on five of six conditions; `pid-change` not run |
+| A1 | 0 continuity errors at paced P1 egress after MoQ round trip, per condition | **met** on five of six conditions; `pid-change` not run |
 | A2 | Wrap: no backwards PCR step at egress, slot index monotonic across the boundary | **met** — the boundary appears once in each of the three captures, with no continuity error and no interval past the limit |
 | A3 | Drift: occupancy bounded over ≥ 30 min at ±30 ppm without an underrun storm | **met, by a substituted method.** The criterion as written cannot reach its failure mode in 30 min; a ladder to 20,000 ppm found no occupancy signal at all |
 | A4 | Any MoQ-path-only failure bisected before hardware week | **not triggered** — no arm failed at any capture point |
@@ -284,7 +284,7 @@ Run on the secondary against `d518b61b` (current `main`, quinn), `t33-gate2.sh` 
 
 One result worth recording rather than treating as noise: on the `discontinuity` arm the grader reports `pcr_max_ms` of 95,443,492 — the 33-bit PCR wrap period expressed as an interval — while still scoring `pcr_over40 = 0`, because the signalled-discontinuity discount removes it. That is the corrected gate behaving as designed, and it is also a live demonstration of the limitation recorded below: it discounts by count, not by pairing each interval to its own flag.
 
-**It passes unchanged on `3c0daa21b`, the build under test,** on a host that had never run it, from a fresh private copy of `lab/scripts/`, with a 120 s clip. All thirteen graded rows are `PASS`, with 0 continuity errors and no PCR interval above 40 ms. The clip is shorter than the 300 s soak, so the soak arm carried it once (806,954 packets exported, 801,941 groomed): a soak needs a source longer than the arm. The raw export now meets the 481 ns accuracy check on the wrap, PMT-version and soak arms, 0 bad where `d518b61b` and `9d2a4f6e` failed every interval; on the discontinuity arm it fails 1,157 of 1,158 PCRs, and the groomer leaves 1. One run was made.
+**It passes unchanged on `3c0daa21b`, the build under test,** on a host that had never run it, from a fresh private copy of `lab/scripts/`, with a 120 s clip. All thirteen graded rows are `PASS`, with 0 continuity errors and no PCR interval above 40 ms. The clip is shorter than the 300 s soak, so the soak arm carried it once (806,954 packets exported, 801,941 paced): a soak needs a source longer than the arm. The raw export now meets the 481 ns accuracy check on the wrap, PMT-version and soak arms, 0 bad where `d518b61b` and `9d2a4f6e` failed every interval; on the discontinuity arm it fails 1,157 of 1,158 PCRs, and the pacer leaves 1. One run was made.
 
 ## Predicted at the IRD and the analyser, fixed before the window
 
@@ -306,7 +306,7 @@ Written from software measurements before any hardware result, so that the windo
 ## Open
 
 - **`pid-change` has not run**, and needs a second elementary stream synthesised inside real coded video. It is the only Part A condition still outstanding.
-- **Where a fast source's surplus accumulates is unattributed.** The groomer reads on demand, so its cushion is blind to source-clock drift; the excess is somewhere upstream — pipe, exporter or relay — and nothing here instruments those. This bears on [T21](test-21-permanence-soak.md)'s memory question and on the monitoring design, not only on this arm.
+- **Where a fast source's surplus accumulates is unattributed.** The pacer reads on demand, so its cushion is blind to source-clock drift; the excess is somewhere upstream — pipe, exporter or relay — and nothing here instruments those. This bears on [T21](test-21-permanence-soak.md)'s memory question and on the monitoring design, not only on this arm.
 - **The harness soak is 240 s against a 2 h criterion and a 72 h hardware protocol.** The rig is validated; the duration is not.
 - **The corrected discontinuity gate discounts by count rather than pairing each interval to its own flag.** Sound while signalled events are rare, unsound on a splice-heavy feed.
 - **The analyser's machine-readable export path is still unconfirmed** for a specific model, and that is the one Part B item that cannot be worked around on site.

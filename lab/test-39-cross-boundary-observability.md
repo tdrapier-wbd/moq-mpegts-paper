@@ -2,7 +2,7 @@
 
 **State: Parts A and C run and passed; Part B, the return path, is measured on loopback on late October 2026 `main` (in no release): it carries the client edge's report on one scoped credential and names a dead audio or video stream, and it reads a total stall as silence and ends with its exporter. On the live feed it held for an hour with no false alarm. The run at scale is [P1-l](planned-experiments.md#p1--establishes-where-one-architecture-is-superior).** Tier placement and the reasoning for it are in _Tiering_ below, including the one place this stretches a tier.
 
-**Headline.** A standalone process at the client edge, on its own subscription, **catches a T24-class partial-media fault that no relay-side telemetry can express** — _measured_: the suppressed audio PID alarmed on its own at media t=25.025 s with every other elementary stream still delivering, while the groomer ran alongside it unmodified and the relay's counters carried no per-PID field in which the fault could appear. That settles the tier split the design rests on: **tier 2 can prove bytes flowed and can never prove the media was healthy**, so the only place the delivered signal can be assessed is hardware the broadcaster does not own.
+**Headline.** A standalone process at the client edge, on its own subscription, **catches a T24-class partial-media fault that no relay-side telemetry can express** — _measured_: the suppressed audio PID alarmed on its own at media t=25.025 s with every other elementary stream still delivering, while the pacer ran alongside it unmodified and the relay's counters carried no per-PID field in which the fault could appear. That settles the tier split the design rests on: **tier 2 can prove bytes flowed and can never prove the media was healthy**, so the only place the delivered signal can be assessed is hardware the broadcaster does not own.
 
 **The return path is authorizable, protocol-legal and, on `main`, tooled — and it names partial faults, not total ones.** One token can carry a `--subscribe` prefix for media and an unrelated `--publish` prefix for telemetry, and a segment-aware relay routes both correctly (_measured_, six cells, Part C). An opaque telemetry payload on its own track is legal on both wires this relay speaks (_specified_, see _Open_). Upstream's solicited viewer feedback carries the subscriber's per-PID report back over the same relay on that one token, and the publisher side names a dead audio or video stream from it **4.1–6.1 s after onset, 1.4–2.6 s after a detector at the client edge itself** (_measured_, loopback, Part B). **It cannot name two faults:** a total stall changes nothing in the report and an unchanged report is not re-sent, so the publisher side hears the same silence as a lost return path; and a relay frozen past the QUIC idle timeout ends the subscriber's exporter, and its report with it.
 
@@ -16,7 +16,7 @@ The deployed topology is asymmetric in ownership:
 flowchart LR
   P[Publisher<br/>ours] --> R[Relay / fabric<br/>ours or a vendor's]
   R -.->|administrative boundary| S[Subscriber<br/>client hardware]
-  S --> G[Groomer<br/>client hardware]
+  S --> G[Pacer<br/>client hardware]
   G --> D[Client's downstream]
 ```
 
@@ -32,7 +32,7 @@ The campaign's observability evidence divides by which side of the boundary can 
 | 2 | Relay / fabric | Ours **or a vendor's** | Session, byte, subscription and revocation state. Content-blind by construction |
 | 3 | Client edge | **Theirs** | Per-PID liveness and PCR conformance on the signal actually delivered |
 
-**Part A is tier 3 in isolation** and is placed there without qualification: a standalone process at the client-edge position, on its own subscription, with no groomer involvement. It needs no apparatus that does not already exist and no cooperation from the other tiers.
+**Part A is tier 3 in isolation** and is placed there without qualification: a standalone process at the client-edge position, on its own subscription, with no pacer involvement. It needs no apparatus that does not already exist and no cooperation from the other tiers.
 
 **Part B — the telemetry return path — is a tier-3 measurement whose _results_ have to reach tier 1, and that crossing is the thing being tested.** It is listed here rather than as its own experiment because the detector is Part A's and only the carriage differs.
 
@@ -44,7 +44,7 @@ The campaign's observability evidence divides by which side of the boundary can 
 | --- | --- | --- | --- |
 | 1 | A healthy transport does not imply a live programme | [T22](test-22-silent-media-plane-failure.md) | Nothing about who can see the difference |
 | 2 | A partial stall passes the whole of TR 101 290 P1; an audio-only stall has no wire-observable signature | [T24](test-24-partial-media-plane-stall.md) | Whether the only detector that works can run where the boundary puts it |
-| 3 | Per-PID access-unit counting catches every arm, and works at a cross-host groomed output | [T27](test-27-liveness-detector.md) | It was run on infrastructure we own end to end |
+| 3 | Per-PID access-unit counting catches every arm, and works at a cross-host paced output | [T27](test-27-liveness-detector.md) | It was run on infrastructure we own end to end |
 | 4 | The relay is QUIC-payload-blind by construction | [T36](test-36-entitlement-enforcement.md) | Whether its _published_ telemetry adds anything the log does not |
 | 5 | `moq token sign` takes repeatable `--publish` and `--subscribe` | T37 environment notes | Whether both survive on one token, and whether the relay routes them independently |
 
@@ -52,9 +52,9 @@ The campaign's observability evidence divides by which side of the boundary can 
 
 ## Environment
 
-Parts A and C: build `moq` 0.11.0-`fd4f5d82e` / `moq-relay` 0.14.16-`fd4f5d82e` from `~/bin-3529/` (Part B's is in its procedure); groomer `mpegts-pacer` `5ab84cd`, **unmodified**. Loopback, macOS, `--server-quic-gso=false`. Source `contrib-5m.ts`: AVC video on PID 111 (also PCR), MPEG-1 audio on 121, AC-3 on 123, teletext on 131, three SCTE-35 PIDs. Detector `lab/scripts/ts-liveness.py`.
+Parts A and C: build `moq` 0.11.0-`fd4f5d82e` / `moq-relay` 0.14.16-`fd4f5d82e` from `~/bin-3529/` (Part B's is in its procedure); pacer `mpegts-pacer` `5ab84cd`, **unmodified**. Loopback, macOS, `--server-quic-gso=false`. Source `contrib-5m.ts`: AVC video on PID 111 (also PCR), MPEG-1 audio on 121, AC-3 on 123, teletext on 131, three SCTE-35 PIDs. Detector `lab/scripts/ts-liveness.py`.
 
-**The hard constraint on this experiment is that `mpegts-pacer` gets no changes.** Any client-edge capture is a standalone process on a duplicate subscription, never a groomer patch. Part A is constructed to demonstrate that the constraint is satisfiable concurrently rather than merely asserted: the groomer runs in the same lane, at the same time, with the flags it already takes.
+**The hard constraint on this experiment is that `mpegts-pacer` gets no changes.** Any client-edge capture is a standalone process on a duplicate subscription, never a pacer patch. Part A is constructed to demonstrate that the constraint is satisfiable concurrently rather than merely asserted: the pacer runs in the same lane, at the same time, with the flags it already takes.
 
 ## Procedure
 
@@ -62,7 +62,7 @@ Parts A and C: build `moq` 0.11.0-`fd4f5d82e` / `moq-relay` 0.14.16-`fd4f5d82e` 
 
 `lab/scripts/t39-clientedge-monitor.sh`. One publisher into one relay; three consumers at the client-edge position:
 
-1. the groomer subscription, `moq export ts | mpegts-pacer - auto`, unmodified;
+1. the pacer subscription, `moq export ts | mpegts-pacer - auto`, unmodified;
 2. the monitor subscription, an independent `moq export ts` into `ts-liveness.py`;
 3. the relay's own view, with `--stats-enabled --stats-interval 1 --stats-node edge1`.
 
@@ -104,7 +104,7 @@ Reported, not graded: the release clock's drift and out-of-tolerance count per 1
 
 ### Part A — the client edge sees what the relay cannot
 
-_(file domain, P1 detector, loopback, single relay, build `fd4f5d82e`, groomer `5ab84cd` unmodified.)_
+_(file domain, P1 detector, loopback, single relay, build `fd4f5d82e`, pacer `5ab84cd` unmodified.)_
 
 Source verified before publishing: part 1 132,427 packets carrying 2,689 audio packets on PID 121; part 2 129,805 packets carrying none.
 
@@ -112,7 +112,7 @@ Source verified before publishing: part 1 132,427 packets carrying 2,689 audio p
 | --- | --- |
 | **Tier 3 — standalone monitor** | `alarm pid=121` at media t=**25.025 s**, the instant the detector armed (warm-up plus learning, 25 s; the fault began at 20 s), **localised**: every other elementary stream still delivering. The next alarm is 14.30 s later and is all remaining PIDs at once, i.e. the source ending |
 | **Tier 2 — relay** | No per-PID field exists in which the fault could appear. Bytes, frames and groups continued |
-| **Groomer** | 333,144 packets out, `buffer_high_water=10746`, `media_rate=9538593 b/s`. No flags added, no patch |
+| **Pacer** | 333,144 packets out, `buffer_high_water=10746`, `media_rate=9538593 b/s`. No flags added, no patch |
 
 **The monitor localised the fault to one elementary stream while the service around it was healthy**, which is the distinction [T24](test-24-partial-media-plane-stall.md) established as the operationally important one — an alarm that fires when everything stops is the cheap clock-progression layer, and it is not sufficient. The harness classifies an alarm as localised only if other PIDs are still delivering behind it, so the end-of-stream alarm is not counted as a detection.
 
@@ -169,7 +169,7 @@ The client-edge detector column is from the armed trials; the stall and relay ar
 
 - Whether the tier-3 detector alarms on the suppressed PID **with other PIDs still delivering** — a boolean, and the only one that distinguishes localisation from stream-end.
 - Media time of each alarm, and the interval to the next, so an end-of-stream alarm is separable.
-- The groomer's packet count and pacer summary, to show the monitor was additive.
+- The pacer's packet count and pacer summary, to show the monitor was additive.
 - The relay's published counter set, enumerated from source and audited against §9 line by line.
 - Part C: per cell, whether an independent privileged subscriber could read back what was published.
 - Part B: per arm, what the publisher side reads in the report and when, beside the client-edge detector, the importer's own report, and recovery.
@@ -179,7 +179,7 @@ The client-edge detector column is from the armed trials; the stall and relay ar
 | # | Criterion | Verdict |
 | --- | --- | --- |
 | 1 | A standalone client-edge process detects a T24-class fault on its own subscription | **Pass.** PID 121 alarmed at media t=25.025 s, localised |
-| 2 | It does so with **zero** changes to `mpegts-pacer`, running concurrently | **Pass.** The groomer ran in the same lane with the flags it already takes and produced 333,144 packets |
+| 2 | It does so with **zero** changes to `mpegts-pacer`, running concurrently | **Pass.** The pacer ran in the same lane with the flags it already takes and produced 333,144 packets |
 | 3 | The relay's published telemetry is enumerated and audited against §9 rather than characterised | **Pass.** Twelve traffic counters and two presence counters, audited line by line |
 | 4 | The dual-scope token hypothesis is **verified, not assumed**, either way | **Pass.** Six cells with a readback oracle and a control; it holds |
 | 5 | The return path is either demonstrated end to end or its blocker identified and evidenced | **Pass, on loopback and on `main`.** Demonstrated (Part B): a dead audio or video stream is named at the publisher side; a total stall and a relay freeze are not, for the reasons given there. Released tooling still has no path |
@@ -196,8 +196,8 @@ That is enough to attribute a client-edge observation to a publisher-side group 
 ## Limits, stated in advance
 
 - **Loopback, and a simulated boundary.** There is no administrative boundary in this run — both "sides" are one machine. What is demonstrated is that the _vantage_ works where the boundary puts it, not that it works across a real one with a real network and a real customer's change control.
-- **The groomer's presence shows concurrency, not non-interference at scale.** One extra subscription on a loopback relay is not evidence about what N monitoring subscriptions cost a client's box.
-- **Part A measures no detection latency**, and its figures must not be read as latencies. Thresholds were set explicitly to make the tier comparison legible; [T27](test-27-liveness-detector.md) is the authority, and it measured 1.0–3.1 s at a groomed monitoring point.
+- **The pacer's presence shows concurrency, not non-interference at scale.** One extra subscription on a loopback relay is not evidence about what N monitoring subscriptions cost a client's box.
+- **Part A measures no detection latency**, and its figures must not be read as latencies. Thresholds were set explicitly to make the tier comparison legible; [T27](test-27-liveness-detector.md) is the authority, and it measured 1.0–3.1 s at a paced monitoring point.
 - **Part A: one fault class.** An audio-PID suppression; Part B runs the others.
 - **Part B makes every fault at the source**, where the publisher's own importer sees it too. A fault arising between relay and subscriber, which only the report could reveal, is not constructed on loopback. Its latencies are quantised by the 1 s report cadence, from two to four trials an arm, on one build.
 - **Part C's oracle proves readback, not refusal semantics.** A cell that reads back nothing is scored as refused; it does not distinguish a refusal from a publish that failed for another reason. The oracle control bounds this but does not eliminate it.
@@ -225,7 +225,7 @@ That is enough to attribute a client-edge observation to a publisher-side group 
 
 **No incumbent offers this, and the framing matters.** No open control plane and no transport protocol in current use gives an origin this visibility into a subscriber's delivered-media health — not WebRTC, SRT or RTMP, not HLS/CMAF/DASH. CMCD/CMSD is the nearest thing and is a different measurement: request and buffer state reported to a CDN, silent on whether the arriving media was intact. So there is no existing convention to copy or interoperate with, which is freedom and risk in the same place, and it is a reason to think carefully about the schema rather than a reason not to propose it. Two consequences for how this experiment's results may be used: **nothing here is a deficiency of MoQ against an incumbent**, because no incumbent offers it either; and **no adoption decision turns on it**, so it must not appear in a verdict table as a point for or against a data plane. It is recorded as a real operational gap a distributor meets at fleet scale, whose mechanism happens to be unusually close to hand on this plane.
 
-**The route deliberately not taken: the groomer.** `mpegts-pacer` already decodes the stream and already counts per-PID access units for [T27](test-27-liveness-detector.md)'s detector, so emitting this telemetry from there is a small amount of code and by far the fastest path to the measurement. It is rejected on purpose. The groomer is kept minimal and non-proprietary, and a health-reporting channel inside one distributor's grooming binary is a capability only that distributor's receivers can offer — which forfeits exactly the interoperability that makes the observation worth having, and converts an open convention into a private extension. The value of the capability is that _any_ conformant subscriber could report using a credential the operator already issues. Building it into the groomer would produce the data and destroy the reason for it. This is consistent with the standing constraint that the client-edge monitor is a standalone process on a second subscription and never a groomer patch — the monitor in Part A was built that way for the same reason.
+**The route deliberately not taken: the pacer.** `mpegts-pacer` already decodes the stream and already counts per-PID access units for [T27](test-27-liveness-detector.md)'s detector, so emitting this telemetry from there is a small amount of code and by far the fastest path to the measurement. It is rejected on purpose. The pacer is kept minimal and non-proprietary, and a health-reporting channel inside one distributor's pacing binary is a capability only that distributor's receivers can offer — which forfeits exactly the interoperability that makes the observation worth having, and converts an open convention into a private extension. The value of the capability is that _any_ conformant subscriber could report using a credential the operator already issues. Building it into the pacer would produce the data and destroy the reason for it. This is consistent with the standing constraint that the client-edge monitor is a standalone process on a second subscription and never a pacer patch — the monitor in Part A was built that way for the same reason.
 
 **The announce-refusal finding reaches both wires, and it is not a dropped error.** Payload agnosticism holds on both wires, and so does the silence. Measured with [`t39-ietf-refusal.sh`](scripts/t39-ietf-refusal.sh) — one relay, one token scoped to publish `affa.telemetry`, one clip, the wire pinned per cell with `--client-version`, each version carrying an in-scope control as well as the out-of-scope subject:
 
@@ -247,6 +247,6 @@ So the finding does not split by wire after all. **The fix that would help an op
 
 **What the IETF measurement does not cover.** It shows that the configuration an operator meets — a token whose publish scope excludes the path — produces silence on both wires, and why. It does not show that _no_ configuration reaches `write_error`; an announcement arriving inside the interest prefix and then failing may well do so, and that case was not constructed. Each cell is a single sample, which is adequate for a categorical told/not-told outcome and would not be for a figure.
 
-**Whether a client would accept running it is not a technical question.** The whole design puts the only useful detector on hardware the broadcaster does not own, under someone else's change control. Part A shows it is additive and needs no groomer changes, which is the strongest technical answer available, and it does not answer the commercial one.
+**Whether a client would accept running it is not a technical question.** The whole design puts the only useful detector on hardware the broadcaster does not own, under someone else's change control. Part A shows it is additive and needs no pacer changes, which is the strongest technical answer available, and it does not answer the commercial one.
 
 **Clock offset across the boundary is unmeasured.** The correlation convention is exact in media time and depends on deployment clock discipline in wall time. What that discipline actually is between a broadcaster's site and a client's is a question for a real deployment, and the design's instruction to carry the offset explicitly is _reasoned_, not measured. Upstream's report stamps each rendition's newest arrival with the subscriber's wall clock and carries no offset; on loopback the offset is zero.

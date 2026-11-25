@@ -24,7 +24,7 @@ The control is clean and every injection is recovered inside the 100 ms margin c
 
 **How much this validates, stated precisely.** The agreement is exact rather than merely within tolerance because the oracle derives the injected duration from the clip's PCR timeline using the same median-rate arithmetic the grader uses. That is a strong check on the _implementation_ — it would have caught a wrong CSV column, a PCR wrap bug, a sign error, or a rate reference moved by the holes being measured, which are the failures this campaign has actually hit — but it is **not** an independent check on the _method_. The independent corroboration is the continuity-error column, which comes from a different tool and rises from 0 to 37–98 exactly where an excision or repeat was made, confirming each capture was damaged as intended.
 
-**The grader needed a second reference before it could score a live capture, and finding that out is part of this result.** The validated arithmetic above compares elapsed PCR time against the bytes between two PCR samples, which assumes a constant byte rate. That holds for a clip or a groomed egress — the file domain, which is what the self-test exercises — and fails on a raw `moq export ts` capture, because the exporter emits PCR-bearing packets in clusters ([T19](test-19-pcr-grid-verification.md)'s positional finding): the median packet gap between adjacent PCR samples measured **6 packets** rather than the ~150 a CBR stream gives, so the rate estimate collapsed to **0.361 Mb/s against a true 8.595 Mb/s** and the grader reported **1,254 s of duplication in a 55 s capture**. The hole figure survived that corruption, because a hole is dominated by its time term, but a grader that is right in one column and silently wrong in another is not usable. `t28-media-lost.py` now takes `--domain {file,wire}`; `wire` references the stream's own PCR cadence and ignores byte positions. **Both domains are validated against the same five known answers** (`DOMAIN=wire bash t28-grader-selftest.sh`), the wire domain carrying a systematic offset of one PCR cadence, well inside the 100 ms margin.
+**The grader needed a second reference before it could score a live capture, and finding that out is part of this result.** The validated arithmetic above compares elapsed PCR time against the bytes between two PCR samples, which assumes a constant byte rate. That holds for a clip or a paced egress — the file domain, which is what the self-test exercises — and fails on a raw `moq export ts` capture, because the exporter emits PCR-bearing packets in clusters ([T19](test-19-pcr-grid-verification.md)'s positional finding): the median packet gap between adjacent PCR samples measured **6 packets** rather than the ~150 a CBR stream gives, so the rate estimate collapsed to **0.361 Mb/s against a true 8.595 Mb/s** and the grader reported **1,254 s of duplication in a 55 s capture**. The hole figure survived that corruption, because a hole is dominated by its time term, but a grader that is right in one column and silently wrong in another is not usable. `t28-media-lost.py` now takes `--domain {file,wire}`; `wire` references the stream's own PCR cadence and ignores byte positions. **Both domains are validated against the same five known answers** (`DOMAIN=wire bash t28-grader-selftest.sh`), the wire domain carrying a systematic offset of one PCR cadence, well inside the 100 ms margin.
 
 **That grader is sound for a lane that passes the stream through — SRT and segmented HTTP — and is not sound for the MoQ lane.** `moq export ts` keeps writing PCR across pictures it never received, so a hole in the programme is not a hole in the clock, and the grader scores a lane that has stopped delivering picture as nearly clean ([method-notes](method-notes.md) § _The exporter manufactures bytes and clock_). MoQ cells are graded on the content's own timeline by [`t28-content-lost.py`](scripts/t28-content-lost.py) from 8 s in (the join is not the impairment), validated against known answers by `t28-content-selftest.sh` within 0–40 ms, and **conserved** against a clean cell of the same invocation by [`t2831-conservation.py`](scripts/t2831-conservation.py), because a picture that stops before the window closes leaves no hole to count ([method-notes](method-notes.md) § _A hole count sees only gaps between what arrived_). The figure quoted is **video missing at close**: in holes, plus what had not arrived when the window ended — lost, or late by up to the budget.
 
@@ -32,7 +32,7 @@ Where a capture was deleted, the matched ladder's latency taps survive it: they 
 
 ## Measured — the transport axis, MoQ lane
 
-**Environment.** EC2 secondary, 8 vCPU / 15 GB, Ubuntu 26.04. Two network namespaces joined by veth (`t8b-netns.sh`), `cake` at the bottleneck provisioned at 20 Mb/s, 100 ms base RTT (50 ms each way), source a 120 s ~9.95 Mb/s CBR slice of `contrib-10m.ts` paced with `tsp regulate --pcr-synchronous`. `moq import ts` → relay → `moq export ts`, **no groomer in the path**, captured at the subscriber. Outage = 100 % loss applied at the bottleneck for a fixed duration, 20 s after delivery settles. Measurement point **P1**, graded on content and conserved, as above. The build and QUIC backend are named on every table, because the lane's figures differ between builds by more than between budgets.
+**Environment.** EC2 secondary, 8 vCPU / 15 GB, Ubuntu 26.04. Two network namespaces joined by veth (`t8b-netns.sh`), `cake` at the bottleneck provisioned at 20 Mb/s, 100 ms base RTT (50 ms each way), source a 120 s ~9.95 Mb/s CBR slice of `contrib-10m.ts` paced with `tsp regulate --pcr-synchronous`. `moq import ts` → relay → `moq export ts`, **no pacer in the path**, captured at the subscriber. Outage = 100 % loss applied at the bottleneck for a fixed duration, 20 s after delivery settles. Measurement point **P1**, graded on content and conserved, as above. The build and QUIC backend are named on every table, because the lane's figures differ between builds by more than between budgets.
 
 ### The build bisection: the lane lost ground between builds, and the backend decides the loss shape
 
@@ -629,7 +629,7 @@ This closes the single largest comparative gap called out as P1-a (its remainder
 
 |  |  |
 | --- | --- |
-| Lanes | Media-aware MoQ (`moq import ts` → relay → `moq export ts` → groomed egress) and segmented HTTP (`tsp -O hls` → origin → receiver → groomed egress), topologies aligned with [T5](test-5-network-impairment.md) and [T6](test-6-relay-resilience.md) so existing drills are reused, not re-run for their own sake. |
+| Lanes | Media-aware MoQ (`moq import ts` → relay → `moq export ts` → paced egress) and segmented HTTP (`tsp -O hls` → origin → receiver → paced egress), topologies aligned with [T5](test-5-network-impairment.md) and [T6](test-6-relay-resilience.md) so existing drills are reused, not re-run for their own sake. |
 | Impairment point | `netem`/`tc` at the same logical hop on both lanes — the path between source node and serving node — per [method-notes](method-notes.md) on matching substrate and controller variables. |
 | Source | Looped `<CLIP>` at known CBR, paced with `tsp -P regulate --pcr-synchronous`; segmented packager flags unchanged from [T6](test-6-relay-resilience.md) segmented arm. |
 | Hosts | Loopback for v1 matrix; cross-host variant optional once the grader is stable. Placeholder `<EC2_IP>` when remote. |
@@ -660,7 +660,7 @@ Two axes, applied identically where the lane has an equivalent role.
 
 - Source node (MoQ publisher; segmented packager).
 - Mid-path node (MoQ relay; segmented origin — cache/edge where applicable).
-- Receiver-side process without killing the transport (exporter stall, groomer stall).
+- Receiver-side process without killing the transport (exporter stall, pacer stall).
 - Network path reset (flush `netem`, restart interface — simulates route change).
 - **Dual failures** — two components, e.g. publisher + path, relay + packager, chosen from pairs that production 1+1 is meant to survive.
 
@@ -670,7 +670,7 @@ Each cell: baseline capture → inject at known wall time → capture through st
 
 ## Metrics
 
-Per injection, per lane, at groomed P1 egress (file):
+Per injection, per lane, at paced P1 egress (file):
 
 - **Media lost (headline)** — seconds of programme time missing or duplicated, computed from PCR/PTS timeline holes and regressions, not from session logs.
 - **Continuity errors** — TSDuck count during fault and recovery windows ([method-notes](method-notes.md)).
@@ -689,7 +689,7 @@ These are criteria on the _experiment's deliverable_, not on the lanes — neith
 1. **Grader validity.** A control run with no injection reports 0 s media lost and 0 continuity errors on both lanes; a synthetic hole injected in post produces the injected duration ± 100 ms.
 2. **Matrix completeness.** Every transport outage duration {500 ms, 5 s, 30 s, 5 min} × both lanes; every infrastructure single-failure row × both lanes; ≥ 4 dual-failure pairs × both lanes. A cell skipped for missing apparatus is listed as blocked, not omitted silently.
 3. **Ranking published.** Final table sorted by media lost; no cell reported only as recovery time.
-4. **Comparability.** Same source clip, same provisioned rate, same groomer configuration within a lane across all cells unless the cell explicitly tests configuration (then labelled).
+4. **Comparability.** Same source clip, same provisioned rate, same pacer configuration within a lane across all cells unless the cell explicitly tests configuration (then labelled).
 5. **Segmented receiver axis.** Where [T6](test-6-relay-resilience.md) showed receiver-dependent outcomes, at least two receivers are graded for origin-restart and outage-5 s cells; divergence is a finding, not a rig error.
 
 **Lane-level interpretation (fixed before running):** a lane is _superior on resilience_ for a given failure class if its median media lost across three repeats is lower than the other lane's at matched ingress rate and matched conformance of pre-fault bytes. A tie within ± 0.5 s programme time is reported as tied.

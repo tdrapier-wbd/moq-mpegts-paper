@@ -1,12 +1,12 @@
 # Test 55 — ST 2022-7 legs from passthrough exports through TSDuck's RTP output
 
-**State: run on the laptop, through a relay on EC2, and on an EC2 host; graded. H1 holds once `tsp`'s initial load is bounded; H3 holds; H2 does not, because a killed leg also costs packets at the merge. Two co-started legs make a pair, but no leg event the export's delay does not absorb leaves one: the route protects the RTP paths, not the MoQ legs. Through stream-clocked groomers instead, legs started apart kept the pair through a restart and a 1 s stall, and lost nothing when a 10 s stall ended a leg (on one host).**
+**State: run on the laptop, through a relay on EC2, and on an EC2 host; graded. H1 holds once `tsp`'s initial load is bounded; H3 holds; H2 does not, because a killed leg also costs packets at the merge. Two co-started legs make a pair, but no leg event the export's delay does not absorb leaves one: the route protects the RTP paths, not the MoQ legs. Through stream-clocked pacers instead, legs started apart kept the pair through a restart and a 1 s stall, and lost nothing when a 10 s stall ended a leg (on one host).**
 
 ## Objective
 
 Upstream is removing `export ts --sync` and its RTP egress work, naming passthrough as the mode for 2022-7 output; RTP framing is left to an external tool. This test takes two `export ts --passthrough` legs, each piped into `tsp -O ip --rtp`, and asks whether they give a pair a 2022-7 receiver can merge, and through which failures.
 
-`tsp` numbers each datagram from its own count, starting at `--start-sequence-number`, and stamps it from the stream's PCR. Two legs therefore carry the same datagrams under the same numbers only if they cut the same packets from the same first packet and neither skips nor restarts. [T12](test-12-dual-path-handoff.md)'s stream-clocked groomer instead derives each number from the datagram's slot on the source's timeline, and on the passthrough lane it kept a pair mergeable through a late join, a blackout of each leg and a killed export. That is the comparison.
+`tsp` numbers each datagram from its own count, starting at `--start-sequence-number`, and stamps it from the stream's PCR. Two legs therefore carry the same datagrams under the same numbers only if they cut the same packets from the same first packet and neither skips nor restarts. [T12](test-12-dual-path-handoff.md)'s stream-clocked pacer instead derives each number from the datagram's slot on the source's timeline, and on the passthrough lane it kept a pair mergeable through a late join, a blackout of each leg and a killed export. That is the comparison.
 
 ## Hypotheses, fixed before running
 
@@ -82,11 +82,11 @@ Datagrams of leg B matching leg A's under the same number, before and after the 
 
 - **`tsp -O ip --rtp` turns two co-started passthrough legs into a 2022-7 pair**, given `--enforce-burst`, one start number and SSRC, and a bounded initial load. That protects the RTP paths beyond `tsp`.
 - **It does not protect the MoQ legs.** A late join, a restart, a skip, or a stall past the export's delay leaves a pair that no longer merges, until both legs restart together; a kill also costs a datagram. A skipped leg is the worst case: it keeps sending the right programme under the wrong numbers, which a receiver cannot tell from a healthy leg until the other fails.
-- **The stream-clocked groomer is what makes the route survive leg failure.** On the passthrough lane it kept a pair merging through a late join, each leg's loss and a killed export ([T12](test-12-dual-path-handoff.md)), because it numbers each datagram by its slot on the source's timeline, not by a count. For P0-k and P1-b the legs are passthrough exports, each through a stream-clocked groomer; `tsp` serves where a pair can be restarted together.
+- **The stream-clocked pacer is what makes the route survive leg failure.** On the passthrough lane it kept a pair merging through a late join, each leg's loss and a killed export ([T12](test-12-dual-path-handoff.md)), because it numbers each datagram by its slot on the source's timeline, not by a count. For P0-k and P1-b the legs are passthrough exports, each through a stream-clocked pacer; `tsp` serves where a pair can be restarted together.
 
 ## Stream-clocked legs, started apart
 
-**Question.** T12's passthrough-lane arm merged passthrough legs through stream-clocked groomers, one leg 8 s late, through blackouts and an export killed for good. Do such legs also carry this test's other events, a leg killed and restarted and an export stopped, when the two legs never start together?
+**Question.** T12's passthrough-lane arm merged passthrough legs through stream-clocked pacers, one leg 8 s late, through blackouts and an export killed for good. Do such legs also carry this test's other events, a leg killed and restarted and an export stopped, when the two legs never start together?
 
 **Rig.** The rig with `START=apart LEG=pacer`: each export into `mpegts-pacer --rtp --stream-clock` at the clip's rate, shared SSRC and sequence seed, the pacer at `ea88793` (T12's fixed pacer); leg B 8 s after leg A in every cell; `main` `66af72315`; the laptop, on loopback; 120 s; three runs per cell. Cells: `late` (the control), `kill` (A's export killed at 40 s, its export and pacer restarted 10 s later), `stall` for 1 s and for 10 s. No blackout: T12's 5 s blackouts, across which the export skipped, passed with this pacer, and the laptop has no `iptables`.
 
@@ -101,7 +101,7 @@ Reported, not graded: skew at equal numbers, and each pacer's withheld and disca
 
 **Results.** Twelve runs, all valid. In each control run all of B's datagrams (102,278–102,325) were in A under the same numbers, with no conflict. In every run the receiver lost no datagram and met no conflict, the merged output had no continuity error, and `--groomed` identity found no gap and no foreign packet. After A's restart its datagrams matched B's on every number (63,765–63,813, none mismatched), as after the 1 s stall (74,616–74,629). The datagrams left unpaired in a `kill` run are exactly B's while A was down or refilling its delay (10,907–10,932). The 10 s stall ended A's export in all three runs, and B carried the rest alone. Skew at equal numbers: medians −12.8 to +4.6 ms, extremes −94 and +100 ms, inside the 450 ms window. The pacers' counts were not recorded: the stage set no `--stats-interval-ms`, and the rig stops each pacer by signal, before its final report.
 
-**Grading.** Criterion 2 holds in all twelve runs and 3 in `kill` and the 1 s `stall`, so **the fix holds**: stream-clocked groomers make a pair of passthrough legs that never start together and survive a leg killed and restarted, and a stall, without a lost datagram, where `tsp`'s own numbering lost the pair at a late start and at a restart.
+**Grading.** Criterion 2 holds in all twelve runs and 3 in `kill` and the 1 s `stall`, so **the fix holds**: stream-clocked pacers make a pair of passthrough legs that never start together and survive a leg killed and restarted, and a stall, without a lost datagram, where `tsp`'s own numbering lost the pair at a late start and at a restart.
 
 ## Limits
 

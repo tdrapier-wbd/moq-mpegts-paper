@@ -15,12 +15,12 @@ Per-request failover is only invisible if the two origins are interchangeable: a
 
 - **H1 (interchangeable).** Two packagers that join apart cut every segment they share identically: name, duration and bytes.
 - **H2 (protection).** No failure confined to the primary origin's pathway (its packager dies or freezes; its origin refuses, hangs or becomes unreachable) leaves a hole in either receiver's output, and nor does the primary's return.
-- **H3 (bounded).** The longest a receiver waits for a new segment through any of those failures stays inside the groomer's latency.
+- **H3 (bounded).** The longest a receiver waits for a new segment through any of those failures stays inside the pacer's latency.
 - **H4 (merge).** The two receivers' legs stay identical and in phase through each failure, and the 2022-7 merge loses nothing.
 
 ## Environment
 
-T60's rig. A pathway is the segmenter (D = 2 s, six segments listed, three more kept, target duration 4 s), the guard (4 s) and T59's nginx origin, on the primary (pathway A, the group's primary) and the secondary (B), each reading its host's copy of the live feed. The guard's 4 s exceeds the longest cut interval the grid allows (D plus the feed's longest random-access spacing, 1.2 s): any less would withdraw both origins' playlists together on a long interval, since both cut at the same content. CloudFront: one distribution, `/g/*` on the origin group (A, failing over to B on 404, 500, 502, 503 or 504), one connection attempt, 1 s connection and response timeouts (the minimums), playlist cached 1 s and segments 60 s. Both receivers on the tertiary, on `/g/`, groomer `2eea651` at 26 Mb/s, latency 8 s, cap 14 s, `--align-ms 30000`.
+T60's rig. A pathway is the segmenter (D = 2 s, six segments listed, three more kept, target duration 4 s), the guard (4 s) and T59's nginx origin, on the primary (pathway A, the group's primary) and the secondary (B), each reading its host's copy of the live feed. The guard's 4 s exceeds the longest cut interval the grid allows (D plus the feed's longest random-access spacing, 1.2 s): any less would withdraw both origins' playlists together on a long interval, since both cut at the same content. CloudFront: one distribution, `/g/*` on the origin group (A, failing over to B on 404, 500, 502, 503 or 504), one connection attempt, 1 s connection and response timeouts (the minimums), playlist cached 1 s and segments 60 s. Both receivers on the tertiary, on `/g/`, pacer `2eea651` at 26 Mb/s, latency 8 s, cap 14 s, `--align-ms 30000`.
 
 ## Procedure
 
@@ -42,7 +42,7 @@ Identity across hosts is graded on the two segmenters' logs over the whole sessi
 1. **Void** unless both legs emit from 60 s to the tail and the failure landed at 120 ± 2 s.
 2. **H1:** every segment both segmenters cut in the session is identical in duration, size and hash; 0 mismatched datagrams between legs in every cell.
 3. **H2:** in every cell, each leg 0 holes and 0 lost segments, and the merged output 0 lost and 0 continuity errors to the tail.
-4. **H3:** each leg's longest wait between new segments under 8 s (the groomer's latency) in every cell; reported beside it, the failover onset (A's last `/g/` answer to B's first) and the failback (restoration to A's first `/g/` answer).
+4. **H3:** each leg's longest wait between new segments under 8 s (the pacer's latency) in every cell; reported beside it, the failover onset (A's last `/g/` answer to B's first) and the failback (restoration to A's first `/g/` answer).
 5. **H4:** |skew| < 450 ms in every cell, with its 5th–95th percentile spread under 50 ms.
 6. **Failback:** A serves `/g/` again within 60 s of its restoration.
 
@@ -62,7 +62,7 @@ The two segmenters, started 3 s apart and run through every cell, cut 2,632 segm
 
 ### The cells
 
-_Groomer `2eea651`, graded from 60 s (leg B's settling) to the tail. Skew is B's arrival less A's at equal RTP numbers, median and 5th–95th percentile. Failover onset: A's last `/g/` answer to B's first. Failback: the restoration to A's first `/g/` answer._ Every cell's legs reached the same CloudFront edge location.
+_Pacer `2eea651`, graded from 60 s (leg B's settling) to the tail. Skew is B's arrival less A's at equal RTP numbers, median and 5th–95th percentile. Failover onset: A's last `/g/` answer to B's first. Failback: the restoration to A's first `/g/` answer._ Every cell's legs reached the same CloudFront edge location.
 
 | Cell | Failure at | Failover onset | Failback | Longest wait, A / B | Skew (ms) | Mismatched; holes; merged lost, CC |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -77,11 +77,11 @@ The first runs of `seg-kill`, `seg-freeze` and `origin-down` issued their failur
 
 1. **H1 holds:** every segment the two hosts cut alike, and 0 mismatched datagrams in 3.8 million compared.
 2. **H2 holds:** in every cell, 0 holes, 0 lost or retried segments, 0 playlist failures on either leg, and the merged output 0 lost and 0 continuity errors.
-3. **H3 holds:** the longest wait for a new segment is 5.2 s, against the groomer's 8 s. Unfaulted, it is 3.5–3.7 s (the longest segment plus the playlist's second of caching). A failure the guard must detect (`seg-kill`, `seg-freeze`) added up to 1.5 s, by its 4 s threshold; a refused, hung or unreachable origin added at most 0.6 s, inside its 1 s timeout. T59's struck pathway lost 10.6–22 s.
+3. **H3 holds:** the longest wait for a new segment is 5.2 s, against the pacer's 8 s. Unfaulted, it is 3.5–3.7 s (the longest segment plus the playlist's second of caching). A failure the guard must detect (`seg-kill`, `seg-freeze`) added up to 1.5 s, by its 4 s threshold; a refused, hung or unreachable origin added at most 0.6 s, inside its 1 s timeout. T59's struck pathway lost 10.6–22 s.
 4. **H4 holds:** |skew| ≤ 233 ms in every cell, with a 5th–95th percentile spread of at most 2.3 ms over the cell, failure included.
 5. **Failback holds:** A answered `/g/` again within 6.3 s of every restoration. After a packager restart its playlist stays withdrawn until a new window is whole, so B went on answering the playlist for 11.7–13.3 s.
 
-**The skew on one path is not bounded at 50 ms.** Two cells of six exceeded a Class B receiver's window (228 and 232 ms), though both legs read one playlist from one edge. Each leg's groomer reports how much sooner than its starting point a later delivery came (`align_gain_us`). The difference between the two legs' gains matched the skew to within 32 ms in eight of the nine cells run, void runs included (in the two cells above, B gained 276–293 ms and A 47–75 ms). Each leg ties its clock to the soonest delivery in its own 30 s window, and with a playlist cached 1 s and polled every 250 ms, one window's soonest delivery can fall a quarter-second short of the path's. T60's follow-up grades the uncached playlist against this.
+**The skew on one path is not bounded at 50 ms.** Two cells of six exceeded a Class B receiver's window (228 and 232 ms), though both legs read one playlist from one edge. Each leg's pacer reports how much sooner than its starting point a later delivery came (`align_gain_us`). The difference between the two legs' gains matched the skew to within 32 ms in eight of the nine cells run, void runs included (in the two cells above, B gained 276–293 ms and A 47–75 ms). Each leg ties its clock to the soonest delivery in its own 30 s window, and with a playlist cached 1 s and polled every 250 ms, one window's soonest delivery can fall a quarter-second short of the path's. T60's follow-up grades the uncached playlist against this.
 
 ## Stock receivers behind the group (P1-aq), criteria fixed before running
 
@@ -112,7 +112,7 @@ _The environment above but for the segmenter, T76's (`--peer`: a segment cut acr
 | `block` | 120.2 s | 1.33 s | 0.36 s | 4.54 / 5.03 s | 112.9 (66.1 to 158.2) | 0; 0; 0, 0 |
 | `leg-cut` | 120.2–150.1 s | — | — | 34.85 / 3.41 s | 365.0 (342.3 to 387.3) | 0; A 32.8 s, B 0; 0, 0 |
 
-No fetcher exited during any failure: each `tsp` ran from its start to the cell's stop. At the stop, leg B's `tsp` ignored SIGTERM in `seg-kill`, `seg-freeze` and `block`, and its supervisor, waiting on it, held the groomer's input open; both stayed alive, sending nothing, until killed after the last cell. Leg B's count in every capture (626,804–631,401 datagrams over 254–256 s) shows that none reached a later cell's recorder. The supervisor now kills its fetcher 3 s after SIGTERM.
+No fetcher exited during any failure: each `tsp` ran from its start to the cell's stop. At the stop, leg B's `tsp` ignored SIGTERM in `seg-kill`, `seg-freeze` and `block`, and its supervisor, waiting on it, held the pacer's input open; both stayed alive, sending nothing, until killed after the last cell. Leg B's count in every capture (626,804–631,401 datagrams over 254–256 s) shows that none reached a later cell's recorder. The supervisor now kills its fetcher 3 s after SIGTERM.
 
 **Identity across hosts.** The two segmenters cut 1,228 segments in common over the matrix: 1,226 identical in duration, size and hash, written within 3 ms of each other. The other two are the primary's first after `seg-freeze`'s thaw, cut across its own freeze: 28.8 s and 1.0 MB against the secondary's 1.2 s and 3.8 MB, then 1.2 s against 2.4 s. Its peer check found both different and deleted them, and no receiver got either. The 33 segments only the secondary holds are those the primary missed while killed or frozen.
 

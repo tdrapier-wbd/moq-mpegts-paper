@@ -121,7 +121,7 @@ The offset tools (`--scan`, `--window`) re-run the exact models, except that `--
 | Group | Files | Cut at |
 | --- | --- | --- |
 | Source clip | `<source>.ts`: H.264 High@4.0 with NAL HRD 8.798 Mb/s, MPEG-1 L2, AC-3, DVB teletext, three SCTE-35 PIDs | first PCR |
-| T44 arms | `ffa`, `m11` (300 s and 90 s), `main`, `main-sc`, `t21a`, `srt` (300 s and 90 s), `srt-sc`, `udp`, `udp-sc`; `main-raw` as exported and as groomed | 20 s |
+| T44 arms | `ffa`, `m11` (300 s and 90 s), `main`, `main-sc`, `t21a`, `srt` (300 s and 90 s), `srt-sc`, `udp`, `udp-sc`; `main-raw` as exported and as paced | 20 s |
 | T44 oracle outputs | source at packet, frame and PES availability; `ffa`, `m11`, `main` at packet availability | 20 s |
 | T45 arms | `smoke`, `ffa-L100`, `ffa-L100-w60`, `ffa-L600-w60`, `udp-sc-c100`, `srt-sc-b120-c100` | 5 s |
 | Upstream controls | Kyrion as captured; restamped at 1×, 0.7×, 4× and 15× by `tstd-controls.py`'s own builder (TSDuck `pcradjust`) | first PCR |
@@ -270,8 +270,8 @@ Source and egress access units matched by PTS, compared byte for byte and NAL un
 | --- | --- | --- | --- | --- | --- |
 | `ffa-L600-w60` | media-aware lane `ffa5b81b`, live re-multiplexer | 9,650 | 9,070 | 580 | parameter sets only: 332 lose a repeated PPS ([AUD, PPS, SEI, slice] → [AUD, SEI, slice]); 248 carry SPS/PPS moved ahead of the AUD. AUD, SEI and every slice are byte-identical in all 9,650 |
 | `smoke` | re-multiplexer on the source clip | 1,456 | 1,455 | 1 | the capture's last access unit, truncated |
-| `udp-sc-c100` | UDP, stream-clocked groomer | 10,781 | 10,773 | 8 | bytes missing: the capture's first seven access units (start-up) and its last |
-| `srt-sc-b120-c100` | SRT, stream-clocked groomer | 10,637 | 10,634 | 3 | the capture's first and last, and the one hit by the 22-packet loss at 139.7 s |
+| `udp-sc-c100` | UDP, stream-clocked pacer | 10,781 | 10,773 | 8 | bytes missing: the capture's first seven access units (start-up) and its last |
+| `srt-sc-b120-c100` | SRT, stream-clocked pacer | 10,637 | 10,634 | 3 | the capture's first and last, and the one hit by the 22-packet loss at 139.7 s |
 
 **The ES bytes do not survive the media-aware lane unchanged; the slices do.** The key is therefore on the slice NAL units. The source clip's 19,629 pictures have 19,629 distinct slice digests, so its alignment for repeated content is exercised only by the self-test.
 
@@ -304,7 +304,7 @@ The content key reports the egress-to-source PTS offset it finds:
 
 |  |  |
 | --- | --- |
-| Capture | T44 `main-300s`: upstream `main` `9157692f6`, `moq export ts` into the arrival-clocked groomer `5ab84cd` at a 1,000 ms cushion, 2,500 ms cap, 11 Mb/s carrier, subscriber `--max-latency 500ms` |
+| Capture | T44 `main-300s`: upstream `main` `9157692f6`, `moq export ts` into the arrival-clocked pacer `5ab84cd` at a 1,000 ms cushion, 2,500 ms cap, 11 Mb/s carrier, subscriber `--max-latency 500ms` |
 | Measurement | P1, loopback, one clip, 300 s capture, 10 s settle |
 | PTS key | exits 1: no egress PTS within ±4 ticks of a source PTS (egress PTS = source PTS − 2,305,461,943 ticks, a rebase) |
 | Content key | 10,864 of 10,865 egress pictures matched, all at that one offset; 10,538 timed over 287.1 s |

@@ -2,21 +2,21 @@
 
 **State: complete, conclusive on the questions asked.**
 
-- **The media-aware lane's TS-out, as built, is not a conformant transport stream.** Neither of the groomer's clock modes makes it one, and neither does `main`'s own padding to the mux rate. On the configuration that passes TR 101 290 P1/P2 on the wire ([T19](test-19-pcr-grid-verification.md) measurement 11), on the soak's ([T21](test-21-permanence-soak.md)), on `ffa5b81b` and on current upstream `main` (`9157692f6`), the transport buffers of the video, both audio PIDs and the PSI overflow throughout, and **no constant PCR offset makes the audio decoder buffers legal in any 2 s window**.
-- **A stage that re-multiplexes can make it one.** An offline T-STD scheduler that keeps each PID's packets in order rebuilds a multiplex that passes every buffer over the whole capture. It needs only the time each packet became available, and at no point the source's layout. It did so from the lane's own groomed egress on three builds, and from frame-granular source data at 25 ms of added decoder delay.
-- **Byte-faithful carriage keeps the T-STD through the groomer's stream clock**, over SRT and over UDP: every buffer passes over the whole capture, on exactly the source's joint legal interval, with the source's nulls stripped and re-spread. It does not keep it through the default arrival clock, which lets the PCR-to-PTS offset drift and fails the decoder buffers over a whole capture.
+- **The media-aware lane's TS-out, as built, is not a conformant transport stream.** Neither of the pacer's clock modes makes it one, and neither does `main`'s own padding to the mux rate. On the configuration that passes TR 101 290 P1/P2 on the wire ([T19](test-19-pcr-grid-verification.md) measurement 11), on the soak's ([T21](test-21-permanence-soak.md)), on `ffa5b81b` and on current upstream `main` (`9157692f6`), the transport buffers of the video, both audio PIDs and the PSI overflow throughout, and **no constant PCR offset makes the audio decoder buffers legal in any 2 s window**.
+- **A stage that re-multiplexes can make it one.** An offline T-STD scheduler that keeps each PID's packets in order rebuilds a multiplex that passes every buffer over the whole capture. It needs only the time each packet became available, and at no point the source's layout. It did so from the lane's own paced egress on three builds, and from frame-granular source data at 25 ms of added decoder delay.
+- **Byte-faithful carriage keeps the T-STD through the pacer's stream clock**, over SRT and over UDP: every buffer passes over the whole capture, on exactly the source's joint legal interval, with the source's nulls stripped and re-spread. It does not keep it through the default arrival clock, which lets the PCR-to-PTS offset drift and fails the decoder buffers over a whole capture.
 
-Measured at P1, wire domain, loopback, one clip, three exporter builds, two groomer builds, both groomer clock modes. The exporter's own padded output and the re-multiplexer's outputs are file domain. Hardware: not run. The T-STD figures are from [`ts-tstd.py`](scripts/ts-tstd.py) as corrected in [T46](test-46-tstd-check-cross-validation.md); that correction moved no verdict on any capture graded here, only the counts and margins below.
+Measured at P1, wire domain, loopback, one clip, three exporter builds, two pacer builds, both pacer clock modes. The exporter's own padded output and the re-multiplexer's outputs are file domain. Hardware: not run. The T-STD figures are from [`ts-tstd.py`](scripts/ts-tstd.py) as corrected in [T46](test-46-tstd-check-cross-validation.md); that correction moved no verdict on any capture graded here, only the counts and margins below.
 
 TR 101 290 P1/P2 grades the PCR, continuity and tables. It does not model the decoder's buffers, and the campaign's conformance results — T19's 0 of 20,193 intervals above 40 ms, T21's day — are P1/P2 results. ISO/IEC 13818-1 defines a conformant transport stream as one a T-STD can decode without overflow or underflow, so a stream can pass every P1/P2 check and still not be one. The MSFTS co-author's review put the point directly: a transmux subscriber becomes the multiplexer and has to schedule every packet against the T-STD, a job the source multiplexer already did and the lane discards. This test grades it.
 
 ## Objective
 
-1. **Is the media-aware lane's groomed TS-out T-STD-conformant** on the configurations whose P1/P2 results the paper quotes?
-2. **Whose is any failure** — the lane's packet order, or the groomer's PCR regeneration?
-3. **Could the existing groomer repair it?** It paces and re-stamps PCR but never reorders packets, so the only correction open to it is a constant PCR-to-PTS offset.
+1. **Is the media-aware lane's paced TS-out T-STD-conformant** on the configurations whose P1/P2 results the paper quotes?
+2. **Whose is any failure** — the lane's packet order, or the pacer's PCR regeneration?
+3. **Could the existing pacer repair it?** It paces and re-stamps PCR but never reorders packets, so the only correction open to it is a constant PCR-to-PTS offset.
 4. **Could a stage that reorders repair it, and at what decoder delay?**
-5. **Does byte-faithful carriage keep the T-STD through the groomer over a whole capture**, with the source's nulls removed?
+5. **Does byte-faithful carriage keep the T-STD through the pacer over a whole capture**, with the source's nulls removed?
 
 Questions 4 and 5 were added after the first grading. Question 4 came from the MSFTS review's second point, and question 5 from the whole-capture scan failing the SRT control.
 
@@ -35,13 +35,13 @@ Questions 4 and 5 were added after the first grading. Question 4 came from the M
 | TBsys, PAT/PMT/CAT | 512 B | 1 Mb/s | 13818-1 |
 | SCTE-35 and SI PIDs | 512 B | 1 Mb/s | **assumed** — no normative T-STD; reported separately, not graded |
 
-Decoder residence is bounded at 1 s for audio and teletext, and 10 s for AVC (2.4.2.7). The source's video HRD rate sits between its mux rate (9,945,951 b/s) and the groomer's 11 Mb/s carrier, which matters below.
+Decoder residence is bounded at 1 s for audio and teletext, and 10 s for AVC (2.4.2.7). The source's video HRD rate sits between its mux rate (9,945,951 b/s) and the pacer's 11 Mb/s carrier, which matters below.
 
 Three tests of whether an offset could repair the decoder buffers:
 
 - **Nominal**: the stream's own PCR.
 - **Whole-capture offset scan** (`--offset-scan`): the constant offsets at which each buffer, and all at once, are legal. One PCR serves every PID, so only the joint set is a repair.
-- **Windowed** (`--window 2`): the exact legal interval per 2 s window. A groomer that regenerates PCR lets the PCR-to-PTS offset drift slowly, and then no single offset serves a whole capture even when the lane delivered every unit in time; over 2 s that drift is negligible, so **a window with no legal offset is a failure of the packet timing itself**. The _deficit_ is how far apart the constraints are.
+- **Windowed** (`--window 2`): the exact legal interval per 2 s window. A pacer that regenerates PCR lets the PCR-to-PTS offset drift slowly, and then no single offset serves a whole capture even when the lane delivered every unit in time; over 2 s that drift is negligible, so **a window with no legal offset is a failure of the packet timing itself**. The _deficit_ is how far apart the constraints are.
 
 Transport-buffer overflow does not depend on the offset at all: it is set by how many packets of one PID arrive back to back at the carrier rate.
 
@@ -57,7 +57,7 @@ Availability is the only thing a rebuild at the subscriber is allowed to know ab
 
 | Mode | A packet may be sent once | Stands for |
 | --- | --- | --- |
-| `packet` | it has arrived in the input | a byte-faithful input; or, on a lane capture, a regroomer behind the lane |
+| `packet` | it has arrived in the input | a byte-faithful input; or, on a lane capture, a re-pacer behind the lane |
 | `frame` | every audio frame it carries a byte of has arrived; video and teletext as `pes` | a lane that publishes each access unit as one object |
 | `pes` | its whole PES has arrived: `PES_packet_length` met, else the next PES start on its PID | a lane that publishes each PES as one object |
 
@@ -69,30 +69,30 @@ Loopback on one laptop, the [T18](test-18-delivery-latency.md) rig [`t18-arm.sh`
 
 Neither original capture exists — T21 stored nothing by design and T19's egress was not retained — so both configurations were re-captured:
 
-| Arm | Exporter build | Groomer | Stands for |
+| Arm | Exporter build | Pacer | Stands for |
 | --- | --- | --- | --- |
 | **m11** | `f8236680b` (carries #3351) | `64595f6` | T19 measurement 11 exactly |
-| **t21** | `f8236680b` | `5ab84cd` | T21's chain. T21 ran `222cc72`, also carrying #3351, cross-host on a continuous source for a day; this is the same lane and groomer on loopback for 300 s |
+| **t21** | `f8236680b` | `5ab84cd` | T21's chain. T21 ran `222cc72`, also carrying #3351, cross-host on a continuous source for a day; this is the same lane and pacer on loopback for 300 s |
 | **ffa** | `ffa5b81b` — build under test | `5ab84cd` | the current build |
-| **srt** | none: `tsp` SRT caller → listener, 1,000 ms latency | `64595f6` | attribution — the same groomer fed a byte-faithful transport |
+| **srt** | none: `tsp` SRT caller → listener, 1,000 ms latency | `64595f6` | attribution — the same pacer fed a byte-faithful transport |
 | **main** | `9157692f6` — current upstream `main` | `5ab84cd` | whether the result still holds on today's code |
-| **main-sc** | `9157692f6` | `5ab84cd --stream-clock` | whether the groomer's other clock mode repairs the lane |
-| **main-raw** | `9157692f6`, its default null padding to the catalog's mux rate | none: the exporter's own bytes, saved before the groomer (`RECEIVE_SAVE`), 180 s | whether the exporter's padding carries a T-STD schedule by itself. **File domain**: the bytes as written, timed by their own PCR, as a sender that replays them against it would place them |
+| **main-sc** | `9157692f6` | `5ab84cd --stream-clock` | whether the pacer's other clock mode repairs the lane |
+| **main-raw** | `9157692f6`, its default null padding to the catalog's mux rate | none: the exporter's own bytes, saved before the pacer (`RECEIVE_SAVE`), 180 s | whether the exporter's padding carries a T-STD schedule by itself. **File domain**: the bytes as written, timed by their own PCR, as a sender that replays them against it would place them |
 | **udp** | none: `tsp` UDP, the file's own bytes | `5ab84cd` | the byte-faithful control with no reliable transport |
 | **udp-sc** | none: `tsp` UDP | `5ab84cd --stream-clock` | question 5: byte-faithful, nulls stripped and re-placed on the source's PCR |
 | **srt-sc** | none: `tsp` SRT, 1,000 ms latency | `5ab84cd --stream-clock` | question 5 over a reliable transport |
 
 `--stream-clock` places each packet on the output slot its source PCR implies at the locked rate, spreading each PCR interval's packets evenly between its PCR slots. It is the mode the 1+1 design uses. The default arrival clock releases content at a media rate recovered against its own emit clock, closed-loop on buffer occupancy, and byte-locks PCR from the first PCR it sees. Both strip the input's nulls and stuff their own.
 
-The m11, t21 and ffa arms each reproduced its P1/P2 result on the wire: 0 continuity errors, 0 PCR intervals above 40 ms (0/20,193, 0/20,297, 0/20,203; worst 30.1 ms), 0 PCRs outside ±481 ns; median delivery latency 2,443, 2,469 and 3,092 ms. The m11 arm's groomer recorded 3 underruns where T19's recorded 0. The SRT arm recorded 4 continuity errors and 0 of 11,803 intervals above 40 ms.
+The m11, t21 and ffa arms each reproduced its P1/P2 result on the wire: 0 continuity errors, 0 PCR intervals above 40 ms (0/20,193, 0/20,297, 0/20,203; worst 30.1 ms), 0 PCRs outside ±481 ns; median delivery latency 2,443, 2,469 and 3,092 ms. The m11 arm's pacer recorded 3 underruns where T19's recorded 0. The SRT arm recorded 4 continuity errors and 0 of 11,803 intervals above 40 ms.
 
 The main arm had 0 continuity errors and one PCR interval above 40 ms in 20,318: 210.9 ms, 0.93 s after the first PCR, inside the ungraded start-up and beside the capture's one PCR discontinuity. One PCR in 20,317 was outside ±481 ns. The main-sc arm had 0, 0 of 19,098 and 0. **`main` rebases the PTS onto its own clock**, so the rig's PTS-keyed latency report finds no matching frame and exits 1, and neither main arm has a delivery latency. The byte-faithful arms had 3 (udp, loopback input drops), 0 and 0 continuity errors, and none had a PCR interval above 40 ms.
 
 ## Pass criteria, fixed before the runs
 
 - **Conformant**: zero overflows in every normative transport buffer, and zero underflows, overflows and residence violations in every decoder buffer, over the graded window (the grader's exit status).
-- **Attributable to the lane**: a buffer that fails on a MoQ arm and passes on the SRT arm through the same groomer.
-- **Repairable by the existing groomer**: a constant offset exists at which every decoder buffer is legal at once, and no transport buffer overflows.
+- **Attributable to the lane**: a buffer that fails on a MoQ arm and passes on the SRT arm through the same pacer.
+- **Repairable by the existing pacer**: a constant offset exists at which every decoder buffer is legal at once, and no transport buffer overflows.
 
 The windowed test was added after the first grading, when the whole-capture scan found no legal offset on the SRT arm either (below). It is a diagnostic that separates PCR drift from packet timing; it was not a criterion fixed in advance.
 
@@ -112,7 +112,7 @@ For questions 4 and 5, fixed before those runs: an output **passes** when the gr
 
 The assumed SCTE-35 and SI buffers peak at 171 B on every arm.
 
-**Stream clocking makes the lane's video worse, not better.** It places each packet on the slot the _exporter's_ PCR implies, and the exporter's PCR positions do not track their values. The groomer reported 1,726 overrun PCR intervals and a displacement of 3,655 packets (499 ms at rate), and it spills each overrun into the following slots at the full carrier rate.
+**Stream clocking makes the lane's video worse, not better.** It places each packet on the slot the _exporter's_ PCR implies, and the exporter's PCR positions do not track their values. The pacer reported 1,726 overrun PCR intervals and a displacement of 3,655 packets (499 ms at rate), and it spills each overrun into the following slots at the full carrier rate.
 
 ### Decoder buffers — nominal PCR, and the whole-capture offset scan
 
@@ -123,7 +123,7 @@ The assumed SCTE-35 and SI buffers peak at 171 B on every arm.
 | B AC-3: underflows · overflow arrivals | 3,694 of 8,613 · 1,854 | 32 of 8,622 · 24,176 | 3,553 of 8,613 · 2,188 | 8,661 of 8,661 · 0 | 610 of 8,642 · 11,591 | 0 · 35,228 overflow arrivals, residence over 1 s in every unit |
 | Legal offsets, −3 s to +3 s in 50 ms steps | EB [+900, +3,000]; audio none; **joint none** | EB [+600, +3,000]; audio none; **joint none** | EB [+900, +3,000]; audio none; **joint none** | EB [+1,350, +3,000]; audio none; **joint none** | EB [+800, +3,000]; audio none; **joint none** | **none for any buffer** |
 
-On the nominal PCR every arm fails, SRT included. The arrival-clocked groomer's byte-locked PCR regeneration sets the PCR-to-PTS offset from its own buffer occupancy, so the offset is wrong on every arm and drifts on the SRT one (margins spread over 0.9 s). The whole-capture scan therefore cannot attribute the decoder buffers. The windowed test can, and so can a stream-clocked control (below).
+On the nominal PCR every arm fails, SRT included. The arrival-clocked pacer's byte-locked PCR regeneration sets the PCR-to-PTS offset from its own buffer occupancy, so the offset is wrong on every arm and drifts on the SRT one (margins spread over 0.9 s). The whole-capture scan therefore cannot attribute the decoder buffers. The windowed test can, and so can a stream-clocked control (below).
 
 ### Decoder buffers — 2 s windows with a legal constant offset
 
@@ -134,7 +134,7 @@ On the nominal PCR every arm fails, SRT included. The arrival-clocked groomer's 
 | B AC-3 | 299 of 299 | **0 of 137** · 175.8, 561.5 | **0 of 138** · 183.4, 560.3 | **0 of 137** · 179.7, 469.2 | **0 of 139** · 193.8, 561.9 | **0 of 138** · 173.9, 481.3 | 133 of 133 |
 | All at once | 299 of 299 | **0 of 137** · 686.8, 970.3 | **0 of 138** · 684.6, 969.4 | **0 of 137** · 685.9, 929.9 | **0 of 139** · 679.5, 968.2 | **0 of 138** · 682.0, 946.4 | 133 of 133 |
 
-### `main`'s own padded export, before the groomer
+### `main`'s own padded export, before the pacer
 
 File domain, 157 s graded. The export holds the mux rate on average (9,957,934 b/s, against the source's 9,945,951 b/s), but not inside a PCR interval. The median interval carries 0.04 times the packets its PCR values imply at that rate, and 12 % of intervals carry more than the video's 10.56 Mb/s leak, up to 17.5 times the rate. So the padding does not place the lane's packets on the schedule their PCR describes.
 
@@ -146,7 +146,7 @@ File domain, 157 s graded. The export holds the mux rate on average (9,957,934 b
 | 2 s windows legal | EB 78 of 78; MP2 78 of 78; AC-3 **0 of 78** · deficit median 21.5 ms, max 40.8; all at once **0 of 78** · 701.1, 918.4 |
 | P1/P2 of the same bytes | 0 continuity errors; 0 of 7,109 PCR intervals above 40 ms, max 25.0 ms; **7,109 of 7,110 PCRs outside ±481 ns**, worst 17.5 ms |
 
-### Byte-faithful carriage through the groomer's two clock modes
+### Byte-faithful carriage through the pacer's two clock modes
 
 |  | udp, arrival clock | srt, arrival clock (above) | udp-sc, stream clock | srt-sc, stream clock |
 | --- | --- | --- | --- | --- |
@@ -182,18 +182,18 @@ The FFmpeg-muxed `testloop_clean` was rejected as a second source: it overflows 
 
 **Established** (P1, wire, loopback, one clip, the builds named; the rebuild offline, file domain):
 
-- **The media-aware lane's groomed TS-out fails the T-STD on every build tested.** That is three exporter builds in four configurations, up to current upstream `main`, and it includes the configuration that passes P1/P2 and the soak's. It fails in the transport buffers of video, both audio PIDs and the PSI, and in both audio decoder buffers.
-- **The failure is the lane's, not the groomer's.** Byte-faithful carriage through the same groomer passes every transport buffer, and every decoder buffer in every window, in either clock mode. Through the stream clock it passes everything over the whole capture. The groomer does not reorder packets, so the transport-buffer overflows are the order in which the exporter wrote the packets.
-- **Neither of the groomer's clock modes can repair it.** No offset touches a transport buffer. In the decoder buffers the video is repairable: legal in every window, and over the whole capture from +600 ms to +3 s of added delay depending on the build (the scan's upper bound, not a tight ceiling). **The audio is not repairable at any offset, in any window.** The audio's own timing spreads a median 0.13–0.19 s wider than its buffer holds, and the offsets legal for video and for audio lie a median 0.68–0.69 s apart. One PCR serves both. Stream clocking places packets by an exporter PCR that does not track its own positions, and it raises video transport-buffer overflow to 95.9 % of packets, with **five** 1 s stretches where the video TB does not empty.
-- **`main`'s padding to the mux rate does not repair it either** (file domain). The exporter's own padded bytes, before any groomer, overflow 99.3 % of video transport-buffer packets. They have no joint legal offset in any window, and 7,109 of 7,110 PCRs fall outside ±481 ns: the padding holds the rate on average but not per PCR interval.
-- **A stage that re-multiplexes does repair it.** Kept in each PID's order and rescheduled against the T-STD, the lane's own groomed egress becomes a multiplex that passes every buffer over the whole capture and decodes on its own PCR. This holds on all three builds rebuilt. The delay needed against the egress's PCR, 0.9 s and on `main` 1.4 s, is the offset the lane's video needed anyway. Fed frame-granular source data, which a lane publishing each access unit as one object could deliver, the rebuild needs 25 ms; fed PES-granular data, 250 ms.
+- **The media-aware lane's paced TS-out fails the T-STD on every build tested.** That is three exporter builds in four configurations, up to current upstream `main`, and it includes the configuration that passes P1/P2 and the soak's. It fails in the transport buffers of video, both audio PIDs and the PSI, and in both audio decoder buffers.
+- **The failure is the lane's, not the pacer's.** Byte-faithful carriage through the same pacer passes every transport buffer, and every decoder buffer in every window, in either clock mode. Through the stream clock it passes everything over the whole capture. The pacer does not reorder packets, so the transport-buffer overflows are the order in which the exporter wrote the packets.
+- **Neither of the pacer's clock modes can repair it.** No offset touches a transport buffer. In the decoder buffers the video is repairable: legal in every window, and over the whole capture from +600 ms to +3 s of added delay depending on the build (the scan's upper bound, not a tight ceiling). **The audio is not repairable at any offset, in any window.** The audio's own timing spreads a median 0.13–0.19 s wider than its buffer holds, and the offsets legal for video and for audio lie a median 0.68–0.69 s apart. One PCR serves both. Stream clocking places packets by an exporter PCR that does not track its own positions, and it raises video transport-buffer overflow to 95.9 % of packets, with **five** 1 s stretches where the video TB does not empty.
+- **`main`'s padding to the mux rate does not repair it either** (file domain). The exporter's own padded bytes, before any pacer, overflow 99.3 % of video transport-buffer packets. They have no joint legal offset in any window, and 7,109 of 7,110 PCRs fall outside ±481 ns: the padding holds the rate on average but not per PCR interval.
+- **A stage that re-multiplexes does repair it.** Kept in each PID's order and rescheduled against the T-STD, the lane's own paced egress becomes a multiplex that passes every buffer over the whole capture and decodes on its own PCR. This holds on all three builds rebuilt. The delay needed against the egress's PCR, 0.9 s and on `main` 1.4 s, is the offset the lane's video needed anyway. Fed frame-granular source data, which a lane publishing each access unit as one object could deliver, the rebuild needs 25 ms; fed PES-granular data, 250 ms.
 - **Byte-faithful carriage keeps the T-STD through the stream clock, without the source's nulls.** The test ran over UDP and over SRT. Every null was stripped and each PCR interval's packets re-spread evenly, and every buffer passes over the whole capture on exactly the source's joint legal interval. Through the arrival clock the same bytes fail every decoder buffer over the whole capture, because the start-up lead sets the PCR-to-PTS offset and the offset then drifts.
 
 **Likely** (inferred from the peaks; the exporter's code was not read for this test). The exporter writes each track's pending units contiguously rather than interleaving the PIDs. An MP2 peak of 6,802 B is about 36 packets back to back, about twelve 576 B frames or 290 ms of audio released at once, where the source spaces every audio packet on its own. At a 2 Mb/s leak, **more than three back-to-back packets of an audio PID overflow at any carrier rate**. The video transport buffer is the rate-dependent case: its 10.56 Mb/s leak is below the 11 Mb/s carrier, so a contiguous frame overflows after 67 packets. At a carrier below the HRD rate the video transport buffer could not overflow, however the packets were ordered. [T45](test-45-live-tstd-remux.md) read the exporter's code at `ffa5b81b`: it writes one whole frame at a time, from whichever track's pending frame has the smallest PTS, which is this mechanism on that build.
 
 **Likely, and inferred from the mechanism.** A frame-granular rebuild costs about one audio frame on this source because the source sends its audio just in time and pre-loads its video by at least 278 ms. A source that sends its video just in time would make the video the binding stream, at about one frame's transfer time. A low-delay contribution encoder is that kind of source. Not measured: the one broadcast-muxed clip here is not that source.
 
-**What is structural and what is not.** The lane discards the source multiplexer's packet schedule. The interleave of PIDs and the pre-loading of the decoder buffers live in the byte positions, and neither is in the decode timestamps the lane carries. Rebuilding a conformant stream is therefore a multiplexing job: schedule every PID's packets against the T-STD from the timestamps and sizes the lane does carry. **That job is feasible, and the oracle does it on the lane's own output.** Two things are structural. The job has to be done somewhere that reorders, at the subscriber or at an edge stage. And it yields _a_ conformant multiplex, not the source's. None of the builds does it, and the pacing groomer cannot by design. What the oracle does not establish:
+**What is structural and what is not.** The lane discards the source multiplexer's packet schedule. The interleave of PIDs and the pre-loading of the decoder buffers live in the byte positions, and neither is in the decode timestamps the lane carries. Rebuilding a conformant stream is therefore a multiplexing job: schedule every PID's packets against the T-STD from the timestamps and sizes the lane does carry. **That job is feasible, and the oracle does it on the lane's own output.** Two things are structural. The job has to be done somewhere that reorders, at the subscriber or at an edge stage. And it yields _a_ conformant multiplex, not the source's. None of the builds does it, and the pacer cannot by design. What the oracle does not establish:
 
 - **A real-time implementation.**
 - **Clock recovery.** The oracle took its input's PCR as its clock. A subscriber on the lane has no source PCR, and `main` also rebases the PTS, so it must lock its output clock to the source's from the timestamps alone.
@@ -207,11 +207,11 @@ The FFmpeg-muxed `testloop_clean` was rejected as a second source: it overflows 
 ## Limits
 
 - **One clip, one carrier rate, loopback.** The audio result does not depend on the carrier; the video transport-buffer result does (above). No WAN path, so no network jitter is added to the lane's own.
-- **300 s, not T21's day.** The t21 arm is T21's lane, #3351-bearing exporter and groomer, not its exact build, host or continuous source. The three MoQ arms agree to within 0.5 percentage points on every transport buffer, so a longer run is not expected to move the result; that is inferred, not measured.
+- **300 s, not T21's day.** The t21 arm is T21's lane, #3351-bearing exporter and pacer, not its exact build, host or continuous source. The three MoQ arms agree to within 0.5 percentage points on every transport buffer, so a longer run is not expected to move the result; that is inferred, not measured.
 - **The SCTE-35 and SI buffers are assumed**, and pass on every arm.
 - **The offset tools merge MB + EB.** `--offset-scan` and `--window` grade AVC as one buffer of MBS + EBS, where the nominal grade runs the leak model, so a scan or window verdict on video near MB's limit is approximate ([T46](test-46-tstd-check-cross-validation.md)). The highest MB peak here is 2,086,001 of 2,666,304 B, on the arrival-clocked UDP arm.
 - **The segmented-HTTP lane was not graded.** It carries the source's own packet order, so it should behave as the SRT arm does. That is reasoned, not measured.
-- **The rebuild is offline and its output is a file.** Availability is the input's PCR-interpolated time, which on the egress captures is the groomer's regenerated clock. A constant transport latency therefore cancels, and path jitter beyond what the capture holds is not modelled. `frame` mode approximates per-frame objects on the source's own packetization, where a lane would repacketize. The scheduler is greedy, so an optimal one may need less delay.
+- **The rebuild is offline and its output is a file.** Availability is the input's PCR-interpolated time, which on the egress captures is the pacer's regenerated clock. A constant transport latency therefore cancels, and path jitter beyond what the capture holds is not modelled. `frame` mode approximates per-frame objects on the source's own packetization, where a lane would repacketize. The scheduler is greedy, so an optimal one may need less delay.
 - **`main`'s egress was cut at its one PCR discontinuity**, 0.71 s in, for the rebuild, because the oracle refuses a second timeline.
 - **The main arms have no delivery latency.** `main` rebases the PTS, and the rig's latency report keys on it. Latency on `main` needs a tap that keys on content.
 
@@ -225,10 +225,10 @@ RELAY_TOML=<relay.toml for the build> MOQ=<build>/moq RELAY=<build>/moq-relay MO
   RATE=11000000 CAP=2500 PACER=<pacer>/mpegts-pacer \
   bash lab/scripts/t18-arm.sh <source>.ts <out> 300 moq 1000
 RATE=11000000 CAP=2500 PACER=<pacer>/mpegts-pacer bash lab/scripts/t18-arm.sh <source>.ts <out> 300 srt 1000
-# the stream-clocked arms: the same commands with the groomer's other clock mode
+# the stream-clocked arms: the same commands with the pacer's other clock mode
 PACER_EXTRA=--stream-clock RATE=11000000 CAP=2500 PACER=<pacer>/mpegts-pacer \
   bash lab/scripts/t18-arm.sh <source>.ts <out> 300 udp 1000
-# main-raw: any MoQ arm, keeping the exporter's own bytes before the groomer
+# main-raw: any MoQ arm, keeping the exporter's own bytes before the pacer
 RECEIVE_SAVE=<out>/export-raw.ts <the MoQ arm's environment> bash lab/scripts/t18-arm.sh <source>.ts <out> 180 moq 1000
 python3 lab/scripts/ts-tstd.py <out>/<moq|srt|udp>-c1000-egress.ts --skip 20 --window 2 \
   --offset-scan -3000,3000,50 --json <out>/tstd.json
@@ -247,5 +247,5 @@ A capture with a PCR discontinuity is cut after it first, for example with `tail
 
 ## Corrections
 
-- **The approximate `tstd` flag on the media-aware lane was attributed to the source content.** [T2](test-2-media-aware-transparency.md) read the harness's fixed-leak flag as "a property of the input content". Calibrated, the source passes every buffer on its own PCR. The overflows belong to the lane's packet order. Rule ([method notes](method-notes.md#6-claims-and-their-scope)): a buffer-model flag is attributed only with a calibrated model, the source graded as the control, and a transparent transport through the same groomer.
-- **The SRT control was reported as passing every buffer.** It passes every transport buffer and every decoder buffer in every 2 s window. Over the whole capture, the arrival-clocked groomer's PCR fails its decoder buffers at every offset, as it fails the lane's. The overstatement had reached the paper, where it has been corrected. Rule ([method notes](method-notes.md#1-controls)): an arrival-clocked control attributes the transport buffers only. A whole-capture decoder grade needs a stream-clocked control.
+- **The approximate `tstd` flag on the media-aware lane was attributed to the source content.** [T2](test-2-media-aware-transparency.md) read the harness's fixed-leak flag as "a property of the input content". Calibrated, the source passes every buffer on its own PCR. The overflows belong to the lane's packet order. Rule ([method notes](method-notes.md#6-claims-and-their-scope)): a buffer-model flag is attributed only with a calibrated model, the source graded as the control, and a transparent transport through the same pacer.
+- **The SRT control was reported as passing every buffer.** It passes every transport buffer and every decoder buffer in every 2 s window. Over the whole capture, the arrival-clocked pacer's PCR fails its decoder buffers at every offset, as it fails the lane's. The overstatement had reached the paper, where it has been corrected. Rule ([method notes](method-notes.md#1-controls)): an arrival-clocked control attributes the transport buffers only. A whole-capture decoder grade needs a stream-clocked control.

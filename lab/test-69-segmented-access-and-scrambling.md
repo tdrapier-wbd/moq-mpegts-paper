@@ -33,7 +33,7 @@ R7 on the segmented lane rested on a derivation: where the CDN authorises every 
 4. **A revoked viewer.** `t69-cat-recv.py` running when its token is revoked: what it hands on after the write returns.
 5. **Expiry.** A token expiring 30 s after issue, probed at 100 ms through its expiry.
 
-**Part S.** `t69-scrambled-hls.sh` builds and checks the stimulus (T66's criterion 1), then runs each packager variant for 130 s with the receiver's verbatim output and the descrambled, groomed output captured together.
+**Part S.** `t69-scrambled-hls.sh` builds and checks the stimulus (T66's criterion 1), then runs each packager variant for 130 s with the receiver's verbatim output and the descrambled, paced output captured together.
 
 ## Pass criteria, fixed before the first run
 

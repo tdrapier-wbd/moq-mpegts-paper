@@ -1,4 +1,4 @@
-# Test 66 — A scrambled multiplex through the passthrough lane, the groomer and a descrambling receiver
+# Test 66 — A scrambled multiplex through the passthrough lane, the pacer and a descrambling receiver
 
 **State: run twice; the second run holds every criterion, the first failed C on the rig's own start-up buffering.**
 
@@ -6,7 +6,7 @@ Part of [P1-al](planned-experiments.md#p1--establishes-where-one-architecture-is
 
 ## Objective
 
-Does a DVB-CISSA-scrambled multiplex, with an ECM PID referenced from the PMT and an EMM PID from the CAT as BISS-CA carries them, cross `moq-dev`'s passthrough lane and our groomer byte for byte, and can the receiver descramble it before an IRD that has no BISS-CA?
+Does a DVB-CISSA-scrambled multiplex, with an ECM PID referenced from the PMT and an EMM PID from the CAT as BISS-CA carries them, cross `moq-dev`'s passthrough lane and our pacer byte for byte, and can the receiver descramble it before an IRD that has no BISS-CA?
 
 **Falsifies:** [Control](../docs/control-plane.md) §7.3's premise that a route which must deliver a feed still scrambled is served by byte-faithful carriage and needs nothing else, if that carriage alters a scrambled byte or drops a conditional-access PID; and the prediction, from the source, that the media-aware lane cannot carry one. The answer decides whether BISS-CA asks anything of the lane, and whether the soft receiver can terminate it for an affiliate whose IRD lacks it.
 
@@ -59,7 +59,7 @@ The table is the second run. The first differed only in C, which failed criterio
 
 ## Conclusions
 
-1. **BISS-CA asks nothing of the passthrough lane or of the groomer.** Scrambling leaves the adaptation field clear, and neither reads past it: the lane groups on the random-access indicator and carries every scrambled packet and conditional-access PID unaltered, and the groomer re-times on the PCR alone. Control §7.3's premise survives.
+1. **BISS-CA asks nothing of the passthrough lane or of the pacer.** Scrambling leaves the adaptation field clear, and neither reads past it: the lane groups on the random-access indicator and carries every scrambled packet and conditional-access PID unaltered, and the pacer re-times on the PCR alone. Control §7.3's premise survives.
 2. **The soft receiver can descramble for an IRD that lacks BISS-CA**, at the scrambling layer: a `tsp` descrambler before the pacer hands the IRD the clear source packet for packet. A `tsp` stage in a live chain needs a small `--initial-input-packets`, or the pacer trims and splices its start. The key ladder that would give the receiver its control words is not exercised.
 3. **The media-aware lane carries no part of a scrambled multiplex.** A subscriber finds no broadcast; the publisher logs damage each second, and its only error comes at end of input, which a live feed never reaches.
 4. **Our segmenter cannot cut a scrambled source**: it names each segment from a PES timestamp. Naming from the PCR, which stays clear, would remove that dependency, untested; `tsp -O hls` is untried.

@@ -4,7 +4,7 @@
 
 - **A live re-multiplexer makes the media-aware lane's wire T-STD-conformant.** Fed nothing but what a subscriber has — each PID's packets in order, when each arrived, and the timestamps they carry — a real-time scheduler produced a multiplex that passes every buffer of the calibrated grader over the whole capture, and TR 101 290 P1/P2 on the same bytes, with no packet sent late. This is [T44](test-44-tstd-grading.md)'s offline oracle made causal and run in real time.
 - **It costs 2.20 s of presentation latency on this build, and the lane decides most of it.** About 1.2 s is the lane's own transit, measured on the audio, which the exporter does not hold. About 0.4 s comes from the exporter's ordering: it writes each video frame once the audio has passed the frame's PTS, and authors that frame's DTS 400 ms earlier. The remaining 0.6 s is the lead the re-multiplexer adds to rebuild the decoder pre-load that this ordering removes. Searching the lead downward, 0.6 s is the lowest measured to pass — 550, 500 and 400 ms all fail the T-STD, and the video's margin crosses zero between about 545 and 560 ms, which is where a rate-limited bound derived independently from the frames puts it.
-- **Byte-faithful carriage on the same rig conforms at a twentieth of that.** Through the stream-clocked groomer at a 100 ms cushion, UDP passes the grader and P1/P2 at 113.7 ms presentation latency, but only after the groomer's first 5 s, which a cap below its start-up backlog damages. Over SRT at a 120 ms latency it presents at 234.0 ms, but lost one burst in 288 s that SRT did not recover.
+- **Byte-faithful carriage on the same rig conforms at a twentieth of that.** Through the stream-clocked pacer at a 100 ms cushion, UDP passes the grader and P1/P2 at 113.7 ms presentation latency, but only after the pacer's first 5 s, which a cap below its start-up backlog damages. Over SRT at a 120 ms latency it presents at 234.0 ms, but lost one burst in 288 s that SRT did not recover.
 - **The lane's delay takes about 50 s to settle after a subscriber joins.** It grows by about 630 ms on every PID together. A stage that fixes a clock in the first seconds, as the re-multiplexer did with a 5 s warm-up, is overtaken by the lane.
 
 Measured at P1, captured from the wire, wire domain, loopback, one clip, exporter `ffa5b81b`, the re-multiplexer in Python. Two conformant runs, 270 s and 210 s on a clip each, and three shorter leads on the primary clip that fail. Hardware: not run. The T-STD figures are from [`ts-tstd.py`](scripts/ts-tstd.py) as corrected in [T46](test-46-tstd-check-cross-validation.md); that correction moved no verdict on any capture graded here, only the counts and margins below.
@@ -31,7 +31,7 @@ Set when the tool was built, before the conformant run and the comparators. A co
 
 Latency is quoted as presentation latency, with delivery latency beside it, and only for a configuration that passes.
 
-Two things were settled after the runs. `pcrverify` is given the carrier rate, which an existing method rule requires ([method notes](method-notes.md) §2, _Pass `pcrverify --bitrate` explicitly_) and the rig had not applied. And the comparators, which fail criterion 2 only in the groomer's start-up or on one transport loss, are also reported for the part of each capture that passes, with that part stated.
+Two things were settled after the runs. `pcrverify` is given the carrier rate, which an existing method rule requires ([method notes](method-notes.md) §2, _Pass `pcrverify --bitrate` explicitly_) and the rig had not applied. And the comparators, which fail criterion 2 only in the pacer's start-up or on one transport loss, are also reported for the part of each capture that passes, with that part stated.
 
 **Questions 4 and 5, and another profile, asked of the merged export.** Upstream's `moq export ts` now schedules against the T-STD itself and steers its clock to the source's ([T47](test-47-fixed-delay-export.md)), so it is the live re-multiplexer these are put to, on `f8215bc47`. Fixed before the runs, with T47's criteria 1–4 (both T-STD checks, P1/P2, the whole capture, every unit of every track):
 
@@ -48,7 +48,7 @@ Two things were settled after the runs. `pcrverify` is given the carrier rate, w
 
 ### The live re-multiplexer
 
-[`ts-remux-live.py`](scripts/ts-remux-live.py), written for this test. It takes `moq export ts` on stdin and sends RTP, seven packets a datagram, at a constant rate. It accepts the groomer's command line, so [`t18-arm.sh`](scripts/t18-arm.sh) runs it with `PACER=` in the groomer's place.
+[`ts-remux-live.py`](scripts/ts-remux-live.py), written for this test. It takes `moq export ts` on stdin and sends RTP, seven packets a datagram, at a constant rate. It accepts the pacer's command line, so [`t18-arm.sh`](scripts/t18-arm.sh) runs it with `PACER=` in the pacer's place.
 
 - **The scheduler is the oracle's**: each slot goes to the available packet with the earliest decode deadline among those whose transport buffer and, where the T-STD sizes one, decoder buffer have room. Otherwise the slot is a null, and an adaptation-only PCR packet goes out whenever none has for 25 ms. Transport-buffer sizes and audio B match [`ts-tstd.py`](scripts/ts-tstd.py); video is scheduled against the single cpb + BSmux + BSoh buffer the first instrument used (1,115,696 B on this clip). That bound is smaller than MB alone, so it cannot overflow 2.14.3.1's MB + EB leak model ([T46](test-46-tstd-check-cross-validation.md)). It does not model the leak's 24 Mb/s transfer into EB, so underflow is left to the grader. HRD parameters are read from the source's SPS before the loop starts.
 - **Deadlines come from the stream as it arrives.** Video and teletext take the unit's DTS or PTS. Audio is split into frames as its bytes arrive, each frame known from its header, so a packet's deadline is the decode time of the frame holding its first byte. Every deadline is causal: nothing is scheduled against a packet that has not yet arrived.
@@ -71,7 +71,7 @@ Two choices matter:
 
 ## Environment
 
-Loopback on one laptop. The [T18](test-18-delivery-latency.md) rig, with `ts-remux-live.py` in the groomer's place at an 11 Mb/s carrier. Source `contrib-10m.ts`, as in T44. Exporter `ffa5b81b`, subscriber `--max-latency 500ms`, and the exporter's default null padding, which the re-multiplexer drops. Taps on one host share one clock. The comparators feed the source's own bytes over UDP or SRT to `mpegts-pacer` `5ab84cd --stream-clock`, with the cap one step above the cushion, because a groomer that runs ahead settles at its cap ([T18](test-18-delivery-latency.md) § Corrections).
+Loopback on one laptop. The [T18](test-18-delivery-latency.md) rig, with `ts-remux-live.py` in the pacer's place at an 11 Mb/s carrier. Source `contrib-10m.ts`, as in T44. Exporter `ffa5b81b`, subscriber `--max-latency 500ms`, and the exporter's default null padding, which the re-multiplexer drops. Taps on one host share one clock. The comparators feed the source's own bytes over UDP or SRT to `mpegts-pacer` `5ab84cd --stream-clock`, with the cap one step above the cushion, because a pacer that runs ahead settles at its cap ([T18](test-18-delivery-latency.md) § Corrections).
 
 ## Results
 
@@ -138,24 +138,24 @@ The video decoder's margin tracks the lead almost one for one. Across the runs w
 | The re-multiplexer's lead | 600 | measured as the lowest lead that passes; its floor derived from measured frames at about 545 ms, and measured to lie between 550 and 600 ms |
 | **Sum** | **about 2,200** | measured presentation latency 2,196.7 ms |
 
-The re-multiplexer's own share is the 600 ms, and only a lane that delivers frames ahead of their decode time could shrink it. The 400 ms belongs to the exporter's ordering. A downstream stage could re-derive each picture's DTS from the stream's reorder structure, returning 0–280 ms to most pictures and nothing to those at the full 400 ms reorder. Whether that lowers the rate-limited lead was not computed. The 1.2 s is the lane at this build and setting, and this test did not locate where it is spent. [T18](test-18-delivery-latency.md) measured the lane's video delivery, groomer included, at 126–146 ms on loopback on the `main` of the time, `eab96019`.
+The re-multiplexer's own share is the 600 ms, and only a lane that delivers frames ahead of their decode time could shrink it. The 400 ms belongs to the exporter's ordering. A downstream stage could re-derive each picture's DTS from the stream's reorder structure, returning 0–280 ms to most pictures and nothing to those at the full 400 ms reorder. Whether that lowers the rate-limited lead was not computed. The 1.2 s is the lane at this build and setting, and this test did not locate where it is spent. [T18](test-18-delivery-latency.md) measured the lane's video delivery, pacer included, at 126–146 ms on loopback on the `main` of the time, `eab96019`.
 
 ### Comparators
 
-The source's own bytes over UDP, and over SRT at a 120 ms latency, into the stream-clocked groomer at a 100 ms cushion and a 150 ms cap. Graded the same way.
+The source's own bytes over UDP, and over SRT at a 120 ms latency, into the stream-clocked pacer at a 100 ms cushion and a 150 ms cap. Graded the same way.
 
 |  | UDP | SRT, 120 ms |
 | --- | --- | --- |
 | Grader, after 5 s | **passes**: 0 overflows, 0 underflows, joint [+0, +100] ms, 144 of 144 windows | **fails**: 4 MP2 and 7 AC-3 underflows, joint [+100, +100] ms only; 141 of 141 windows legal |
 | P1/P2, whole capture | **fails**: 90 continuity errors, 68 PCR intervals over 40 ms (largest 98.6 ms), 68 PCRs outside ±481 ns | **fails**: 83, 53 (98.6 ms), 53 |
-| P1/P2 after the groomer's first 5.3 s | **passes**: 0, 0, 0 | 5 continuity errors, all at 139.7 s; 0, 0 |
+| P1/P2 after the pacer's first 5.3 s | **passes**: 0, 0, 0 | 5 continuity errors, all at 139.7 s; 0, 0 |
 | Presentation latency · delivery, median | **113.7 ms**, spread 4.4 ms · 113.6 ms | 234.0 ms, spread 4.4 ms · 233.9 ms |
 
-- **Every whole-capture P1/P2 failure on the UDP arm is in the groomer's first 5.3 s.** The first picture it sent had reached the source tap 4.6 s earlier, and within the next 0.17 s it skipped through 4.5 s of pictures, down to its 150 ms cap. Its first 864 packets span 5.3 s of PCR, the PCR advancing 58–99 ms every few packets. After that the capture is clean. T44's stream-clocked arms, at a 2,500 ms cap, show none of it; on its SRT arm the first picture went out 2.03 s after the source sent it, inside the cap.
-- **The SRT arm lost one burst it did not recover.** At 139.7 s it lost 22 packets across five PIDs before the groomer, which kept its own schedule, so no PCR failed. The 11 underflows are that loss: graded from 20 s to 139 s the capture passes with a joint offset of [+0, +25] ms, and from 145 s to its end at [+0, +0] ms.
+- **Every whole-capture P1/P2 failure on the UDP arm is in the pacer's first 5.3 s.** The first picture it sent had reached the source tap 4.6 s earlier, and within the next 0.17 s it skipped through 4.5 s of pictures, down to its 150 ms cap. Its first 864 packets span 5.3 s of PCR, the PCR advancing 58–99 ms every few packets. After that the capture is clean. T44's stream-clocked arms, at a 2,500 ms cap, show none of it; on its SRT arm the first picture went out 2.03 s after the source sent it, inside the cap.
+- **The SRT arm lost one burst it did not recover.** At 139.7 s it lost 22 packets across five PIDs before the pacer, which kept its own schedule, so no PCR failed. The 11 underflows are that loss: graded from 20 s to 139 s the capture passes with a joint offset of [+0, +25] ms, and from 145 s to its end at [+0, +0] ms.
 - **Presentation and decode latency agree on both arms**, as they must where the DTS is the source's.
 
-**At equal conformance, in steady state, byte-faithful carriage over UDP presents each picture at 113.7 ms against the re-multiplexed lane's 2,196.7 ms**, on the same rig and clip. Neither starts cleanly and at once: the re-multiplexer sends nothing for its 60 s warm-up, and the groomer at this cap damages its first 5 s. SRT at 120 ms is not conformant over this capture, on a single loss.
+**At equal conformance, in steady state, byte-faithful carriage over UDP presents each picture at 113.7 ms against the re-multiplexed lane's 2,196.7 ms**, on the same rig and clip. Neither starts cleanly and at once: the re-multiplexer sends nothing for its 60 s warm-up, and the pacer at this cap damages its first 5 s. SRT at 120 ms is not conformant over this capture, on a single loss.
 
 ### Questions 4 and 5, put to the merged export (`f8215bc47`)
 
@@ -192,7 +192,7 @@ P1, wire domain, `moq-lite-06`, the origin on one EC2 host and the export on ano
 - **The media-aware lane's TS-out can be made T-STD-conformant live, by a subscriber-side re-multiplexer that sees only the lane.** Nothing it used is unavailable to a real subscriber: the packets in order, their arrival times, their timestamps, and buffer parameters from the source's own SPS. That last is calibration a deployment would take from the stream or the catalog.
 - **The output clock does not need the source's PCR.** A PCR stamped from the decode timeline keeps the PCR-to-PTS offset fixed by construction; the scheduler's own byte clock gives a largest PCR interval of 25.2 ms and every PCR within ±481 ns.
 - **On this build the latency is set by the lane's delivery schedule, not by the re-multiplexing.** Of the 2.2 s, about 1.2 s is the lane's transit and about 0.4 s the exporter's ordering. The re-multiplexer's 0.6 s lead rebuilds the pre-load that ordering removed.
-- **Byte-faithful carriage keeps the T-STD at about 114 ms in steady state on the same rig**, through the stream-clocked groomer over UDP; about a twentieth of the re-multiplexed lane.
+- **Byte-faithful carriage keeps the T-STD at about 114 ms in steady state on the same rig**, through the stream-clocked pacer over UDP; about a twentieth of the re-multiplexed lane.
 - **A live stage on this lane must anchor after the lane settles.** The lane's delay grows by about 630 ms over the first 50 s, and a fixed clock cannot follow it. At the ±30 ppm system-clock tolerance, absorbing 630 ms would take almost six hours (derived).
 
 **Not established.**
@@ -201,7 +201,7 @@ P1, wire domain, `moq-lite-06`, the origin on one EC2 host and the export on ano
 - **1+1 determinism.** This schedule depends on when each packet arrived, which differs between legs, and the exporter's PSI and SI are placed by its own arrivals. The merged export's schedule does not: two legs on two hosts were byte-identical for 120 s.
 - **Any other clip, a cross-host lane, a long run, or `main`**, which rebases the PTS and so defeats the latency instruments' PTS keys.
 - **The decoded-picture buffer.** The grader does not model it. The exporter decodes each picture 0–280 ms earlier than the source does, so each is held that much longer before presentation, and whether that exceeds the level's decoded-picture buffer on a real decoder is unmeasured.
-- **A clean start for byte-faithful carriage at this latency.** A groomer that went live without trimming, or a cap above its start-up backlog with the backlog drained, was not tested.
+- **A clean start for byte-faithful carriage at this latency.** A pacer that went live without trimming, or a cap above its start-up backlog with the backlog drained, was not tested.
 
 **Uncertain.** How a hardware IRD responds; as in T44.
 

@@ -89,4 +89,4 @@ The four-clip set is clean and representative (synthetic CBR + real 4:2:2 broadc
 
 - Contribution-feed class (a news channel, open-GOP): [`evidence.md`](evidence.md) §3.1.
 - File vs wire domain, and what each gate can decide: [`docs/architecture.md`](../docs/architecture.md) §4.2.
-- Pre-groom baseline used downstream: [`evidence.md`](evidence.md) §3.
+- Pre-pace baseline used downstream: [`evidence.md`](evidence.md) §3.

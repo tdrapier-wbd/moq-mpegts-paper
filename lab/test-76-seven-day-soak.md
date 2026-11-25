@@ -4,7 +4,7 @@
 
 ## Objective
 
-[T62](test-62-origin-group-soak.md) ran the single-CDN design for 72 h and added no failure of its own, but its availability was set by the segmenter's withdrawal rule: six continuity breaks in the contribution, each seen by both segmenters at the same content, withdrew both playlists and cost 54 s, so 1+1 covered none of it. Its groomer also carried a wrong clock for 43 h, which no criterion graded. P1-aj asks for the gate's 7 days with both fixed: a rule that withdraws only a pathway whose segments differ from its peer's, the groomer whose re-base moves the PCR with the content, and PTS graded against PCR on the merged wire.
+[T62](test-62-origin-group-soak.md) ran the single-CDN design for 72 h and added no failure of its own, but its availability was set by the segmenter's withdrawal rule: six continuity breaks in the contribution, each seen by both segmenters at the same content, withdrew both playlists and cost 54 s, so 1+1 covered none of it. Its pacer also carried a wrong clock for 43 h, which no criterion graded. P1-aj asks for the gate's 7 days with both fixed: a rule that withdraws only a pathway whose segments differ from its peer's, the pacer whose re-base moves the PCR with the content, and PTS graded against PCR on the merged wire.
 
 ## The rule
 
@@ -25,7 +25,7 @@ A stall over 0.5 s, a lost sync byte and the PTS going back still withdraw at on
 T62's rig and graders ([`p1aj-soak.sh`](scripts/p1aj-soak.sh), [`t62-grade.py`](scripts/t62-grade.py)), with three changes:
 
 - **Segmenters:** `--pdt --peer http://<peer-private-address>:18310/g/ --peer-header X-P59-Origin:<secret file> --peer-wait 3` on the primary (A) and the secondary (B).
-- **Groomers:** the stream-clocked pacer at `97f3a38`, whose re-base moves the emitted PCR with the content ([T65](test-65-ird-hls-profile.md)), `--align-ms 30000`, release 1.5 s after the date.
+- **Pacers:** the stream-clocked pacer at `97f3a38`, whose re-base moves the emitted PCR with the content ([T65](test-65-ird-hls-profile.md)), `--align-ms 30000`, release 1.5 s after the date.
 - **In-flight grading:** [`t21-pcr-monitor.py`](scripts/t21-pcr-monitor.py) `--pts` adds each minute's PTS against the last PCR before each PES start, per PID. On the clip it reads 442–1,333 ms for video and 27–75 ms for audio and teletext.
 
 A new distribution with T61's origin group and viewer gate; leg A at the edge its resolver gives, leg B pinned to a Düsseldorf PoP. Both origins also carry the live feed's standing units, as in T62; anything else run on the three hosts during the soak is logged with its start and stop.
@@ -37,7 +37,7 @@ A new distribution with T61's origin group and viewer gate; leg A at the edge it
 3. **C2, programme lost only where the contribution lost it:** 0 datagrams lost on the merged wire and 0 mismatched, except in the window of a reset both segmenters made (a stall or a PTS step). Damage both carried and damage one carried alone cost nothing. Each leg's own losses reported with their causes.
 4. **C3, the skew:** within 450 ms throughout; hourly median and drift reported.
 5. **C4, resources:** every role's memory grows slower than 1.60 MB/h by a least-squares slope.
-6. **C5, events traced:** every segmenter reset, damaged segment and its answer, guard withdrawal, origin failover, receiver retry, loss, playlist failure, and groomer stall, mute or late drop has a cause in the logs.
+6. **C5, events traced:** every segmenter reset, damaged segment and its answer, guard withdrawal, origin failover, receiver retry, loss, playlist failure, and pacer stall, mute or late drop has a cause in the logs.
 7. **C6, the wrap:** across each PTS wrap the numbering stays consecutive on both pathways, and C1 holds in the five minutes either side.
 8. **C7, the clock:** in every minute every PES's PTS lies 0–2,000 ms ahead of the PCR before it (`lead_out=0`), except minutes attributed as in C1; each PID's hourly minimum and maximum reported.
 9. **C8, the rule:** every damaged segment answered within the 3 s wait; each shared one published on both pathways with no withdrawal; each unshared one withdrawing one pathway only, the merge losing nothing for it.
@@ -73,7 +73,7 @@ python3 lab/scripts/t62-grade.py DIR                                    # at the
 | C2 | The merge lost, mismatched and dropped late no datagram. Each leg's own losses, merged from the other: leg B 49,107 datagrams in its first two minutes, leg A 25,274,864 over 171 minutes (below) |
 | C3 | −0.5 to 1.8 ms; hourly medians 0.3–0.5 ms, drift +0.0004 ms/h |
 | C4 | Steepest +0.279 MB/h, a receiver going from 47.5 to 85.3 MB in 168 h; every other role +0.007 MB/h or less. Disk use under 0.5 GB on every host |
-| C5 | Leg A's receiver lost name resolution for 2.84 h: an upgrade restarted the host's network daemon, which replaced the resolver file its network namespace had bound, and the bind was restored by hand. Its groomer stalled 8 s and muted until the receiver rejoined at the live edge, past 5,116 segments it never saw. Two single playlist fetches were cut short by the edge and retried 0.3 s later. Of 1,198,138 fetches, ten took over 900 ms to a first byte: eight met the secondary answering within 3 s, the origin group failing over from a slow primary, and two (964 and 1,022 ms) left no trace at either origin. No guard withdrew a playlist |
+| C5 | Leg A's receiver lost name resolution for 2.84 h: an upgrade restarted the host's network daemon, which replaced the resolver file its network namespace had bound, and the bind was restored by hand. Its pacer stalled 8 s and muted until the receiver rejoined at the live edge, past 5,116 segments it never saw. Two single playlist fetches were cut short by the edge and retried 0.3 s later. Of 1,198,138 fetches, ten took over 900 ms to a first byte: eight met the secondary answering within 3 s, the origin group failing over from a slow primary, and two (964 and 1,022 ms) left no trace at either origin. No guard withdrew a playlist |
 | C6 | Seven PTS wraps on each pathway, each consecutive, with no reset or C1 minute within 5 min |
 | C7 | No minute outside 0–2,000 ms. Hourly, the video's minimum ran 114–638 ms and its maximum 1,255–1,425 ms; both audio PIDs 29–105 ms; teletext 69–141 ms |
 | C8 | Two damaged segments, both answered _shared_ by both pathways within 2–10 ms, published and not withdrawn. No unshared case arose |
@@ -92,5 +92,5 @@ _Predicted_ about 14 breaks at T62's rate; one came, in two segments.
 ## Conclusions
 
 1. **Seven days through one origin group, on the live feed, cost nothing the contribution did not lack.** The damage both pathways carry is published, so a break of the kind that cost T62 54 s of withdrawals cost the merge nothing here. One break in a week is a sample of one for that rule.
-2. **The groomer's clock held for the week**: PTS in band every minute, where T62's groomer was wrong for 43 h.
+2. **The pacer's clock held for the week**: PTS in band every minute, where T62's pacer was wrong for 43 h.
 3. **The design's own faults were none.** What did happen was its hosts': one receiver lost its resolver to an upgrade, and the merge rode it. One feed, one distribution, receivers on one host and no failure injected bound the result (T61 covers the failure classes).

@@ -22,7 +22,7 @@ A rule belongs here only if it would change how a future experiment is designed,
 
 **Pinning a component scopes the conclusion to the pin, and if the mechanism runs through the pinned component the A/B can credit the wrong one.** _(T8b, C3's #3271 re-check.)_ The mechanism ran through relay group eviction while the relay was pinned. Ask of each pin whether the proposed mechanism could run through it, and cross the pin before writing the report.
 
-**A control that removes the suspect stage tests the stimulus, not the system, and exonerates nothing downstream of what it removed.** _(T21.)_ Feeding the looped clip straight into the groomer removed the exporter that failed on the wrap. Name the stages a control removes, and write "the wrap alone, without the exporter, does not do it", not "not the wrap".
+**A control that removes the suspect stage tests the stimulus, not the system, and exonerates nothing downstream of what it removed.** _(T21.)_ Feeding the looped clip straight into the pacer removed the exporter that failed on the wrap. Name the stages a control removes, and write "the wrap alone, without the exporter, does not do it", not "not the wrap".
 
 **A control with the mechanism removed is worth more than a second run of the same arm, and where a stage's own throughput could be the limit, the control that deletes the subject is mandatory.** _(T15, T9, T7.)_ Plain UDP through the same chain matched RIST's 73 ms bursts to the millisecond, so they were the publisher's; a local file at the lane's rate did worse than any lane, so the clip measured the pacer. A saturated instrument fails in the direction that looks like a finding.
 
@@ -32,7 +32,7 @@ A rule belongs here only if it would change how a future experiment is designed,
 
 **Grade beyond one full failure-detection interval, and record the idle timeout on both ends of the session.** _(T6, T13.)_ A failover graded 21 s into a 30 s QUIC idle timeout could not pass on any build. QUIC uses the smaller of the two timeouts (a 6 s client put the relay's detection at 7–9 s), so observe a hard kill for at least the idle timeout plus the behaviour's own window, or "not yet detected" is recorded as "hung".
 
-**A positive control that cannot take the arms' injections is a gate on the rig, not a comparison.** _(T12.)_ Arm C grooms once and duplicates, so killing its publisher takes the whole arm down: it validates receiver and instrument, not the topology.
+**A positive control that cannot take the arms' injections is a gate on the rig, not a comparison.** _(T12.)_ Arm C paces once and duplicates, so killing its publisher takes the whole arm down: it validates receiver and instrument, not the topology.
 
 **A parameter fixed once and never varied is an uncontrolled variable.** _(T8b C3.)_ C3's "a second feed reduces throughput" survived controller and bufferbloat elimination until the 2 s `--latency-max` was swept. Before hunting a network mechanism, list every value the rig was told and vary the ones never in the matrix.
 
@@ -44,9 +44,9 @@ A rule belongs here only if it would change how a future experiment is designed,
 
 **A control made of two production deployments is a coincidence, not an experiment.** _(T34, T40.)_ Two hosts on builds either side of a regression varied host, kernel and path too. Make the comparison from pinned artefacts on one host when it can be made there.
 
-**A transparent control through an arrival-clocked groomer attributes the transport buffers, not the decoder buffers.** _(T44.)_ SRT and UDP through such a groomer pass the transport buffers and fail every decoder buffer; stream-clocked grooming passes with the source's own offset. Use stream-clocked grooming or none for a whole-capture transparent control, and grade a clip as a source before using it as one: the campaign's FFmpeg-muxed loop overflows its own AAC transport buffer.
+**A transparent control through an arrival-clocked pacer attributes the transport buffers, not the decoder buffers.** _(T44.)_ SRT and UDP through such a pacer pass the transport buffers and fail every decoder buffer; stream-clocked pacing passes with the source's own offset. Use stream-clocked pacing or none for a whole-capture transparent control, and grade a clip as a source before using it as one: the campaign's FFmpeg-muxed loop overflows its own AAC transport buffer.
 
-**A self-pacing exporter is graded with nothing re-clocking it, and on more than its CI's clip.** _(T47.)_ A groomer after it grades the groomer. Use a forwarder that never re-clocks ([`ts-rtp-forward.py`](scripts/ts-rtp-forward.py)), give it a fixture with a broadcast-sized CPB graded as a source first, and report T-STD and P2 separately: the export passed every buffer and failed PCR accuracy on nearly every PCR.
+**A self-pacing exporter is graded with nothing re-clocking it, and on more than its CI's clip.** _(T47.)_ A pacer after it grades the pacer. Use a forwarder that never re-clocks ([`ts-rtp-forward.py`](scripts/ts-rtp-forward.py)), give it a fixture with a broadcast-sized CPB graded as a source first, and report T-STD and P2 separately: the export passed every buffer and failed PCR accuracy on nearly every PCR.
 
 ---
 
@@ -90,9 +90,9 @@ A rule belongs here only if it would change how a future experiment is designed,
 
 **"Pacing" names three quantities, and a lane can pass one and fail the others.** _(T13.)_ PCR values on an exact 25 ms grid can carry 188 B to 870,628 B between pairs against the 31,081 B the rate requires, and padding within 0.21 % of the rate can leave 96.7 % of slots wrong. Read the interval from the carried PCR values and the rate from the packet count over the same pair (`pcr-residual.py`), and grade the distribution of per-slot bytes, never the total.
 
-**Read PCR from one PID, and say which.** _(T13 P1-n.)_ Two PIDs on offset 25 ms grids pooled into a 12.5 ms grid with half the bytes. Print the PID census before the verdict, grade one PID, report the interval minimum (clustering hides under median, p95 and maximum), and compare groomed output against the source's own sub-millisecond share (0.09 % on the reference clip).
+**Read PCR from one PID, and say which.** _(T13 P1-n.)_ Two PIDs on offset 25 ms grids pooled into a 12.5 ms grid with half the bytes. Print the PID census before the verdict, grade one PID, report the interval minimum (clustering hides under median, p95 and maximum), and compare paced output against the source's own sub-millisecond share (0.09 % on the reference clip).
 
-**A determinism comparison aligns on the source's own bytes, never on a value either process minted, and compares as multisets before positions.** _(T12, T13 P1-n; `ts-pair-diff.py`, `ts-cc-merge.py`.)_ PCR, packet index and continuity counter are the values under test. Align on a payload run that occurs once in the other capture, taken after the later process joined; allow the alignment to slip, since one displaced packet de-phases every later slot (24.28 % slot-by-slot was 99.95 % common as a multiset and 98.414 % aligned; a groomed pair was 24.7 % by slot and 100 % keyed by PID and PTS); classify each difference by field; on a saturated constant-rate mux count packets per PID per PCR interval before naming a burst; take each PID's continuity offset as the modal one; and void a comparison of streams that are mostly nulls.
+**A determinism comparison aligns on the source's own bytes, never on a value either process minted, and compares as multisets before positions.** _(T12, T13 P1-n; `ts-pair-diff.py`, `ts-cc-merge.py`.)_ PCR, packet index and continuity counter are the values under test. Align on a payload run that occurs once in the other capture, taken after the later process joined; allow the alignment to slip, since one displaced packet de-phases every later slot (24.28 % slot-by-slot was 99.95 % common as a multiset and 98.414 % aligned; a paced pair was 24.7 % by slot and 100 % keyed by PID and PTS); classify each difference by field; on a saturated constant-rate mux count packets per PID per PCR interval before naming a burst; take each PID's continuity offset as the modal one; and void a comparison of streams that are mostly nulls.
 
 **Pass `pcrverify --bitrate` explicitly whenever the arm might not carry the full programme.** _(T19 measurement 11, T47.)_ Without it TSDuck derives the rate from the PCRs it then grades, so shed content fails every PCR. Pass the padded rate, not always the rig's: 9,999,999 against 10,000,000 b/s exceeds 500 ns after about 5 s. Fit PCR value against packet index to separate rate from error.
 
@@ -140,7 +140,7 @@ A rule belongs here only if it would change how a future experiment is designed,
 
 **A bound relative to a baseline needs a baseline that knows its own spread.** _(T52.)_ Twice step 1's one join probe, 0.41 s, set 0.83 s; one probe a step then ranged 0.33–1.08 s with no trend in N, so the rule failed three steps on noise, where a 0.72 s baseline on the other node admitted the same spread. Take the baseline and each step's figure as medians of several probes, or fix an absolute bound, and check before the run that the control's spread clears it.
 
-**A window shorter than the phenomenon's own timescale reads as a different phenomenon.** _(T8b C6, T9, T21, T26, T27, Gate 2's rig design.)_ Relay memory knees near three hours, so hourly slopes read as unbounded growth; a groomer's nine-minute "monotone drift" was a bounded 600 s oscillation; a pacer qualified on 300 s failed after about nine; a ramp moves N and time together, so it measures neither. Set a soak from the longest period in the system (the PCR wraps every 26.51 h, so 24 h may hold none and 72 h holds two; place a fixture near the boundary instead of waiting), outlast every integrator a change adds, name the denominator of a per-something cost and hold it at one, and pin the variable you are not asking about.
+**A window shorter than the phenomenon's own timescale reads as a different phenomenon.** _(T8b C6, T9, T21, T26, T27, Gate 2's rig design.)_ Relay memory knees near three hours, so hourly slopes read as unbounded growth; a pacer's nine-minute "monotone drift" was a bounded 600 s oscillation; a pacer qualified on 300 s failed after about nine; a ramp moves N and time together, so it measures neither. Set a soak from the longest period in the system (the PCR wraps every 26.51 h, so 24 h may hold none and 72 h holds two; place a fixture near the boundary instead of waiting), outlast every integrator a change adds, name the denominator of a per-something cost and hold it at one, and pin the variable you are not asking about.
 
 **Distinguish a leak from a cache: register the shape as well as the number, and fit the competing shapes.** _(T8b C6, T21, T45.)_ A step fits a line better than a logarithm, and a converging curve and a leak can share a ceiling. Fit at least a line, a logarithm and a square root, quote slopes per quarter (the relay's halved, 9.85 to 1.75 MB/h; the publisher's held at about 2.6), report a shape-independent statistic beside the fit (largest single increment as a share of growth, largest drawdown from a running peak), measure warm-up instead of assuming it, and pair long RSS series with reclaim counters.
 
@@ -176,19 +176,19 @@ A rule belongs here only if it would change how a future experiment is designed,
 
 **Before reporting that a client cannot reach a relay, run it in each of its publishing modes and read its interop notes.** _(T53.)_ `openmoq-publisher` with `--publish-catalog` publishes by PUBLISH, which `moq-relay` refuses; without it, the same release is served on draft 18. The arm's mode was reported as the client's defect.
 
-**When two runs differ in more than one variable, do not credit the one you have been tuning; and a quantity that does not move under your variable is not thereby someone else's.** _(T13, T18, T19.)_ Cushion took the credit for a PCR result until an eightfold sweep moved nothing; the same invariance was read three times as proof the cause lay upstream, and three upstream fixes merged on that reading before reserving the slot in our own groomer cleared the gate. Enumerate what your own stage's knob cannot reach.
+**When two runs differ in more than one variable, do not credit the one you have been tuning; and a quantity that does not move under your variable is not thereby someone else's.** _(T13, T18, T19.)_ Cushion took the credit for a PCR result until an eightfold sweep moved nothing; the same invariance was read three times as proof the cause lay upstream, and three upstream fixes merged on that reading before reserving the slot in our own pacer cleared the gate. Enumerate what your own stage's knob cannot reach.
 
-**Name a divergence from the bytes that differ, with the suspect field masked, and attribute the residue.** _(T12.)_ None of 400 conflicting datagrams differed only in PCR; 97–98 % differed in one field minted upstream of both groomers; breaking the remaining 2.90 % down by PID named the second defect.
+**Name a divergence from the bytes that differ, with the suspect field masked, and attribute the residue.** _(T12.)_ None of 400 conflicting datagrams differed only in PCR; 97–98 % differed in one field minted upstream of both pacers; breaking the remaining 2.90 % down by PID named the second defect.
 
 **A mechanism read from the source is a hypothesis; before reporting a null, work out whether the arm could have shown the effect.** _(T10, T12.)_ A 15 s SI clock with 870 ms lag predicts 0.6 differing emissions in ten, so zero confirmed nothing until the clock was driven at its limit.
 
 **Before recording that a stage preserves a property, check whether another experiment found that it does not.** _(T4.)_ A contradiction between two files means one is already wrong and being cited; treat it as a defect.
 
-**A stage's own counters decide a placement defect, and a counter reading zero where its event is impossible is evidence about that configuration only.** _(T18.)_ Matching the carrier to the content cut underruns from 18,070 to 5 while violations held at 502; `pcr_inserted=0` at 0.0 % stuffing was quoted in five documents, though that groomer inserts only into slots it would stuff. Vary the condition that enables the mechanism and check the counter moves.
+**A stage's own counters decide a placement defect, and a counter reading zero where its event is impossible is evidence about that configuration only.** _(T18.)_ Matching the carrier to the content cut underruns from 18,070 to 5 while violations held at 502; `pcr_inserted=0` at 0.0 % stuffing was quoted in five documents, though that pacer inserts only into slots it would stuff. Vary the condition that enables the mechanism and check the counter moves.
 
 **A threshold-crossing count can point at the opposite of its cause; plot the interval distribution first.** _(T18.)_ 375–414 intervals above 40 ms read as too few PCRs; the distribution showed a median of 11 µs and every violation in a hole between bursts. Loss and clustering look alike in the count and opposite in the distribution.
 
-**Keep a byte-transparent control carrying the same source in the same session in any rig that measures a conversion.** _(T18, T8b.)_ The exporter's defect went eighteen months mis-summarised because it was only ever seen through a groomer, with the source profiled in another session.
+**Keep a byte-transparent control carrying the same source in the same session in any rig that measures a conversion.** _(T18, T8b.)_ The exporter's defect went eighteen months mis-summarised because it was only ever seen through a pacer, with the source profiled in another session.
 
 **Distinguish a stage that normalises a difference from one that gives two streams a common frame of reference.** _(T12.)_ Only normalisation bounds what downstream measurement can see.
 
@@ -200,7 +200,7 @@ A rule belongs here only if it would change how a future experiment is designed,
 
 **Before adopting the tidy explanation a new number suggests, test it against measurements already in hand.** _(T8b C6.)_ A coincidence of ratios is not a mechanism.
 
-**When a stage reports bad input, write down the stage's own contract, and refuse to integrate a sample there is no reason to believe.** _(T19, T21, T34.)_ A groomer that read one PCR interval as both duration and length exited zero after discarding 67.2 % of a legal fixture; a pacer computed 431 Mb/s inside an 11 Mb/s carrier and drained its cushion; an importer's _below the live edge_, read as the feed stepping back, was its own stamp on a SCTE-35 section. Make assumptions measured quantities, check recovered values against conservation, and raise a counter rather than clamp silently. Before blaming the source for a refusal, reproduce it on the captured bytes through the same build, cut either side of the suspect packet.
+**When a stage reports bad input, write down the stage's own contract, and refuse to integrate a sample there is no reason to believe.** _(T19, T21, T34.)_ A pacer that read one PCR interval as both duration and length exited zero after discarding 67.2 % of a legal fixture; a pacer computed 431 Mb/s inside an 11 Mb/s carrier and drained its cushion; an importer's _below the live edge_, read as the feed stepping back, was its own stamp on a SCTE-35 section. Make assumptions measured quantities, check recovered values against conservation, and raise a counter rather than clamp silently. Before blaming the source for a refusal, reproduce it on the captured bytes through the same build, cut either side of the suspect packet.
 
 **Where a stage derives a quantity from its input, capture both ends of one run.** _(T21.)_ The input showed a clean grid and a signalled break, the output a stopped clock: the estimator was faithful to input that had stopped telling the truth.
 
@@ -214,7 +214,7 @@ A rule belongs here only if it would change how a future experiment is designed,
 
 **A mechanism read from a diff names the component, not the loop.** _(T8b C7.)_ Bisect named #4001's interleave hold; collapse needed `rewind()` renewing the hold at every skip. Settle a mechanism with a same-build switch on one variable and a log of the decisions: the switch proves cause, the log shows the loop.
 
-**Locate a whole-capture error count in time before naming its cause.** _(T45.)_ Ninety continuity errors fell in a groomer's first 5.3 s of backlog trimming. Spread causes predict spread events; transients and single incidents predict clusters.
+**Locate a whole-capture error count in time before naming its cause.** _(T45.)_ Ninety continuity errors fell in a pacer's first 5.3 s of backlog trimming. Spread causes predict spread events; transients and single incidents predict clusters.
 
 **Repeat a cell that disagrees with its neighbour before naming what differs.** _(T47.)_ A cross-host failure moved from audio to video on a re-run and passed on the third: entry state, not configuration. Configuration effects repeat; a margin that repeats to a tenth of a millisecond is one state repeating.
 
@@ -276,7 +276,7 @@ A rule belongs here only if it would change how a future experiment is designed,
 
 **Derive a rate target from a capture of the stage's own input, and grade a stage against captures from the pipeline it will sit in.** _(T13.)_ A target from the wrong stage, or an input synthesised by stripping nulls, produced plausible, flatter, wrong tables. Treat an unexpectedly smooth result as a suspect one.
 
-**In a timing rig, assert the process census between legs, and check a file's size against its packet count.** _(T13.)_ Killing a pipeline by its last PID reaped only the groomer; a 17 MB file that censused as 2.4 M packets was the tell.
+**In a timing rig, assert the process census between legs, and check a file's size against its packet count.** _(T13.)_ Killing a pipeline by its last PID reaped only the pacer; a 17 MB file that censused as 2.4 M packets was the tell.
 
 **A two-host latency figure must bracket its clock, and its correction must be tested.** _(T18, T70.)_ A cell that straddled a 13.94 ms clock step returned a clean 1,018 ms; the re-run read 2,108. Probe offset before and after each WAN cell. The offset's sign was once applied inverted, reading every WAN cell low by twice its offset: run the probe against a server shifted by a known amount, through to the report.
 
@@ -288,7 +288,7 @@ A rule belongs here only if it would change how a future experiment is designed,
 
 **Any redundancy test whose sources are started independently measures its own clock skew, and its merge window is the union of the legs' activity.** _(T6, T12.)_ Independent replays lag by the join delay, so "same file" is not "same stream": fan one regulated source into both legs, and let the surviving leg define the end of the window.
 
-**A merge that holds in its control says nothing of each leg alone.** _(T83.)_ A segmented leg groomed at its partner's 1.5 s cushion, below the 3 s floor T70 had measured for its lane, fell silent for 1.26 s in every run; the controls merged cleanly, and only with the other leg dark did the merge lose datagrams. Size each leg's groomer from its own lane's measured floor, and read each leg's largest silence in the control before running a fault.
+**A merge that holds in its control says nothing of each leg alone.** _(T83.)_ A segmented leg paced at its partner's 1.5 s cushion, below the 3 s floor T70 had measured for its lane, fell silent for 1.26 s in every run; the controls merged cleanly, and only with the other leg dark did the merge lose datagrams. Size each leg's pacer from its own lane's measured floor, and read each leg's largest silence in the control before running a fault.
 
 **On a lane that two sources can serve at once, the failure is repeated time, and neither a continuity nor a PCR-interval check sees it.** _(T6.)_ Add a rate-ratio or PCR-decrease count wherever two publishers, packagers or origins can be live.
 
@@ -344,17 +344,17 @@ A rule belongs here only if it would change how a future experiment is designed,
 
 **A defect found through an incidental stimulus is described at that stimulus's level until its class is characterised.** _(T21, T23.)_ "PCR does not survive a source discontinuity" split, graded by class, into a rollover carried correctly, forward jumps that recover, and rewinds that withhold and burst.
 
-**Conformance of the output is not health of the stage producing it.** _(T21, T22.)_ A groomer that had destroyed its cushion passed every wire check, and a frozen source passed every transport check. Lasting health needs stage counters and a stated scope.
+**Conformance of the output is not health of the stage producing it.** _(T21, T22.)_ A pacer that had destroyed its cushion passed every wire check, and a frozen source passed every transport check. Lasting health needs stage counters and a stated scope.
 
 **Reading source is sound evidence that something is absent and weak evidence that something present works.** _(T19.)_ #2984 rested on `moq-srt` pacing correctly; measured, it fell through to an unpaced arm. Measure an exemplar, or state that its correctness is assumed.
 
-**A capability claim names the pipeline stage, the input property and the parameter space it covers.** _(T13, T14, T16.)_ "No tool does LL-HLS with TS" was true of receiving and false of publishing; "no stage grooms a broadcast mux" held only for an egress carrying no stuffing; "no configuration passes" rested on three parameters, and two more arms found one. A "structurally impossible" claim from a specification is a hypothesis worth an afternoon: TS segments differed from the source in two PSI packets only.
+**A capability claim names the pipeline stage, the input property and the parameter space it covers.** _(T13, T14, T16.)_ "No tool does LL-HLS with TS" was true of receiving and false of publishing; "no stage paces a broadcast mux" held only for an egress carrying no stuffing; "no configuration passes" rested on three parameters, and two more arms found one. A "structurally impossible" claim from a specification is a hypothesis worth an afternoon: TS segments differed from the source in two PSI packets only.
 
-**Liveness keys on programme content, and the enforcement point is the sender.** _(T12.)_ A rate-holding groomer mints conformant CBR with no programme; exclude its adaptation-only PCR from the content check.
+**Liveness keys on programme content, and the enforcement point is the sender.** _(T12.)_ A rate-holding pacer mints conformant CBR with no programme; exclude its adaptation-only PCR from the content check.
 
 **Every stream-position quantity must be a function of position in the stream, not of what this instance emitted or saw.** _(T12, T30.)_ An RTP sequence that counted datagrams sent left a resumed leg 8,756 behind; sequence, timestamp and PCR must be stream-derived for redundancy. Two `tsp -O hls` packagers of one source on two hosts cut 1.2 s apart until their input bitrate was fixed, and one that missed the first tables numbered its PAT and PMT apart: hash a pair's segments, written apart, before it shares a namespace.
 
-**Pin every parameter the property depends on, then measure; a predicted divergence is no substitute for one run.** _(T12.)_ Ungroomed legs predicted to fail on phase aligned in all twelve cells and failed on conformance instead.
+**Pin every parameter the property depends on, then measure; a predicted divergence is no substitute for one run.** _(T12.)_ Unpaced legs predicted to fail on phase aligned in all twelve cells and failed on conformance instead.
 
 **Draw the demarcation before comparing two designs, and count only work on the same side of it.** _(T14.)_ A receive-side hand-off in clients' equipment does not discharge the distributor's obligation.
 
@@ -366,4 +366,4 @@ A rule belongs here only if it would change how a future experiment is designed,
 
 **A head-to-head is a lane result only on a shared substrate, with packet sizes reported.** _(T5, T20.)_ Reordering 0.98 against 0.19 compared TCP with QUIC and 34,380 B packets with 931 B ones, so `reorder 25 %` met about 24× fewer events on the winner; normalised, the gap was largely the rig's. List what differed besides the thing under test, equalise MTU and offloads on every arm, and prove the transport from the server and the wire: FFmpeg's `-http_version 3only` fetched segments over HTTP/1.1.
 
-**A P1/P2 pass is not a conformant transport stream, and a buffer-model pass is not a complete one.** _(T44, T47.)_ The groomed wire passed P1/P2 for a day while its buffers overflowed throughout; an export that dropped every MP2, AC-3 and teletext unit passed `ts-tstd.py`, since absent PIDs have no buffer. Say "P1/P2-conformant" for what was graded, grade the T-STD per PID with the source as control (`ts-tstd.py --window` where the groomer regenerates PCR), and count every PID's units against the source over the same span, reading the export's drop log.
+**A P1/P2 pass is not a conformant transport stream, and a buffer-model pass is not a complete one.** _(T44, T47.)_ The paced wire passed P1/P2 for a day while its buffers overflowed throughout; an export that dropped every MP2, AC-3 and teletext unit passed `ts-tstd.py`, since absent PIDs have no buffer. Say "P1/P2-conformant" for what was graded, grade the T-STD per PID with the source as control (`ts-tstd.py --window` where the pacer regenerates PCR), and count every PID's units against the source over the same span, reading the export's drop log.

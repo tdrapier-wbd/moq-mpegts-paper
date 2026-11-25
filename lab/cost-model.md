@@ -28,7 +28,7 @@ Deliberately excluded: staffing and NOC cost (fixed, dominant at low route count
 | Bitrate profiles | 10 Mbps and 25 Mbps TS | arbitrary but representative; 10 Mbps now, 25 Mbps aspirational |
 | Redundancy | active/active 1+1, both legs always live | [architecture](../docs/architecture.md) §5; two full-rate copies at all times |
 | Regions | EU (Ireland), US East (N. Virginia), US West (Oregon) | egress rates are identical across all three |
-| MoQ carriage multiplier | **0.982x** source TS rate on the wire | T9 measured on a WAN path, media-aware lane. Below 1.0 because the lane strips the source's null stuffing (4.57 % of this clip) and the edge groomer regenerates it. **0.973x with path MTU discovery on**, a flag that is off by default ([T9](test-9-performance.md)). **1.033x on the stuffing-free live feed** ([T14](test-14-data-plane-comparison.md) § _On the live feed's profile_) |
+| MoQ carriage multiplier | **0.982x** source TS rate on the wire | T9 measured on a WAN path, media-aware lane. Below 1.0 because the lane strips the source's null stuffing (4.57 % of this clip) and the edge pacer regenerates it. **0.973x with path MTU discovery on**, a flag that is off by default ([T9](test-9-performance.md)). **1.033x on the stuffing-free live feed** ([T14](test-14-data-plane-comparison.md) § _On the live feed's profile_) |
 | SRT carriage multiplier | **1.037x** | T9 measured on the same path with the same clip; matches its framing arithmetic (7 × 188 B TS + 16 B SRT + 8 B UDP + 20 B IPv4 = 1,360 / 1,316 = 1.0334); 1.035x on the live feed |
 | MoQ ingest CPU | 0.34 core per 10 Mbps feed | T8, `moq import ts` on 2-vCPU EC2 |
 | SRT ingest CPU | ~0.01 core per feed | T8, `tsp regulate` + SRT carriage |
@@ -372,7 +372,7 @@ The ratios hold at any scale where the volume tiers are reached; below a few hun
 - **MoQ's multiplier is the media-aware lane.** The passthrough lane carries the source verbatim, stuffing included, and measured 1.054x per leg on the live feed, two points above SRT; a deployment that needs byte-verbatim carriage should price that, not this one ([T14](test-14-data-plane-comparison.md)).
 - **The GiB/GB convention shifts AWS figures by 7.4 %.** AWS's binary tier boundaries imply GiB billing and that is what is modelled; a decimal-GB reading raises every AWS number by 7.4 %.
 - **The 100 GB/month AWS free tier is applied per scenario**, whereas it is per account. Worth up to ~$108/yr per scenario — noise here, but wrong if scenarios are summed.
-- **No staffing, tooling, monitoring, integration or grooming cost.** For a small route count these plausibly exceed everything modelled here.
+- **No staffing, tooling, monitoring, integration or pacing cost.** For a small route count these plausibly exceed everything modelled here.
 - **No receive-side cost on either side**, and no satellite uplink, teleport or IRD cost. The comparison is transport-only.
 - **Ingest CPU at 25 Mbps is assumed linear in bitrate** from the 10 Mbps measurement. It is not measured, and it does not matter: the whole compute line is 6 % of the 25 Mbps total.
 - **One region-pair, one currency, no tax.** Rates are USD ex-VAT for Ireland / N. Virginia / Oregon, which happen to share identical egress pricing.

@@ -16,7 +16,7 @@ tsp -I file received.ts -P continuity -O drop    # silent == clean
 
 This is demonstrated rather than asserted — see "Oracle sensitivity" below.
 
-**Scope note.** This is interop testing, not conformance testing. It asks whether the subscriber got what the publisher sent. It deliberately does _not_ check TR 101 290, PCR jitter or CBR conformance: those are properties of the publisher's pacing and of any downstream grooming, not of the relay under test, and checking them here would make the harness a compliance arbiter — an explicit non-goal of the project.
+**Scope note.** This is interop testing, not conformance testing. It asks whether the subscriber got what the publisher sent. It deliberately does _not_ check TR 101 290, PCR jitter or CBR conformance: those are properties of the publisher's pacing and of any downstream pacing, not of the relay under test, and checking them here would make the harness a compliance arbiter — an explicit non-goal of the project.
 
 ## Contents
 

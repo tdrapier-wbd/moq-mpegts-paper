@@ -65,7 +65,7 @@ Buyers weigh three things, in this order. **Reliability and trust** comes first,
 
 **A third incumbent line is easy to miss and can dominate the comparison: the receive estate.** Where the broadcaster supplies receivers to its affiliates — usually because the chain is a vendor-specific proprietary system — migrating to an equivalent competing system is a capex event across every receive site rather than a transport decision. It sits outside the per-route comparison and is how a technically superior challenger loses on economics that have nothing to do with transport (§7.4).
 
-**The challenger's TCO** must sum at least: relay compute (scaling with connection count, only weakly with bandwidth); egress (the line that dominates); the control plane (§8); 24/7 operations to the broadcast standard; tooling and monitoring; the edge grooming and interop work; and the receiver at the far end. A model counting only egress and compute understates the build and overstates how substitutable the offering is; staffing and the control plane are excluded from every figure below (§9).
+**The challenger's TCO** must sum at least: relay compute (scaling with connection count, only weakly with bandwidth); egress (the line that dominates); the control plane (§8); 24/7 operations to the broadcast standard; tooling and monitoring; the edge pacing and interop work; and the receiver at the far end. A model counting only egress and compute understates the build and overstates how substitutable the offering is; staffing and the control plane are excluded from every figure below (§9).
 
 ---
 
@@ -153,12 +153,12 @@ An open-source relay and a standardised protocol lower the cost of entry against
 
 | Transport | Carriage multiplier | Latency | Fan-out topology | Standardisation |
 | --- | --- | --- | --- | --- |
-| MoQ, media-aware | 0.982 _(measured on a 4.57 %-stuffed clip; 0.973 with MTU discovery; 1.033 on a stuffing-free feed)_ | **2,447 ms** P1/P2-conformant, or **141 ms** on a build whose wire cannot be made conformant _(both measured over the internet, source to groomed egress)_ | relay fans out; last mile is N unicast copies | IETF draft, open implementations; carriage passes nine of nine other relays after the join, five for a late subscriber ([Evidence](../lab/evidence.md) §3.7) |
+| MoQ, media-aware | 0.982 _(measured on a 4.57 %-stuffed clip; 0.973 with MTU discovery; 1.033 on a stuffing-free feed)_ | **2,447 ms** P1/P2-conformant, or **141 ms** on a build whose wire cannot be made conformant _(both measured over the internet, source to paced egress)_ | relay fans out; last mile is N unicast copies | IETF draft, open implementations; carriage passes nine of nine other relays after the join, five for a late subscriber ([Evidence](../lab/evidence.md) §3.7) |
 | SRT | 1.037 _(measured, same path; 1.035 on the feed)_ | **1,623 ms** at a 1 s jitter buffer _(measured, same path and window)_ — sub-second is a matter of setting the buffer shallower | no native fan-out; N sessions or a re-origination tier | published spec, open source |
 | Zixi | ~1.03 _(estimated)_ | sub-second _(vendor claim, not measured here)_ | broadcaster fans out | proprietary, per-GB licence |
 | HLS with TS segments | **1.056 over HTTP/3, 1.029 over HTTP/2 on TCP** _(HTTP layer measured at 1.0006×; framing derived)_ | **2,604 ms** P1/P2- and buffer-model-conformant, on one-second segments _(measured, same path)_; ~2–5 s low-latency mode, ~6 s through the free TS clients | cache fans out | _informational_ spec, RFC 8216 and its second edition; DVB-DASH (ETSI TS 103 285) profiles ISOBMFF only — **not standards-track, yet carried by every cache, CDN and general-purpose client; how a receiver rebuilds a transport stream from it is specified nowhere** ([Comparison](comparison.md) §4.4, §9.1) |
 
-_The latency column is source-to-groomed-egress over the public internet from a common EC2 origin, and it carries an important non-economic condition: **a latency figure on this lane is meaningless without the conformance of the same bytes.** Held at TR 101 290 P1/P2 conformance MoQ and segmented HTTP are level, at 2,447 and 2,604 ms, and the transparent tunnels sit at whatever jitter buffer the operator sets — 1,623 ms at 1 s — since their egress carries the source's own conformant grid ungroomed. No sub-second configuration has been measured conformant on MoQ (§4.6). These are delivery figures, not camera-to-display._
+_The latency column is source-to-paced-egress over the public internet from a common EC2 origin, and it carries an important non-economic condition: **a latency figure on this lane is meaningless without the conformance of the same bytes.** Held at TR 101 290 P1/P2 conformance MoQ and segmented HTTP are level, at 2,447 and 2,604 ms, and the transparent tunnels sit at whatever jitter buffer the operator sets — 1,623 ms at 1 s — since their egress carries the source's own conformant grid unpaced. No sub-second configuration has been measured conformant on MoQ (§4.6). These are delivery figures, not camera-to-display._
 
 ### 4.5 Last-mile egress
 
@@ -254,7 +254,7 @@ _The latency column is source-to-groomed-egress over the public internet from a 
 
 **The on-prem SRT case is stronger than this paper's direction implies.**
 
-- **No hand-off problem.** Byte-faithful SRT is transparent on every criterion over a real path — all 13 PIDs, SI/splice, stuffing, source mux rate, PSI cadence, PCR grid, 0 continuity errors, **the source's PCR accuracy intact, ungroomed** ([Evidence](../lab/evidence.md) §3.1). **Removes the grooming workstream** MoQ cannot buy out of; the IRD-facing RTP egress, and an identical pair of it for ST 2022-7, remain on every lane.
+- **No hand-off problem.** Byte-faithful SRT is transparent on every criterion over a real path — all 13 PIDs, SI/splice, stuffing, source mux rate, PSI cadence, PCR grid, 0 continuity errors, **the source's PCR accuracy intact, unpaced** ([Evidence](../lab/evidence.md) §3.1). **Removes the pacing workstream** MoQ cannot buy out of; the IRD-facing RTP egress, and an identical pair of it for ST 2022-7, remain on every lane.
 - **Primary distribution has little fan-out** (§4.5) — tens of destinations, N tunnels tractable; CDN fan-out economics barely apply.
 - **Fixed costs already sunk** — NOC, monitoring, transit, receive estate; own transit is cheapest per byte (§4.6) and reach is not binding inside the footprint.
 
@@ -294,13 +294,13 @@ And it does not generalise: every one of those systems is a different vintage, a
 | Layer | Generalises? | Who should supply it |
 | --- | --- | --- |
 | **Mechanism** — token issue and verification, key rotation, authorisation enforcement, revocation semantics | yes; it is protocol and cryptography | open source or a vendor. The _enforcement point_ is native and verified to exist, but the credential profile above it is a deployment choice rather than a wire primitive, so this layer is generalisable in principle and not yet standardised in practice ([Evidence](../lab/evidence.md) §3.10) |
-| **Orchestration** — provision a route, place a relay, configure a groomer, tear it down | partly; the primitives generalise, the topology and change process do not | vendor primitives, in-house policy |
+| **Orchestration** — provision a route, place a relay, configure a pacer, tear it down | partly; the primitives generalise, the topology and change process do not | vendor primitives, in-house policy |
 | **Observability** — probes and conformance checks generalise; sinks, thresholds, escalation and runbooks are the operator's | partly | vendor probes, in-house integration |
 | **Policy** — who is entitled to what, when, under which contract, and what happens when it changes | no; it lives inside the rights, scheduling and CA systems | in-house, necessarily |
 
 **The vendor-addressable layer is real and thin; the company-specific layer is thick.** That is a more useful conclusion than "zero", and it predicts the shape of a sensible build: buy or adopt the mechanism, build the policy and the integration, and expect the latter to dominate the estimate.
 
-Same division measured in the data plane: pacing primitive general and upstream; grooming stage operator-specific ([lab/upstream-contributions.md](../lab/upstream-contributions.md) §8).
+Same division measured in the data plane: pacing primitive general and upstream; pacing stage operator-specific ([lab/upstream-contributions.md](../lab/upstream-contributions.md) §8).
 
 ### 8.3 In-house tractability
 
@@ -312,7 +312,7 @@ Same division measured in the data plane: pacing primitive general and upstream;
 
 - **Infrastructure providers — CDNs and hyperscalers — capture the durable value.** They sell fungible capacity per unit, the one input nobody self-supplies past a certain reach, and the [cost model](../lab/cost-model.md) §5 puts it at roughly 90 % of a self-built transport bill. The caveat is §4.6's: for MoQ the market premise the buyer relies on is not yet met.
 - **Control-plane vendors have a real market, and it is not the giants.** A smaller organisation has fewer systems to integrate and often no codified process for the work at all, so the vendor's opinionated model _is_ the product — bought as a way of acquiring a process rather than automating one. That is exactly why the same product cannot be sold upmarket: a mature broadcaster already has the process, encoded across those isolated systems, and needs it honoured rather than replaced.
-- **Data-plane vendor value has moved rather than disappeared.** There is little left in _transport_. But the campaign's own results are a product specification: no stock groomer turns a MoQ egress into a conformant transport stream ([Evidence](../lab/evidence.md) §3.2), the campaign's own does so only as far as P1/P2, and upstream's export, which passes the buffer model too, is graded in software only (§3.16 of the same document). **The value sits at the hand-off, not in the carriage** — the edge appliance, the IRD-facing gateway, the conformance stage — which is a smaller market than transport was, and a real one.
+- **Data-plane vendor value has moved rather than disappeared.** There is little left in _transport_. But the campaign's own results are a product specification: no stock pacer turns a MoQ egress into a conformant transport stream ([Evidence](../lab/evidence.md) §3.2), the campaign's own does so only as far as P1/P2, and upstream's export, which passes the buffer model too, is graded in software only (§3.16 of the same document). **The value sits at the hand-off, not in the carriage** — the edge appliance, the IRD-facing gateway, the conformance stage — which is a smaller market than transport was, and a real one.
 
 ### 8.5 Unsponsored interoperability
 

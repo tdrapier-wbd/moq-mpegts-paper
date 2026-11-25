@@ -1,25 +1,25 @@
-# T16 — grooming a segmented-HTTP egress
+# T16 — pacing a segmented-HTTP egress
 
 ## Objective
 
-[T14](test-14-data-plane-comparison.md) measurement 2 established that a segmented-HTTP egress is ~240× coarser than a MoQ egress by median burst size, and stopped there on purpose: the measurement point was the _ungroomed_ egress, because the question was burst granularity. That left the consequence unmeasured, and T14's observations disposed of it in one sentence:
+[T14](test-14-data-plane-comparison.md) measurement 2 established that a segmented-HTTP egress is ~240× coarser than a MoQ egress by median burst size, and stopped there on purpose: the measurement point was the _unpaced_ egress, because the question was burst granularity. That left the consequence unmeasured, and T14's observations disposed of it in one sentence:
 
 > `mpegts-pacer`'s `--stall-ms` / `--on-stall mute` machinery was built for a MoQ egress whose worst gap is 149 ms; it is the right mechanism, but the timeouts documented for leg A are an order of magnitude too tight for a segment-fetching leg. **That is a configuration finding, not a defect.**
 
-This inserts a groomer into the identical chain arm B1 measured, changing nothing else:
+This inserts a pacer into the identical chain arm B1 measured, changing nothing else:
 
 ```
 tsp -O hls -> HTTP origin -> tsp -I hls -> [mpegts-pacer] -> instrument
 ```
 
-and runs it four ways: once sizing its own buffer from the arrival pattern, and three times at points in the parameter space T14 was proposing to adjust — including T14's proposal taken literally. So the run answers two questions off one publisher: whether a segmented-HTTP egress can be groomed to the standard [T13](test-13-downstream-grooming.md) reached on the MoQ lane, and whether reaching it is a matter of setting the documented flags differently.
+and runs it four ways: once sizing its own buffer from the arrival pattern, and three times at points in the parameter space T14 was proposing to adjust — including T14's proposal taken literally. So the run answers two questions off one publisher: whether a segmented-HTTP egress can be paced to the standard [T13](test-13-downstream-grooming.md) reached on the MoQ lane, and whether reaching it is a matter of setting the documented flags differently.
 
 ### Pass criteria (fixed before the runs)
 
-1. **Timing.** The groomed egress meets the gates T13 held `mpegts-pacer` to on the MoQ lane: zero PCR violations at `pcrverify --absolute --jitter-max 13` (481 ns), zero PCR repetition intervals above 40 ms, zero continuity errors.
-2. **Cadence.** No silence beyond the ~15 ms scale T13's paced legs reached, and a 10 ms coefficient of variation of the same order as the MoQ lane's groomed 0.079 rather than arm B1's 12.5.
-3. **Carriage.** Grooming costs nothing T14 measurement 4 credited segmented HTTP with: all PIDs, the DVB service layer, all three SCTE-35 PIDs with typing.
-4. **Nothing deleted.** Zero dropped and zero muted packets. A groomer that meets the first three criteria by discarding programme has not groomed anything.
+1. **Timing.** The paced egress meets the gates T13 held `mpegts-pacer` to on the MoQ lane: zero PCR violations at `pcrverify --absolute --jitter-max 13` (481 ns), zero PCR repetition intervals above 40 ms, zero continuity errors.
+2. **Cadence.** No silence beyond the ~15 ms scale T13's paced legs reached, and a 10 ms coefficient of variation of the same order as the MoQ lane's paced 0.079 rather than arm B1's 12.5.
+3. **Carriage.** Pacing costs nothing T14 measurement 4 credited segmented HTTP with: all PIDs, the DVB service layer, all three SCTE-35 PIDs with typing.
+4. **Nothing deleted.** Zero dropped and zero muted packets. A pacer that meets the first three criteria by discarding programme has not paced anything.
 5. **No tuning.** Criteria 1–4 with the pacer told the output rate and nothing else. If it has to be told the segment duration or the buffer depth, T14's "configuration finding" stands and [architecture](../docs/architecture.md) §4.5 does not.
 
 ---
@@ -32,30 +32,30 @@ and runs it four ways: once sizing its own buffer from the arrival pattern, and 
 | Host | single macOS host, loopback path, all five arms in one session off one publisher |
 | Publisher | TSDuck 3.44-4676 `tsp -O hls`, 2 s target, `--intra-close --align-first-segment --live 6 --live-extra-segments 3` |
 | Origin | `python3 -m http.server`, as T14 measurement 2 |
-| Receiver | TSDuck 3.44-4676 `tsp -I hls --live`, bounded by `-P until --seconds` so the groomer sees a clean end of stream and flushes |
-| Groomer | `mpegts-pacer` 0.1.0 with adaptive sizing, `examples/ts_egress` — the same code has since become the crate's `mpegts-pacer` binary, and the rig builds whichever the checkout has |
+| Receiver | TSDuck 3.44-4676 `tsp -I hls --live`, bounded by `-P until --seconds` so the pacer sees a clean end of stream and flushes |
+| Pacer | `mpegts-pacer` 0.1.0 with adaptive sizing, `examples/ts_egress` — the same code has since become the crate's `mpegts-pacer` binary, and the rig builds whichever the checkout has |
 | Output rate | 11,437,843 b/s — the source's PCR-derived content rate (9,945,951) plus the pacer's 15 % default headroom, pinned so every arm is graded against one byte clock |
-| Instrument | [`t13-cadence.py`](scripts/t13-cadence.py): `pipe` mode for arm A (64 kB reads, as T14), `capture` mode for the groomed arms (loopback UDP, as T13's MoQ lane) |
+| Instrument | [`t13-cadence.py`](scripts/t13-cadence.py): `pipe` mode for arm A (64 kB reads, as T14), `capture` mode for the paced arms (loopback UDP, as T13's MoQ lane) |
 | Grading | [`t13-grade.py`](scripts/t13-grade.py) over `compliance.py`, plus `tsp -P pcrverify`, `-P continuity` and `-P analyze` directly |
 | Rig | [`t16-groom-segmented.sh`](scripts/t16-groom-segmented.sh) |
 | Capture | 60 s per arm, sequential, one run each |
 
 **Five arms. C, D and E are three points in the configuration space, which is what makes T14's claim testable rather than arguable.**
 
-| Arm | Groomer configuration | What it tests |
+| Arm | Pacer configuration | What it tests |
 | --- | --- | --- |
-| **A** | none — ungroomed | T14 arm B1's measurement point, reproduced as the control |
+| **A** | none — unpaced | T14 arm B1's measurement point, reproduced as the control |
 | **B** | rate only, no depth flags | criterion 5: the pacer sizing itself from arrival |
 | **C** | `--latency-ms 200 --max-latency-ms 2000 --stall-ms 1000` | the depths T13 ran on the MoQ lane, unchanged |
 | **D** | `--latency-ms 200 --max-latency-ms 2000 --stall-ms 9000` | T14's proposal taken literally: same depths, timeout raised past the worst gap |
 | **E** | `--latency-ms 8000 --max-latency-ms 16000 --stall-ms 9000` | every depth a flag reaches, set to what arm B derived |
 
-Each arm is timestamped where its output actually goes — arm A on a pipe, because that is what `tsp -I hls` writes to and what T14 measured; the groomed arms on a UDP socket, because that is a groomer's output and what T13 measured. That keeps each column comparable with the campaign that produced it.
+Each arm is timestamped where its output actually goes — arm A on a pipe, because that is what `tsp -I hls` writes to and what T14 measured; the paced arms on a UDP socket, because that is a pacer's output and what T13 measured. That keeps each column comparable with the campaign that produced it.
 
 ### What this environment cannot show
 
-- **Loopback inflates burst rate,** exactly as in T14. Burst _size_ and the silences between bursts are structural, so the input the groomer sees is representative; the peak-rate figures are an upper bound.
-- **The two instruments are not interchangeable.** Arm A resolves bursts at 64 kB reads; the groomed arms resolve every 1,316-byte datagram. A finer instrument sees more variance, not less, so the cadence improvement below is a lower bound.
+- **Loopback inflates burst rate,** exactly as in T14. Burst _size_ and the silences between bursts are structural, so the input the pacer sees is representative; the peak-rate figures are an upper bound.
+- **The two instruments are not interchangeable.** Arm A resolves bursts at 64 kB reads; the paced arms resolve every 1,316-byte datagram. A finer instrument sees more variance, not less, so the cadence improvement below is a lower bound.
 - **Arm A's window carries more media than 60 s of real time,** because `tsp -I hls --live` drains the live window faster than real time before settling. That makes cross-arm _duration_ ratios meaningless; see Corrections.
 - **Nothing was ever missing, only late.** Every arm is loopback, so no segment failed to arrive. This measures absorption of a bursty delivery, not recovery from a lossy one.
 - One clip, one segment duration, one run per arm, single host.
@@ -69,7 +69,7 @@ Each arm is timestamped where its output actually goes — arm A on a pipe, beca
 PACER_REPO=~/mpegts-pacer lab/scripts/t16-groom-segmented.sh ~/contrib-10m.ts ~/t16 60 2
 ```
 
-The rig derives the output rate from the source's PCR timeline, starts publisher and origin, captures arm A on a pipe and the groomed arms on loopback UDP, then reports cadence with `t13-cadence.py report` and structure with `t13-grade.py grade`. Each pacer's closing statistics are collected, which is how the buffer depth it chose for itself gets recorded.
+The rig derives the output rate from the source's PCR timeline, starts publisher and origin, captures arm A on a pipe and the paced arms on loopback UDP, then reports cadence with `t13-cadence.py report` and structure with `t13-grade.py grade`. Each pacer's closing statistics are collected, which is how the buffer depth it chose for itself gets recorded.
 
 ---
 
@@ -77,7 +77,7 @@ The rig derives the output rate from the source's PCR timeline, starts publisher
 
 ### Measurement 1 — cadence: the burst structure is gone, and it did not need to be told anything
 
-| 60 s window | A — ungroomed | **B — adaptive** | C — MoQ depths | D — stall only | E — every flag |
+| 60 s window | A — unpaced | **B — adaptive** | C — MoQ depths | D — stall only | E — every flag |
 | --- | --- | --- | --- | --- | --- |
 | Records | 22,799 reads | 65,186 dgrams | 53,998 | 65,187 | 65,186 |
 | Delivered rate | 10.457 Mb/s | **11.438 Mb/s** | 9.475 Mb/s | 11.438 Mb/s | 11.438 Mb/s |
@@ -91,7 +91,7 @@ The rig derives the output rate from the source's PCR timeline, starts publisher
 
 Arm A reproduces T14 arm B1 within run-to-run noise (28 bursts against 28, median 2.967 MB against 2.95 MB, CoV 12.381 against 12.514), which is the check that this is the same chain.
 
-**Arm B's cadence is not merely better than the ungroomed egress, it is as good as the groomed MoQ lane.** T13's pacer control on the MoQ egress measured 10 ms CoV 0.079 and a largest gap of 10.4 ms; arm B reads 0.068 and 17.2 ms — from an input whose largest gap is 4.01 s, 27× the MoQ egress's worst silence. Two columns within a factor of two of each other, from inputs two orders of magnitude apart: **on a paced egress the arrival pattern has stopped being visible.**
+**Arm B's cadence is not merely better than the unpaced egress, it is as good as the paced MoQ lane.** T13's pacer control on the MoQ egress measured 10 ms CoV 0.079 and a largest gap of 10.4 ms; arm B reads 0.068 and 17.2 ms — from an input whose largest gap is 4.01 s, 27× the MoQ egress's worst silence. Two columns within a factor of two of each other, from inputs two orders of magnitude apart: **on a paced egress the arrival pattern has stopped being visible.**
 
 The 1 s rate series shows the mechanism. Arm A alternates between 0.00 and 23–30 Mb/s; arm B reads 11.42–11.45 Mb/s in every one of the 59 whole seconds in the window, with no exceptions; arm C, on the MoQ-lane depths, collapses to zero seven times:
 
@@ -109,7 +109,7 @@ C:  11.46 11.43  4.67 2.05 11.44 11.44 11.43 11.43 11.43 11.45 11.42 11.44 ...
 
 | variant | packets | stuff % | Mb/s | PCR > 481 ns | PCR > 500 µs | > 40 ms | CC | max jitter | structure |
 | --- | --: | --: | --: | --: | --: | --: | --: | --: | --- |
-| A — ungroomed | 406,406 | 4.6 | 9.948 | 2,506 | 0 | 0 | 0 | 302.3 µs | preserved |
+| A — unpaced | 406,406 | 4.6 | 9.948 | 2,506 | 0 | 0 | 0 | 302.3 µs | preserved |
 | **B — adaptive** | 456,302 | 16.9 | **11.442** | **0** | **0** | **0** | **0** | **13.7 µs** | **preserved** |
 | C — MoQ depths | 377,986 | 19.3 | 9.479 | 2,036 | 7 | 7 | **348** | 1,537,659.7 µs | **FAIL: continuity** |
 | D — stall only | 456,309 | 21.8 | 11.440 | **0** | **0** | 2 | **220** | 7.9 µs | **FAIL: continuity** |
@@ -119,9 +119,9 @@ Confirmed on arm B with `pcrverify` directly rather than only through `complianc
 
 **Arm D is the reason criterion 4 exists.** It posts a _perfect_ PCR record — 0 violations at 481 ns over 2,723 PCRs, 0 at 18 µs, max jitter 7.9 µs, the best of any arm — and a perfect cadence, and it is a corrupt stream: 220 continuity errors in the grading, 231 discontinuities under `tsp -P continuity`, including on two of the three SCTE-35 PIDs. This is **T13's "passing every PCR check is not the same as being right" recurring in a new rig**, and in a nastier form: T13's failing variant at least declared a wrong rate, where arm D's rate, PCR arithmetic and wire cadence are all exactly right.
 
-Carriage survives grooming intact on arm B. PID census against the ungroomed capture:
+Carriage survives pacing intact on arm B. PID census against the unpaced capture:
 
-| PID | Content | A — ungroomed | B — groomed |
+| PID | Content | A — unpaced | B — paced |
 | --- | --- | --: | --: |
 | 0x0000 / 0x0064 | PAT / PMT (own PID kept) | 518 / 518 | 508 / 508 |
 | 0x0010 / 0x0011 / 0x0014 | NIT / SDT-BAT / TDT-TOT | 12 / 59 / 4 | 12 / 57 / 4 |
@@ -135,7 +135,7 @@ Every PID present, all three splice PIDs correctly typed, the DVB service layer 
 
 ### Measurement 3 — the configuration space, tested
 
-Closing statistics from the four groomed arms — the pacer reporting on its own input and its own behaviour:
+Closing statistics from the four paced arms — the pacer reporting on its own input and its own behaviour:
 
 |  | **B — adaptive** | C — MoQ depths | D — stall only | E — every flag |
 | --- | --- | --- | --- | --- |
@@ -154,7 +154,7 @@ Closing statistics from the four groomed arms — the pacer reporting on its own
 
 **D — T14's proposal, taken literally — stops the muting and corrupts the stream instead.** Raising only the timeout does exactly what T14 predicted: no stalls, no muting, a flat wire. It leaves the cap untouched, so the buffer still overflows (20,960 packets), and it leaves the 200 ms start gate untouched, so the pacer begins output holding 200 ms of media with the next segment 1.8 s away and then pads the shortfall with nulls: **125,296 underrun packets, 21.8 % stuffing, 548 PCRs it had to insert itself.** The result is the arm that passes criteria 1, 2 and 3 and fails 4. **So the sentence "the mechanism is right, the timeouts are too tight" is not true: the timeout was the least of the three things that were wrong.**
 
-**E — every depth set to what arm B derived — passes.** So the parameter space _does_ contain a passing configuration, reachable with flags that predate this work: an 8 s cushion, a 16 s cap, a 9 s timeout. That is the honest limit on how much of T14 this run corrects, and it is also the whole argument, because those three numbers are not properties of `mpegts-pacer`. They are properties of the egress it was pointed at — 8 s is 2.5× the 4.2 s lead this feed builds, and at 6 s segments it would be wrong. Arm B reaches the same place having been told the output rate and nothing else. **The difference between B and E is not what the wire looks like; it is whether the operator has to characterise the egress before grooming it.**
+**E — every depth set to what arm B derived — passes.** So the parameter space _does_ contain a passing configuration, reachable with flags that predate this work: an 8 s cushion, a 16 s cap, a 9 s timeout. That is the honest limit on how much of T14 this run corrects, and it is also the whole argument, because those three numbers are not properties of `mpegts-pacer`. They are properties of the egress it was pointed at — 8 s is 2.5× the 4.2 s lead this feed builds, and at 6 s segments it would be wrong. Arm B reaches the same place having been told the output rate and nothing else. **The difference between B and E is not what the wire looks like; it is whether the operator has to characterise the egress before pacing it.**
 
 **The cushion arm B chose is the ceiling, not the factor.** Observed lead 4,313 ms × the 2.5 default factor is 10.8 s, clamped to the 8 s default ceiling. This run therefore does not test the factor; it tests whether 8 s suffices for 2 s segments, and it does, with the buffer peaking at 13.1 MB against a 4.01 s worst gap. A 6 s segment duration would need the ceiling raised, which is the remaining knob and the honest statement of it.
 
@@ -176,23 +176,23 @@ Closing statistics from the four groomed arms — the pacer reporting on its own
 
 **T14's "configuration finding, not a defect" was right in the weak sense and wrong in the sense that mattered.** A passing configuration exists — arm E — so the parameter space was adequate, as claimed. But the claim named the wrong parameter and the wrong magnitude: the operative change is the _cushion_, from 200 ms to 8 s, a factor of 40, and the timeout follows from it rather than the other way round. Arm D is the claim implemented exactly as written and it corrupts the stream. **The generalisable form: when a tool fails on a new input and the diagnosis is "the mechanism is right, the numbers are wrong", that diagnosis is worthless until the numbers are named, because "adjust the timeouts" and "multiply the buffer by forty and re-derive two other quantities from it" are different findings that read identically.**
 
-**The substantive result is that one groomer serves both data planes.** The pacer was built and measured against a MoQ egress whose worst silence is 149 ms. Handed an egress whose worst silence is 4.01 s it reaches the same timing gates and a better cadence figure, with no flag changed and no separate code path, because the quantity it sizes against — the lead the input builds ahead of real time — is measured rather than assumed. This matters for the paper's framing beyond the tool: the grooming obligation sits on the distributor's side of the demarcation on _both_ planes ([comparison](../docs/comparison.md) §4.1), and it is dischargeable by one stage rather than two.
+**The substantive result is that one pacer serves both data planes.** The pacer was built and measured against a MoQ egress whose worst silence is 149 ms. Handed an egress whose worst silence is 4.01 s it reaches the same timing gates and a better cadence figure, with no flag changed and no separate code path, because the quantity it sizes against — the lead the input builds ahead of real time — is measured rather than assumed. This matters for the paper's framing beyond the tool: the pacing obligation sits on the distributor's side of the demarcation on _both_ planes ([comparison](../docs/comparison.md) §4.1), and it is dischargeable by one stage rather than two.
 
-**The cost of absorption is start-up latency and resident memory, and it is arithmetic.** Arm B held output back until it had 7.5 s of programme and ran a 13.1 MB buffer. A groomer cannot ride out a gap it has not stored programme for, so T14's latency-floor finding survives grooming unchanged: segment duration sets the floor and grooming adds a further multiple of it. What grooming does _not_ do is leave that latency visible to the receiver as a cadence problem.
+**The cost of absorption is start-up latency and resident memory, and it is arithmetic.** Arm B held output back until it had 7.5 s of programme and ran a 13.1 MB buffer. A pacer cannot ride out a gap it has not stored programme for, so T14's latency-floor finding survives pacing unchanged: segment duration sets the floor and pacing adds a further multiple of it. What pacing does _not_ do is leave that latency visible to the receiver as a cadence problem.
 
-**Detection time is the honest asymmetry between the planes.** Arm B's stall timeout is derived as cushion plus grace, landing at 9 s against the 1 s the MoQ lane runs. On a segmented plane a dead origin and a slow publish are indistinguishable faster than a segment period, so the deep cushion that buys clean cadence necessarily buys slow failure detection with it. An operator taking segmented HTTP for primary distribution gets off-the-shelf reassembly and pays ~9 s of failure detection for it. That is a property of the data plane, not of the groomer, and not a defect to fix.
+**Detection time is the honest asymmetry between the planes.** Arm B's stall timeout is derived as cushion plus grace, landing at 9 s against the 1 s the MoQ lane runs. On a segmented plane a dead origin and a slow publish are indistinguishable faster than a segment period, so the deep cushion that buys clean cadence necessarily buys slow failure detection with it. An operator taking segmented HTTP for primary distribution gets off-the-shelf reassembly and pays ~9 s of failure detection for it. That is a property of the data plane, not of the pacer, and not a defect to fix.
 
-**What limits PCR placement is the egress, not live operation and not the cushion.** T13 measured 0 PCR repetition intervals above 40 ms on a file against 131 in 25 s on the wire, and concluded that a stage re-timing a stream as it arrives cannot place PCRs as freely as one reading a file. Arm B posts 0 on the wire, which disposes of the file-versus-live reading. It looked at the time as though depth were the replacement — Arm B carries seconds of cushion where the MoQ legs carried about one — and that was the wrong variable, because the two runs also differed in the data plane. Two later measurements separate them. [T18](test-18-delivery-latency.md) swept the MoQ lane's cushion across eight times the depth and found **no crossing point and no trade**: repetition holds at ~490 intervals above 40 ms with a 228 ms maximum, and stays there when groomer starvation is removed altogether. And [T13](test-13-downstream-grooming.md)'s segmented pass-through leg posts 0 while holding almost no buffer at all.
+**What limits PCR placement is the egress, not live operation and not the cushion.** T13 measured 0 PCR repetition intervals above 40 ms on a file against 131 in 25 s on the wire, and concluded that a stage re-timing a stream as it arrives cannot place PCRs as freely as one reading a file. Arm B posts 0 on the wire, which disposes of the file-versus-live reading. It looked at the time as though depth were the replacement — Arm B carries seconds of cushion where the MoQ legs carried about one — and that was the wrong variable, because the two runs also differed in the data plane. Two later measurements separate them. [T18](test-18-delivery-latency.md) swept the MoQ lane's cushion across eight times the depth and found **no crossing point and no trade**: repetition holds at ~490 intervals above 40 ms with a 228 ms maximum, and stays there when pacer starvation is removed altogether. And [T13](test-13-downstream-grooming.md)'s segmented pass-through leg posts 0 while holding almost no buffer at all.
 
 ---
 
 ## Conclusion
 
-**The unmeasured cell in [evidence](evidence.md) §3.2 is closed, and the answer is yes.** A segmented-HTTP egress grooms to the same standard T13 reached on the MoQ lane — 0 PCR violations at 481 ns, 0 repetition intervals above 40 ms, 0 continuity errors, 10 ms CoV 0.068, largest silence 17.2 ms, every PID and all three SCTE-35 PIDs preserved — by the same tool, in the same chain, with nothing dropped and nothing muted.
+**The unmeasured cell in [evidence](evidence.md) §3.2 is closed, and the answer is yes.** A segmented-HTTP egress paces to the same standard T13 reached on the MoQ lane — 0 PCR violations at 481 ns, 0 repetition intervals above 40 ms, 0 continuity errors, 10 ms CoV 0.068, largest silence 17.2 ms, every PID and all three SCTE-35 PIDs preserved — by the same tool, in the same chain, with nothing dropped and nothing muted.
 
-**Reaching it needed the buffer to be sized from arrival, not the flags to be set differently, and the distinction is narrower than it looks.** A flag-only configuration passes (arm E), so T14 was right that the parameter space was adequate. It was wrong about which parameter and by how much, and its literal proposal — raise the timeout — produces a stream with 231 continuity errors and an immaculate PCR record (arm D). The three numbers arm E needs are properties of the egress rather than of the tool, so somebody has to measure the arrival pattern; the result here is that the groomer can do it itself, from the output rate alone.
+**Reaching it needed the buffer to be sized from arrival, not the flags to be set differently, and the distinction is narrower than it looks.** A flag-only configuration passes (arm E), so T14 was right that the parameter space was adequate. It was wrong about which parameter and by how much, and its literal proposal — raise the timeout — produces a stream with 231 continuity errors and an immaculate PCR record (arm D). The three numbers arm E needs are properties of the egress rather than of the tool, so somebody has to measure the arrival pattern; the result here is that the pacer can do it itself, from the output rate alone.
 
-**The paper's two-plane framing gets stronger and its latency framing does not move.** One groomer serves both egresses, so no _custom_ stage has to be written twice. The lanes are not equivalent in what they require of that stage, though, and the asymmetry runs the other way from the one this experiment was looking for: [T13](test-13-downstream-grooming.md) later graded the off-the-shelf candidates against a segmented egress and found that `tsp -P pcradjust -P regulate` passes all four criteria with the mux intact, because this lane hands a groomer the stuffing, the declared mux rate and the PCR spacing that `moq export ts` drops. On this plane the pacer is a better option; on the MoQ plane it is the only one. What segmented HTTP still costs is 7.5 s before the first byte, 13.1 MB resident and ~9 s to notice a dead source — all three set by segment duration, none of them removable by a better groomer.
+**The paper's two-plane framing gets stronger and its latency framing does not move.** One pacer serves both egresses, so no _custom_ stage has to be written twice. The lanes are not equivalent in what they require of that stage, though, and the asymmetry runs the other way from the one this experiment was looking for: [T13](test-13-downstream-grooming.md) later graded the off-the-shelf candidates against a segmented egress and found that `tsp -P pcradjust -P regulate` passes all four criteria with the mux intact, because this lane hands a pacer the stuffing, the declared mux rate and the PCR spacing that `moq export ts` drops. On this plane the pacer is a better option; on the MoQ plane it is the only one. What segmented HTTP still costs is 7.5 s before the first byte, 13.1 MB resident and ~9 s to notice a dead source — all three set by segment duration, none of them removable by a better pacer.
 
 ### Still open
 
@@ -203,7 +203,7 @@ Protocols for these are in [planned-experiments.md](planned-experiments.md).
 | The adaptive factor, tested rather than clamped | a segment duration whose 2.5 × lead lands under the 8 s ceiling — 1 s segments. This run only shows the ceiling was adequate |
 | 6 s segments through the same chain | the default ceiling raised. T14 measurement 5 published at 6 s, so the fixture exists |
 | The content start gate, distinguished from a timer | a feed that is not rate-matched, or a join mid-segment. On this rig the two coincide |
-| Grooming a _lossy_ segmented egress | a path that drops segments rather than delivering them late. Nothing was ever missing here, only late |
+| Pacing a _lossy_ segmented egress | a path that drops segments rather than delivering them late. Nothing was ever missing here, only late |
 | The same grading against a hardware IRD | [T7](test-7-timing-integrity.md)'s open Gate 2, which this inherits rather than advances |
 
 ---
@@ -214,7 +214,7 @@ Protocols for these are in [planned-experiments.md](planned-experiments.md).
 
 **A conclusion was drafted from arithmetic and the run contradicted it.** The first version of this file stated that no configuration of the documented flags passes, reasoning correctly that a 2,000 ms cap cannot hold a 3.9 MB delivery and that the 200 ms start gate is not exposed as a flag — and concluding incorrectly, because `--latency-ms 8000` moves the start gate as a side effect of moving the cushion. Arms D and E were added to test the claim instead of asserting it, and arm E passes. The corrected finding is narrower and more useful than the one it replaced: the configuration exists, the numbers in it are properties of the input, and the disagreement with T14 is about _which_ parameter, not about whether tuning can work. _Lesson: a claim about what a tool cannot be configured to do is a claim about its whole parameter space, and the cost of running two more arms is far below the cost of publishing the inference. This nearly went out as "no configuration passes" on the strength of two correct facts about three parameters._
 
-**Duration fidelity cannot be compared across these captures, and the grading table reports it anyway.** The `dur` column reads 0.976 for every groomed arm, which looks like a stream running 2.4 % short and is not: the structural reference is arm A's capture, and `tsp -I hls --live` drains the live window faster than real time before settling, so arm A's 58.45 s of wall time carries more media than the groomed arms' 60.00 s do. The ~2 % shortfall in every PID count above has the same single cause. This is **T9's loopback span artefact recurring for the third time in this campaign** — T9 recorded it, T14 measurement 5 hit it again and fixed it by removing wall clocks from the ratio — and it recurs because each new rig re-derives a comparison from whatever captures it happens to have. The check that _is_ valid here is intrinsic to one stream: `pcrbitrate` equals the commanded rate exactly, so the groomed output carries the media time it claims. _Lesson: a ratio between two captures is only valid when both windows cover the same media; a rig that grades arms against each other should assert that rather than assume it._
+**Duration fidelity cannot be compared across these captures, and the grading table reports it anyway.** The `dur` column reads 0.976 for every paced arm, which looks like a stream running 2.4 % short and is not: the structural reference is arm A's capture, and `tsp -I hls --live` drains the live window faster than real time before settling, so arm A's 58.45 s of wall time carries more media than the paced arms' 60.00 s do. The ~2 % shortfall in every PID count above has the same single cause. This is **T9's loopback span artefact recurring for the third time in this campaign** — T9 recorded it, T14 measurement 5 hit it again and fixed it by removing wall clocks from the ratio — and it recurs because each new rig re-derives a comparison from whatever captures it happens to have. The check that _is_ valid here is intrinsic to one stream: `pcrbitrate` equals the commanded rate exactly, so the paced output carries the media time it claims. _Lesson: a ratio between two captures is only valid when both windows cover the same media; a rig that grades arms against each other should assert that rather than assume it._
 
 **`pcrverify --jitter-max` changes units depending on another flag, and this run was graded twice because of it.** Mid-analysis the 500 in the harness's second gate was read as 500 PCR units — 18 µs — and a correction was drafted against T13's procedure text and against [`t13-grade.py`](scripts/t13-grade.py)'s header, both of which say 500 µs. Both were right and the correction was wrong: **`--jitter-max` is microseconds by default and PCR ticks only under `--absolute`**, so the campaign's `--jitter-max 500` gate has always been the 500 µs it claims. The arms were re-measured at both readings, which is why the results above quote 500 µs and 18 µs separately; arm B passes at both, so nothing moved. The script's header now states the dependency.
 
@@ -222,8 +222,8 @@ Protocols for these are in [planned-experiments.md](planned-experiments.md).
 
 ## References
 
-- [T14](test-14-data-plane-comparison.md) — the ungroomed egress this grooms, and the "configuration finding" this narrows
-- [T13](test-13-downstream-grooming.md) — the grooming standard on the MoQ lane, whose criteria and gates are reused verbatim, and whose "passing every PCR check is not the same as being right" observation arm D reproduces
+- [T14](test-14-data-plane-comparison.md) — the unpaced egress this paces, and the "configuration finding" this narrows
+- [T13](test-13-downstream-grooming.md) — the pacing standard on the MoQ lane, whose criteria and gates are reused verbatim, and whose "passing every PCR check is not the same as being right" observation arm D reproduces
 - [T9](test-9-performance.md) — the loopback span artefact recorded in Corrections
 - [architecture](../docs/architecture.md) §4.5 — the work this measures
 - [evidence](evidence.md) §3.2 — the unmeasured cell this closes

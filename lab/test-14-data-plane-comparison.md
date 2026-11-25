@@ -6,9 +6,9 @@
 
 This closes the gap on the axes reachable without new hardware, and it tests one prediction the comparison made and could not support:
 
-> A 1–2 s segment fetched over HTTP arrives as a burst of a megabyte or two, where a MoQ object is roughly frame-sized. Segmented HTTP's egress may therefore be _harder_ to groom, not easier.
+> A 1–2 s segment fetched over HTTP arrives as a burst of a megabyte or two, where a MoQ object is roughly frame-sized. Segmented HTTP's egress may therefore be _harder_ to pace, not easier.
 
-That prediction matters because the whole hand-off axis turned on it. The obligation to hand a client a clean, paced transport stream sits on the distributor's side of the demarcation on **both** data planes — a distributor does not supply its clients' receivers ([comparison](../docs/comparison.md) §4.1) — so the question is not who owns the grooming stage but how much work it has to do.
+That prediction matters because the whole hand-off axis turned on it. The obligation to hand a client a clean, paced transport stream sits on the distributor's side of the demarcation on **both** data planes — a distributor does not supply its clients' receivers ([comparison](../docs/comparison.md) §4.1) — so the question is not who owns the pacing stage but how much work it has to do.
 
 ### Pass criteria (fixed before the runs)
 
@@ -40,7 +40,7 @@ Stated as what would move the paper's conclusion, since a comparison has no pass
 - **Arm B1 — classic HLS with TS, entirely off the shelf.** Symmetric TSDuck, so PSI, PID and cadence observations are directly comparable with T1/T2/T7/T13.
 - **Arm B2 — Low-Latency HLS with TS parts.** Now run, with Apple's HLS Tools 1.26.143 as the publisher. The arm divides further than expected: the _publish_ half exists and works, the _receive_ half has no free implementation at all (measurement 2b).
 
-Both arms feed the _same_ groomer and egress as leg A, because a shared groomer is what makes this a comparison rather than two demonstrations.
+Both arms feed the _same_ pacer and egress as leg A, because a shared pacer is what makes this a comparison rather than two demonstrations.
 
 ### What this environment cannot show
 
@@ -79,7 +79,7 @@ done
 mediastreamvalidator -t 25 http://127.0.0.1:<port>/lowLatencyHLS.m3u8
 ```
 
-The measurement point on both legs is the **ungroomed** egress — what the reassembly stage hands the groomer — so no pacer is in either chain.
+The measurement point on both legs is the **unpaced** egress — what the reassembly stage hands the pacer — so no pacer is in either chain.
 
 ---
 
@@ -171,7 +171,7 @@ PID census against the source, 60 s windows:
 
 So the only modification is a continuity re-stamp on PAT and PMT, which is _forced_: the segmenter injects an extra PAT/PMT pair at each segment head, so the counters after it must be renumbered to stay continuous. Every media, audio, teletext, splice and stuffing packet is byte-identical to source. `tsp -P continuity` reports **zero errors** on arm B1, on leg A and on the source.
 
-> **Extended by [T3](test-3-opaque-transparency.md).** "Verbatim" holds for everything the lane _forwards_ and this measurement cannot see what it _adds_, because a census lists what the source carried and looks for it at egress. Scored against T3's transparency inventory on three clips, the lane preserves more than this census records — service identity, TSID/ONID, non-default PMT PIDs, and `testloop`'s CAT — and adds exactly one PAT/PMT pair per segment and nothing else. That addition is not free: it displaces every later PCR in its segment relative to a constant-rate byte clock, taking file-domain PCR accuracy from 37–74 ns to 109–302 µs, or 2,453 violations at the TR 101 290 P2 gate against the source's zero. PCR repetition is untouched. So the arm is transparent to the mux's _content_ and not to its _clock_, and the clock half is closed by the groomer of [T16](test-16-grooming-segmented-http.md) rather than by the carriage.
+> **Extended by [T3](test-3-opaque-transparency.md).** "Verbatim" holds for everything the lane _forwards_ and this measurement cannot see what it _adds_, because a census lists what the source carried and looks for it at egress. Scored against T3's transparency inventory on three clips, the lane preserves more than this census records — service identity, TSID/ONID, non-default PMT PIDs, and `testloop`'s CAT — and adds exactly one PAT/PMT pair per segment and nothing else. That addition is not free: it displaces every later PCR in its segment relative to a constant-rate byte clock, taking file-domain PCR accuracy from 37–74 ns to 109–302 µs, or 2,453 violations at the TR 101 290 P2 gate against the source's zero. PCR repetition is untouched. So the arm is transparent to the mux's _content_ and not to its _clock_, and the clock half is closed by the pacer of [T16](test-16-grooming-segmented-http.md) rather than by the carriage.
 
 **This is materially better than the MoQ media-aware lane, and equal to the passthrough lane on mux content for a single programme** — obtained without a passthrough lane, and preserving the DVB service layer the HLS specification never mentions. It is _not_ equal to the passthrough lane on the clock: [T3](test-3-opaque-transparency.md) scores both against one inventory and finds the segment-head injection costs file-domain PCR accuracy that the passthrough lane's byte-preserving carriage does not.
 
@@ -248,11 +248,11 @@ The honest division of labour is the one taken: measure exactly the part that wa
 
 ## Observations
 
-**The burst granularity and the latency floor are the same knob, and partial segments do not turn it.** Both of segmented HTTP's problems — coarse bursts and a seconds-scale latency floor — have one cause, segment size, so shrinking segments to reduce the grooming burden is the same action as shrinking them to reduce latency, and it terminates in partial segments. Measurement 2b tested the escape and found it closed: the parts are published correctly and free of charge, and **no freely available client will fetch them**, so the egress a groomer sees is arm B1's. It is not that the low-latency tooling is immature or awkward; it is that **the free toolchain is asymmetric — publish exists, receive does not** — and the missing half is precisely the half a distributor needs to hand a client a transport stream.
+**The burst granularity and the latency floor are the same knob, and partial segments do not turn it.** Both of segmented HTTP's problems — coarse bursts and a seconds-scale latency floor — have one cause, segment size, so shrinking segments to reduce the pacing burden is the same action as shrinking them to reduce latency, and it terminates in partial segments. Measurement 2b tested the escape and found it closed: the parts are published correctly and free of charge, and **no freely available client will fetch them**, so the egress a pacer sees is arm B1's. It is not that the low-latency tooling is immature or awkward; it is that **the free toolchain is asymmetric — publish exists, receive does not** — and the missing half is precisely the half a distributor needs to hand a client a transport stream.
 
 **Where the asymmetry sits is exactly where the commercial products sell.** Synamedia's MEG with "ABR2TS conversion" and Ateme's TITAN Edge are receive-side boxes. Measurement 2b explains the market: the publish half of low-latency TS-in-HLS is a free command, and the receive half is a product. That also sets the terms for anyone wanting a free path — they get classic HLS, seconds of latency, and megabyte bursts, on either arm.
 
-**A groomer for arm B1 needs seconds of cushion depth, not milliseconds.** With 24 silences over 2 s in a 60 s window, a groomer holding the output byte clock across a silence must hold at least one segment period, plus margin for the observed two-period stalls. [T16](test-16-grooming-segmented-http.md) shows the operative parameter is cushion depth (200 ms–8 s), with stall timeout following from it — not raising `--stall-ms` alone, which fails with 231 continuity errors behind a flawless PCR record.
+**A pacer for arm B1 needs seconds of cushion depth, not milliseconds.** With 24 silences over 2 s in a 60 s window, a pacer holding the output byte clock across a silence must hold at least one segment period, plus margin for the observed two-period stalls. [T16](test-16-grooming-segmented-http.md) shows the operative parameter is cushion depth (200 ms–8 s), with stall timeout following from it — not raising `--stall-ms` alone, which fails with 231 continuity errors behind a flawless PCR record.
 
 **The carriage result inverts a claim this paper leaned on.** MoQ's clearest carriage advantage was verbatim fidelity via the passthrough lane. For a _single programme_ an MPEG-TS segment achieves the same thing on the alternative, with no special lane, and it keeps the DVB service layer the HLS specification never mentions. What survives of the advantage is confined to the multi-programme case, where HLS's normative "Transport Stream Segments MUST contain a single MPEG-2 Program" binds players, not the distribution: CloudFront carried a three-programme segment byte for byte ([T77](test-77-mpts-through-cloudfront.md)).
 
@@ -262,7 +262,7 @@ The honest division of labour is the one taken: measure exactly the part that wa
 
 ## Conclusion
 
-**The hand-off axis moves off segmented HTTP.** On the evidence here the alternative's reassembly stage is off the shelf, which was the real asymmetry, but what it hands the groomer is two orders of magnitude further from a paced wire than what MoQ hands it, with multi-second silences MoQ does not produce. Since the grooming obligation sits on the distributor's side of the demarcation on both data planes, "easier to receive" and "easier to hand off cleanly" turn out to be different claims, and only the first is true of segmented HTTP.
+**The hand-off axis moves off segmented HTTP.** On the evidence here the alternative's reassembly stage is off the shelf, which was the real asymmetry, but what it hands the pacer is two orders of magnitude further from a paced wire than what MoQ hands it, with multi-second silences MoQ does not produce. Since the pacing obligation sits on the distributor's side of the demarcation on both data planes, "easier to receive" and "easier to hand off cleanly" turn out to be different claims, and only the first is true of segmented HTTP.
 
 **The carriage-fidelity axis moves toward segmented HTTP** for a single programme, verbatim and including the DVB service layer, which removes MoQ's advantage everywhere except a contribution mux.
 
@@ -301,7 +301,7 @@ None is planned: the campaign evaluates open components only ([planned-experimen
 ## References
 
 - [comparison](../docs/comparison.md) §4 — the hand-off axis and the demarcation argument
-- [T1](test-1-baseline-ts.md) — source mux baseline; [T13](test-13-downstream-grooming.md) — the grooming candidates, whose failures are tool properties and so apply to both legs
-- [T7](test-7-timing-integrity.md) — the P1 oracle both legs would be graded against once groomed
+- [T1](test-1-baseline-ts.md) — source mux baseline; [T13](test-13-downstream-grooming.md) — the pacing candidates, whose failures are tool properties and so apply to both legs
+- [T7](test-7-timing-integrity.md) — the P1 oracle both legs would be graded against once paced
 - [T9](test-9-performance.md) — the per-packet framing costs measurement 5 builds on, measured on a real path, and the loopback span artefact its Corrections section first recorded
 - Rigs: [`t14-a.sh`](scripts/t14-a.sh), [`t14-b1.sh`](scripts/t14-b1.sh), [`t14-wirecost.sh`](scripts/t14-wirecost.sh), [`t14-wirecost.py`](scripts/t14-wirecost.py), [`t13-cadence.py`](scripts/t13-cadence.py)

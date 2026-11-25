@@ -13,7 +13,7 @@ Characterise MoQ against the incumbent it would replace — **SRT**, the de-fact
 - **Matched buffers.** Clean-path/impairment runs used **B = 2 s** (MoQ `--latency-max 2s`, SRT `--latency 2000`).
 - The EC2 build predates PR #2440, so the MoQ egress strips DVB SI throughout.
 
-**Two deliberate asymmetries** (recorded, not hidden): the MoQ path traverses a relay hop (the point of the architecture) whereas SRT is point-to-point; and the deployed EC2 publisher is the media-aware lane, so the MoQ egress is not byte-transparent the way SRT-carried TS is. `mpegts-pacer` grooms the MoQ egress back to CBR so the _timing_ comparison is fair; the _transparency_ comparison needs the passthrough lane on EC2 (passthrough-remote follow-up).
+**Two deliberate asymmetries** (recorded, not hidden): the MoQ path traverses a relay hop (the point of the architecture) whereas SRT is point-to-point; and the deployed EC2 publisher is the media-aware lane, so the MoQ egress is not byte-transparent the way SRT-carried TS is. `mpegts-pacer` paces the MoQ egress back to CBR so the _timing_ comparison is fair; the _transparency_ comparison needs the passthrough lane on EC2 (passthrough-remote follow-up).
 
 ## Procedure
 
@@ -27,7 +27,7 @@ CLIP=~/contrib-10m.ts
   | ~/moq-dev/target/release/moq --client-connect http://localhost:4443 \
       --broadcast t8.bench.hang import ts
 
-# 2. Local — MoQ receive → groom → measure (analysis: 30 s window)
+# 2. Local — MoQ receive → pace → measure (analysis: 30 s window)
 timeout 30 sh -c './moq --client-tls-disable-verify --client-connect https://<EC2_IP>:443/anon \
   --broadcast t8.bench.hang export ts --latency-max 1s \
   | cargo run --release -p mpegts-pacer --example moq_egress -- - 10000000 > t8_moq_paced.ts'

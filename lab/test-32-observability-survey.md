@@ -16,12 +16,12 @@ The left-hand column the survey is scored against. Each row is cited from its ex
 
 | Fault | What moves, and when | A product must | From |
 | --- | --- | --- | --- |
-| Source stalled, MoQ | nothing in publisher, relay or exporter for 120 s; the groomer's content-liveness alarm 1.69–1.88 s | alarm on PCR progression at the TS egress | [T22](test-22-silent-media-plane-failure.md) |
+| Source stalled, MoQ | nothing in publisher, relay or exporter for 120 s; the pacer's content-liveness alarm 1.69–1.88 s | alarm on PCR progression at the TS egress | [T22](test-22-silent-media-plane-failure.md) |
 | Relay frozen, MoQ | QUIC's idle timeout at 34.3 s; clock progression at 1.9 s | the same | [T22](test-22-silent-media-plane-failure.md) |
-| Groomer emitting under `--on-stall continue` | valid CBR with no programme, indefinitely | count as presence only packets that are neither null nor adaptation-field-only | [T22](test-22-silent-media-plane-failure.md) |
-| Video PES dead, its PCR kept, MoQ | the whole of TR 101 290 P1 green; per-PID access-unit liveness names it at its learned threshold, 1.0–3.1 s at a groomed point | alarm on a PID that is present but carries no access units | [T24](test-24-partial-media-plane-stall.md), [T27](test-27-liveness-detector.md) |
+| Pacer emitting under `--on-stall continue` | valid CBR with no programme, indefinitely | count as presence only packets that are neither null nor adaptation-field-only | [T22](test-22-silent-media-plane-failure.md) |
+| Video PES dead, its PCR kept, MoQ | the whole of TR 101 290 P1 green; per-PID access-unit liveness names it at its learned threshold, 1.0–3.1 s at a paced point | alarm on a PID that is present but carries no access units | [T24](test-24-partial-media-plane-stall.md), [T27](test-27-liveness-detector.md) |
 | The same, segmented | a segmenter cutting only at random-access pictures closes no segment for 61 s, the audio withheld with it: every source sees only an absence (5.9–6.1 s, timed by the monitor). One that also cuts at a time bound contains it, and liveness names the video in 3.4 s | the above, and a playlist-staleness alarm that cannot name the cause | [T79](test-79-hls-telemetry-faults.md) |
-| Audio PES dead | P1 `PID_error` in 7.0–8.2 s; per-PID liveness 0.7–1.4 s (MoQ, groomed) and 2.0–3.6 s (segmented receiver); CMCD's own keys never; the receiver's TR 101 290 counters as CMCD custom keys 8.1–8.2 s | a per-PID absence alarm below the failover budget | [T27](test-27-liveness-detector.md), [T79](test-79-hls-telemetry-faults.md) |
+| Audio PES dead | P1 `PID_error` in 7.0–8.2 s; per-PID liveness 0.7–1.4 s (MoQ, paced) and 2.0–3.6 s (segmented receiver); CMCD's own keys never; the receiver's TR 101 290 counters as CMCD custom keys 8.1–8.2 s | a per-PID absence alarm below the failover budget | [T27](test-27-liveness-detector.md), [T79](test-79-hls-telemetry-faults.md) |
 | Segmenter stalled 30 s, segmented | the origin answers 200 to every request; the media sequence freezes 31.5 s against ≤ 3.1 s; explicit records only on resumption (`msn-skip` at 30.2 s) | alarm on media-sequence advancement | [T22](test-22-silent-media-plane-failure.md), [T79](test-79-hls-telemetry-faults.md) |
 | Origin down 30 s, segmented | the receiver's failed fetch and CMCD v2's `rc=0` within 0.02–0.20 s; 11–12 continuity errors at the hole, which `ffmpeg -c copy` reads as none | grade the bytes received, not a re-multiplexed copy | [T42](test-42-h3-receiver-fidelity.md), [T79](test-79-hls-telemetry-faults.md) |
 | Client abuse (churn, slow, flood) | nothing: the victims are byte-identical to the control | nothing (the row stops the survey looking for a signal that should not exist) | [T25](test-25-isolation-under-abuse.md) |
@@ -37,7 +37,7 @@ The left-hand column the survey is scored against. Each row is cited from its ex
 
 1. **Native telemetry** — what the lane emits without custom tooling (relay stats, exporter logs, HLS access logs, CDN metrics).
 2. **Commercial monitoring fit** — which off-the-shelf products ingest that telemetry or probe the wire; deployment and upgrade surface.
-3. **Per induced fault class** — walk the catalogue: which signals move, estimated time-to-alarm from product documentation, whether the alarm **localises** to publisher / relay / exporter / groomer / origin / edge / client.
+3. **Per induced fault class** — walk the catalogue: which signals move, estimated time-to-alarm from product documentation, whether the alarm **localises** to publisher / relay / exporter / pacer / origin / edge / client.
 4. **Gap list** — faults for which _no_ product in the survey exposes a distinguishing signal; note whether per-PID liveness, per-PID bitrate, PCR progression, or transport liveness is the closest offered mechanism and why it fails the T24 counterexample.
 
 **Product classes:** TR 101 290 probes and multiviewers, IRD and multiplexer alarms and input redundancy, OTT/ABR monitors, CDN log pipelines and CMCD collectors, and MoQ-native tools. Public documentation first; hands-on confirmation only where access exists, recorded separately.

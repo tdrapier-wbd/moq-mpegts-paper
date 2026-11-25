@@ -41,17 +41,17 @@ The first five are T3's existing inventory, applied unchanged so the columns are
 | --- | --- |
 | Publisher | TSDuck 3.44-4676 `tsp -O hls`, 2 s target, `--intra-close --align-first-segment --live 6 --live-extra-segments 3` |
 | Origin | `python3 -m http.server` over the segment directory, HTTP/1.1 loopback |
-| Receiver | TSDuck 3.44-4676 `tsp -I hls --live`, captured **ungroomed** |
+| Receiver | TSDuck 3.44-4676 `tsp -I hls --live`, captured **unpaced** |
 | Rig | [`t3-segmented-transparency.sh`](scripts/t3-segmented-transparency.sh) |
 | Analyser | [`t3-transparency.py`](scripts/t3-transparency.py) |
 | Window | 60 s of media per clip, bounded by packet count, one run each |
 | Segment durations | 2 s on all three clips; 1 s and 6 s on `contrib-5m` for the duration sweep |
 
-The measurement point is the **ungroomed** egress, matching the passthrough arm, whose exporter releases the source's bytes on the source's PCR and adds none. [T16](test-16-grooming-segmented-http.md) measures the groomed version of this same chain, and the two answer different questions: T16 asks whether the cadence can be repaired, this asks whether the mux arrived.
+The measurement point is the **unpaced** egress, matching the passthrough arm, whose exporter releases the source's bytes on the source's PCR and adds none. [T16](test-16-grooming-segmented-http.md) measures the paced version of this same chain, and the two answer different questions: T16 asks whether the cadence can be repaired, this asks whether the mux arrived.
 
 ### The media-aware lane, for the PCR-accuracy cell only
 
-Captured to settle whether the P2 gate can compare the three lanes; the lane's _carriage_ results are [T2](test-2-media-aware-transparency.md)'s, not re-measured here. `moq 0.9.10-eab960192` and `moq-relay` from `~/bin-main` (stock `main`), local relay on `[::]:4443` with `--server-quic-gso=false`, fed `tsp -I file … -P regulate --pcr-synchronous`, captured **ungroomed** from `moq export ts` by [`t14-a.sh`](scripts/t14-a.sh) — 45 s per clip, all three clips.
+Captured to settle whether the P2 gate can compare the three lanes; the lane's _carriage_ results are [T2](test-2-media-aware-transparency.md)'s, not re-measured here. `moq 0.9.10-eab960192` and `moq-relay` from `~/bin-main` (stock `main`), local relay on `[::]:4443` with `--server-quic-gso=false`, fed `tsp -I file … -P regulate --pcr-synchronous`, captured **unpaced** from `moq export ts` by [`t14-a.sh`](scripts/t14-a.sh) — 45 s per clip, all three clips.
 
 ### Common to both
 
@@ -108,7 +108,7 @@ The rig derives the window from the clip's own PCR bitrate and bounds the captur
 
 ```bash
 for c in testloop_clean testloop contrib-5m; do
-	NAME=$c lab/scripts/t14-a.sh ~/$c.ts ~/t3ma/$c 45      # ungroomed egress
+	NAME=$c lab/scripts/t14-a.sh ~/$c.ts ~/t3ma/$c 45      # unpaced egress
 done
 # then, per capture: the tightest clean --absolute bound, both gates, and the max PCR interval
 tsp -I file ~/t3ma/<clip>/a-egress.ts -P pcrverify --absolute --jitter-max 13 -O drop
@@ -195,7 +195,7 @@ A PAT and a PMT are two packets, 376 bytes. Inserting them at a segment head dis
 
 How _many_ PCRs breach the 481 ns gate is a separate quantity and a much less stable one: 3,028 of ~3,030 on `testloop_clean`, 2,453 of ~2,457 on `contrib-5m`, but only 22 of ~2,163 on `testloop`. It tracks the direction of the whole-capture rate perturbation (+0.17 %, +0.04 %, +0.004 %) rather than the segment count, and `testloop` is the only clip where that perturbation is small enough to attribute to the injection alone — the other two include a window term. Treat the _max_ as the result and the _count_ as an indication.
 
-**All three clips pass the campaign's looser 500 µs gate.** So the error sits between the 481 ns P2 gate and the pre-check the campaign uses, which is exactly the band a groomer exists to close — and [T16](test-16-grooming-segmented-http.md) measured the groomed version of this chain at **0 violations at 481 ns**. The deviation is real, bounded, attributed, and discharged by the stage both data planes already require.
+**All three clips pass the campaign's looser 500 µs gate.** So the error sits between the 481 ns P2 gate and the pre-check the campaign uses, which is exactly the band a pacer exists to close — and [T16](test-16-grooming-segmented-http.md) measured the paced version of this chain at **0 violations at 481 ns**. The deviation is real, bounded, attributed, and discharged by the stage both data planes already require.
 
 #### A 6× duration sweep separates the error's size from its frequency
 
@@ -216,7 +216,7 @@ The mechanism above predicts something the 2 s runs cannot test: because the dis
 
 Both predictions T3 wrote down hold, and one is louder than expected. **The P1 table margin falls monotonically as segments lengthen** — PAT repetition 113 → 118 → 122 ms against the source's 125 ms — because fewer injected PATs mean less shortening. And **the P2 violation count falls with duration**, but not proportionally: 2,456 → 2,453 → **8**. Nine injections in 60 s perturb the whole-capture rate by only +0.011 %, and below some threshold the model no longer drifts past 481 ns between PCRs at all; 1 s → 2 s changes nothing, 2 s → 6 s changes almost everything. This is a second, independent demonstration that the _count_ is a threshold effect on the capture's mean rate rather than a per-event tally — established once from three clips at one duration, and again from one clip at three durations. **The max is the result; the count is an indication.**
 
-The practical reading: **P2 exposure at this measurement point is partly a segment-duration choice** — a 6 s segmenter posts 307× fewer violations than a 1 s one. It does not remove the need for the groomer, because the max error is unmoved and the max is what an IRD sees.
+The practical reading: **P2 exposure at this measurement point is partly a segment-duration choice** — a 6 s segmenter posts 307× fewer violations than a 1 s one. It does not remove the need for the pacer, because the max error is unmoved and the max is what an IRD sees.
 
 #### The same injection buys P1 table margin
 
@@ -240,7 +240,7 @@ T1 warned that `testloop`'s ~475 ms PAT/PMT repetition was close enough to the 5
 | 3. PSI/SI completeness | **Met.** PAT, PMT, SDT, NIT, TDT/TOT and CAT all survive; no table re-versioned. None of these clips carries EIT, so that table is measured separately on a synthetic fixture through this same rig: all 69 sections of an 8-day EPG arrive byte-identical, sparse schedule sub-tables included, at 1.003× the source's PID rate ([T17](test-17-si-snapshot-tracks.md) §5). |
 | 4. Mux structure | **Half met.** Null stuffing is preserved (14.83 → 14.95 %, 5.26 → 5.25 %, 4.66 → 4.66 %). The PCR-derived bitrate is **not** equal to source — it rises by +0.004 % to +0.17 %, upward on every clip, which is the injected packets showing up in a whole-capture rate estimate. Same cause as criterion 6. |
 | 5. Integrity and timing | **Met.** 0 continuity errors on two independent instruments, 0 transport errors, 0 invalid sync, 0 PCR intervals above 40 ms, and every table inside its repetition limit — with more margin than the source had. |
-| 6. Nothing added | **Failed, as expected, and by exactly one thing.** No PID and no table the source lacked, but one PAT/PMT pair per segment: +25/+25, +22/+23 and +27/+26 against 25, 23 and 26 segment heads. The cost is 109–302 µs of file-domain PCR accuracy, closed by grooming ([T16](test-16-grooming-segmented-http.md)). |
+| 6. Nothing added | **Failed, as expected, and by exactly one thing.** No PID and no table the source lacked, but one PAT/PMT pair per segment: +25/+25, +22/+23 and +27/+26 against 25, 23 and 26 segment heads. The cost is 109–302 µs of file-domain PCR accuracy, closed by pacing ([T16](test-16-grooming-segmented-http.md)). |
 
 Criteria 4 and 6 fail together and for one reason, which is the useful form of the result: **the lane's only departure from transparency is that it inserts two packets per segment**, and both the rate row and the conservation row are that fact measured two ways.
 
@@ -262,7 +262,7 @@ Media-aware column shows as-shipped and, where PR #2440 changes it, the state af
 | Mux structure | VBR; nulls stripped (CBR restored by pacer) | **CBR preserved; nulls preserved** | **nulls preserved**; PCR-derived rate +0.004–0.17 % |
 | Continuity errors | **0** | **0** | **0** |
 | PCR intervals > 40 ms (P2), file domain | 0–26 % by clip → **0 % (paced)** | **0 %** | **0 %** |
-| PCR accuracy, file domain | **gate is degenerate ungroomed** — no mux rate to grade against, and meaningful only once a groomer restores one (below) | **the source's: 0 violations at 481 ns** | **37–74 ns → 109–302 µs**; 0 violations at 500 µs; **0 at 481 ns once groomed** ([T16](test-16-grooming-segmented-http.md)) |
+| PCR accuracy, file domain | **gate is degenerate unpaced** — no mux rate to grade against, and meaningful only once a pacer restores one (below) | **the source's: 0 violations at 481 ns** | **37–74 ns → 109–302 µs**; 0 violations at 500 µs; **0 at 481 ns once paced** ([T16](test-16-grooming-segmented-http.md)) |
 | Packets added to the mux | rebuilt, so not comparable | **none** | **one PAT/PMT pair per segment, and nothing else** |
 | Transparency verdict | media-faithful; with #2440 + pacer, transparent **except TDT/TOT** (by design) **and EIT** ([#2824](https://github.com/moq-dev/moq/pull/2824), which would have carried it, closed unmerged) | **broadcast-transparent** | **transparent to the mux's content; not to its clock** |
 
@@ -270,9 +270,9 @@ Media-aware column shows as-shipped and, where PR #2440 changes it, the state af
 
 That row was expected to be a cheap gap to close: run `pcrverify --absolute` on the two MoQ lanes and make it a three-way comparison. **On the media-aware lane it is not closable, and the reason is a property of the gate rather than of the lane.**
 
-The media-aware lane was captured ungroomed on all three clips on a named current build (`moq 0.9.10-eab960192`, stock `main`, via [`t14-a.sh`](scripts/t14-a.sh) — the same rig and the same ungroomed measurement point T14 leg A uses) and graded:
+The media-aware lane was captured unpaced on all three clips on a named current build (`moq 0.9.10-eab960192`, stock `main`, via [`t14-a.sh`](scripts/t14-a.sh) — the same rig and the same unpaced measurement point T14 leg A uses) and graded:
 
-| Media-aware ungroomed egress | `testloop_clean` | `testloop` | `contrib-5m` |
+| Media-aware unpaced egress | `testloop_clean` | `testloop` | `contrib-5m` |
 | --- | --: | --: | --: |
 | Null stuffing | **0 packets** | **0 packets** | **0 packets** |
 | `analyze`'s declared bitrate | 22.0 Gb/s | 25.4 Gb/s | 32.2 Gb/s |
@@ -282,9 +282,9 @@ The media-aware lane was captured ungroomed on all three clips on a named curren
 | Violations at 481 ns | 1,113 of 1,130 | 2,244 of 2,255 | 1,097 of 1,125 |
 | Violations at 500 µs | 332 | 1,127 | 155 |
 
-**The "PCR accuracy" the gate reports on this lane is numerically the maximum PCR interval** — to within 0.003 % on three clips whose maxima differ by 8×, which is not a coincidence that needs a second explanation. The lane demuxes and rebuilds, so its ungroomed egress carries no stuffing and therefore no mux rate: `analyze` puts the "bitrate" at 22–32 **Gb/s** on ~10–27 Mb/s content. Asked to compare PCR values against byte positions in a stream that has no byte clock, `pcrverify --absolute` returns the gap between PCRs. It is measuring the burst structure of MoQ object delivery, not carriage fidelity, and quoting 160 ms beside segmented HTTP's 302 µs would be comparing a PCR interval with a PCR error.
+**The "PCR accuracy" the gate reports on this lane is numerically the maximum PCR interval** — to within 0.003 % on three clips whose maxima differ by 8×, which is not a coincidence that needs a second explanation. The lane demuxes and rebuilds, so its unpaced egress carries no stuffing and therefore no mux rate: `analyze` puts the "bitrate" at 22–32 **Gb/s** on ~10–27 Mb/s content. Asked to compare PCR values against byte positions in a stream that has no byte clock, `pcrverify --absolute` returns the gap between PCRs. It is measuring the burst structure of MoQ object delivery, not carriage fidelity, and quoting 160 ms beside segmented HTTP's 302 µs would be comparing a PCR interval with a PCR error.
 
-So the gate is meaningful exactly where a mux rate survives. It is meaningful on the source clips (37–74 ns), and on segmented HTTP (109–302 µs) because that lane preserves stuffing and CBR — which is why the injection shows up there at all. On the media-aware lane at this measurement point it is undefined, and what it actually establishes is the thing T13 and T16 already concluded from the other direction: **on that lane the groomer is not an optimisation, it is what creates the quantity the gate names.**
+So the gate is meaningful exactly where a mux rate survives. It is meaningful on the source clips (37–74 ns), and on segmented HTTP (109–302 µs) because that lane preserves stuffing and CBR — which is why the injection shows up there at all. On the media-aware lane at this measurement point it is undefined, and what it actually establishes is the thing T13 and T16 already concluded from the other direction: **on that lane the pacer is not an optimisation, it is what creates the quantity the gate names.**
 
 **On the passthrough lane the gate is defined, because the lane keeps the source's stuffing, and it returns the source's figure:** 0 violations at 481 ns on all three clips. That was argued from byte-preservation until the lane's output could be captured; it is now measured.
 
@@ -294,7 +294,7 @@ So the gate is meaningful exactly where a mux rate survives. It is meaningful on
 
 - **The passthrough lane is byte-identical to its source**, from the first group it releases, on both legs and on all three clips, so everything T3 scores is the source's, file-domain PCR accuracy at the P2 limit included.
 - **Segmented HTTP is transparent to what a mux contains and not to when it was sent, and that is a sharper claim than "verbatim".** [T14](test-14-data-plane-comparison.md) established the content half by comparing a segment against the source; the missing half is that the lane is _additive_. It preserves everything, including two tables the media-aware lane drops, and it inserts a PAT/PMT pair every segment that no MoQ lane inserts. Fidelity to the payload and fidelity to the multiplex are different properties, and a lane can hold the first while breaking the second.
-- **The injected pair's PCR displacement is discharged by a stage both planes already need.** T16 measured the groomed version of this chain at 0 violations at 481 ns, so nothing here argues against segmented HTTP on fidelity grounds. What it does establish is that the segmented lane's egress **cannot be handed to an IRD ungroomed** on the strength of being verbatim, which is how a reading of T14 alone might have it.
+- **The injected pair's PCR displacement is discharged by a stage both planes already need.** T16 measured the paced version of this chain at 0 violations at 481 ns, so nothing here argues against segmented HTTP on fidelity grounds. What it does establish is that the segmented lane's egress **cannot be handed to an IRD unpaced** on the strength of being verbatim, which is how a reading of T14 alone might have it.
 
 ---
 
@@ -302,9 +302,9 @@ So the gate is meaningful exactly where a mux rate survives. It is meaningful on
 
 **Gate 1 media fidelity is met at P1 on both lanes, and only one of them is transparent in both directions.** The passthrough lane adds nothing and preserves everything, which is what a fallback lane is for. Segmented HTTP preserves everything too — including `testloop`'s CAT and `contrib-5m`'s TDT/TOT, which the media-aware MoQ lane drops — and adds one PAT/PMT pair per segment, which costs ~300 µs of file-domain PCR accuracy at 10 Mbps and ~110 µs at 27.5 Mbps. That is its whole departure from transparency, measured on three clips: two packets per segment, and nothing else.
 
-**So the carriage-fidelity axis does not separate the passthrough lane from segmented HTTP for a single programme, and the remaining separation is the clock and the multi-programme case.** The clock deviation is bounded, attributed to a named mechanism, and closed by the grooming stage the distributor owns on both planes ([T16](test-16-grooming-segmented-http.md)) — so it is a demarcation finding rather than a fidelity one. The multi-programme case is where HLS's normative "Transport Stream Segments MUST contain a single MPEG-2 Program" bites, it is unrun, and it now carries the whole of MoQ's residual carriage advantage.
+**So the carriage-fidelity axis does not separate the passthrough lane from segmented HTTP for a single programme, and the remaining separation is the clock and the multi-programme case.** The clock deviation is bounded, attributed to a named mechanism, and closed by the pacing stage the distributor owns on both planes ([T16](test-16-grooming-segmented-http.md)) — so it is a demarcation finding rather than a fidelity one. The multi-programme case is where HLS's normative "Transport Stream Segments MUST contain a single MPEG-2 Program" bites, it is unrun, and it now carries the whole of MoQ's residual carriage advantage.
 
-**The P2 PCR-accuracy axis does not rank the lanes, and that is a finding rather than a gap.** It is defined only where a mux rate survives the transport, which is true of segmented HTTP and of the passthrough lane and false of the media-aware lane's ungroomed egress. Where it is defined it is informative — it is what caught the injected pair. Where it is not, it returns the maximum PCR interval and looks like an answer.
+**The P2 PCR-accuracy axis does not rank the lanes, and that is a finding rather than a gap.** It is defined only where a mux rate survives the transport, which is true of segmented HTTP and of the passthrough lane and false of the media-aware lane's unpaced egress. Where it is defined it is informative — it is what caught the injected pair. Where it is not, it returns the maximum PCR interval and looks like an answer.
 
 The load-bearing gaps that remain are **P2 hardware conformance** ([T7](test-7-timing-integrity.md), Gate 2) and the lanes over a real path ([T48](test-48-passthrough-export.md)'s internet leg for the passthrough lane, [T4](test-4-remote-e2e-srt.md) for segmented HTTP) — file-based localhost transparency is necessary, not sufficient. Recorded as a permanent finding in [`evidence.md`](evidence.md).
 
@@ -338,6 +338,6 @@ The load-bearing gaps that remain are **P2 hardware conformance** ([T7](test-7-t
 - Media-aware counterpart: [test-2-media-aware-transparency.md](test-2-media-aware-transparency.md).
 - P0 inventory every column is scored against: [T1](test-1-baseline-ts.md) §5.6.
 - [T14](test-14-data-plane-comparison.md) measurement 4 — the packet-level verbatim result this extends from one clip to three and adds the additive direction to.
-- [T16](test-16-grooming-segmented-http.md) — the groomed version of this same chain, which closes the PCR-accuracy deviation measured here.
+- [T16](test-16-grooming-segmented-http.md) — the paced version of this same chain, which closes the PCR-accuracy deviation measured here.
 - Finding: [`evidence.md`](evidence.md) §3.1.
 - Rigs: [`t3-segmented-transparency.sh`](scripts/t3-segmented-transparency.sh), [`t3-transparency.py`](scripts/t3-transparency.py), [`t48-passthrough.sh`](scripts/t48-passthrough.sh) for the passthrough lane, and [`t14-a.sh`](scripts/t14-a.sh) for the media-aware capture graded in the PCR-accuracy section.

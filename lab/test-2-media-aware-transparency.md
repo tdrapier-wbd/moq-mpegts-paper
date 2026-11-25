@@ -9,7 +9,7 @@ Exercise the upstream `moq-dev` **media-aware** lane (`moq import ts` → `moq-r
 - Binaries: `moq` / `moq-relay` built from `github.com/moq-dev/moq` (`moq-native` 0.18.3), carrying the #1979 catalog-reservation fix (#2072) and open-GOP recovery-point detection (#2066). Protocol negotiated **moq-lite-04** (moq-lite, the forwards-compatible subset — not the draft-14 transport the passthrough platform pins). Binary supports moq-lite-01…04, moq-transport-14…17.
 - Relay config `demo/relay/localhost.toml` (QUIC + HTTP on `[::]:4443`, self-signed `localhost`, anonymous auth).
 - Feed pacing: TSDuck `regulate` (real-time, PCR-based). TSDuck 3.44-4676.
-- Downstream groomer: [`mpegts-pacer`](https://github.com/tdrapier-wbd/mpegts-pacer) 0.1.0 via its offline `cbr_file` example — byte-locks PCR to output byte position (`PcrMode::Regenerate`), re-inserts byte-locked PCR-only packets on the PCR PID, strips input nulls, stuffs to the target mux rate. Not a muxer: PID structure, continuity counters and PSI/PES payloads pass through untouched.
+- Downstream pacer: [`mpegts-pacer`](https://github.com/tdrapier-wbd/mpegts-pacer) 0.1.0 via its offline `cbr_file` example — byte-locks PCR to output byte position (`PcrMode::Regenerate`), re-inserts byte-locked PCR-only packets on the PCR PID, strips input nulls, stuffs to the target mux rate. Not a muxer: PID structure, continuity counters and PSI/PES payloads pass through untouched.
 - All localhost. macOS loopback gotchas apply (see `lab/README.md`).
 
 Two upstream changes separate the as-shipped behaviour recorded below from the current one: the #1979 catalog-reservation fix (#2072, with open-GOP recovery-point detection #2066), and the DVB service-layer preservation in PR [#2440](https://github.com/moq-dev/moq/pull/2440). Results are labelled by which side of those they sit on.
@@ -35,7 +35,7 @@ grep -oE 'track=[^ ]+' <name>_sub.log | tr -d '"' | sort -u
 
 # 5. analyse egress (analyze / continuity / pcrextract per lab/README.md)
 
-# 6. groom the VBR egress to CBR, then re-analyse (<rate> ≈ 1.2× source: 12/33/12 Mbps)
+# 6. pace the VBR egress to CBR, then re-analyse (<rate> ≈ 1.2× source: 12/33/12 Mbps)
 cargo run -q -p mpegts-pacer --example cbr_file -- <name>_out.ts <name>_paced.ts <rate> regenerate
 tsp -I file <name>_paced.ts -P pcrverify --jitter-max 500 -O drop
 tsp -I file <name>_paced.ts -P analyze -O drop     # now exact CBR
@@ -72,9 +72,9 @@ All video, all audio (incl. AC-3 and the visual-impaired commentary), teletext, 
 | PCR interval max (ms) | 1680¹ | 1120¹ | 319.9 | 20–28 |
 | PCR intervals > 40 ms | **25.5 %** | 0.10 %¹ | **13.7 %** | 0 % |
 
-¹ Multi-hundred-ms / 1-second maxima include a live-join / capture-stop artefact (subscriber joins and is killed mid-group). The robust figure is the **percentage** over 40 ms. `testloop_clean`'s 25.5 % closely matches the ~24 % pre-groom figure independently measured in evidence §3.
+¹ Multi-hundred-ms / 1-second maxima include a live-join / capture-stop artefact (subscriber joins and is killed mid-group). The robust figure is the **percentage** over 40 ms. `testloop_clean`'s 25.5 % closely matches the ~24 % pre-pace figure independently measured in evidence §3.
 
-### `mpegts-pacer` grooming closes the P1 timing gap
+### `mpegts-pacer` pacing closes the P1 timing gap
 
 Raw egress → paced egress, same three clips (`regenerate` mode):
 

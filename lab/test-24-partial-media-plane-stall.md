@@ -88,7 +88,7 @@ So before MoQ is involved at all, the stimulus is a stream that no P1 check can 
 
 The `video` and `audio` columns are the result. **Every check is green and one of them is measuring a service with no pictures in it.** The carrier is within 600 b/s of the control's, continuity is perfect, PCR repetition is comfortably inside the 40 ms limit and the worst interval is identical to the control's to three decimal places.
 
-The `es` arm behaves completely differently and for a configured reason: with no content at all the groomer's stall timer expired and `--on-stall mute` stopped the carrier, which is the policy T22 measured. That took the PSI tables down with it — PID 100 has a 59.42 s hole — so the total-loss case _is_ detectable, by the absence of bytes, and is not the interesting one.
+The `es` arm behaves completely differently and for a configured reason: with no content at all the pacer's stall timer expired and `--on-stall mute` stopped the carrier, which is the policy T22 measured. That took the PSI tables down with it — PID 100 has a 59.42 s hole — so the total-loss case _is_ detectable, by the absence of bytes, and is not the interesting one.
 
 The session-state readings were compared with the arm name and connection ids normalised away, so that two runs differing only in their broadcast name compare equal. On that basis `control` and `video` produce **identical** sets of log lines. The transport has nothing to say about a dead video stream — consistent with T22's central finding, now extended from a total stall to a partial one.
 
@@ -107,7 +107,7 @@ Access units per PID, in media time, with holes longer than 2 s reported:
 
 This is the containment result stated exactly. In the `video` arm, **every stream other than the video ran without an interruption longer than two seconds** — including the SCTE-35 splice tables, which matter for a downstream ad system, and the PSI, which matters for tuning. In the `audio` arm the video ran clean throughout. The lane degrades to precisely the streams that failed.
 
-The delivered outage is **57.22 s against 60.02 s injected**: the lane's own buffering returned 2.8 s of it. That is the same order as the **1.81–1.92 s** T22 measured for the groomer's cushion plus the exporter's `--latency-max`, and the residue is noted below rather than explained away.
+The delivered outage is **57.22 s against 60.02 s injected**: the lane's own buffering returned 2.8 s of it. That is the same order as the **1.81–1.92 s** T22 measured for the pacer's cushion plus the exporter's `--latency-max`, and the residue is noted below rather than explained away.
 
 ### Which detectors actually fire
 
@@ -120,30 +120,30 @@ Stuffing ratio is measured per second of media time at the graded output; the st
 | continuity | 0 | **0** | **0** | fails |
 | PCR repetition / accuracy (P2) | pass | **pass** | **pass** | **fails** |
 | **stuffing ratio** | 13.8 %, peak 27.1 % | **13.7 % → 95.2 %, fires t=27** | peak **27.0 %** | works for video, **fails for audio** |
-| **groomer underruns** | 0 | **406,850** | **0** | works for video, fails for audio |
-| groomer `content_gap_max_ms` | 201 ms | 200 ms | 199 ms | fails |
-| groomer stall / mute | 0 / 0 | **0 / 0** | **0 / 0** | fails |
+| **pacer underruns** | 0 | **406,850** | **0** | works for video, fails for audio |
+| pacer `content_gap_max_ms` | 201 ms | 200 ms | 199 ms | fails |
+| pacer stall / mute | 0 / 0 | **0 / 0** | **0 / 0** | fails |
 | **per-stream access units** | none | **57.22 s** | **60.53 s** | **works everywhere** |
 
 Three things follow, and the middle one is the one that would be missed by reading the video column alone.
 
-**The stuffing ratio is an excellent detector for a large stream.** 13.7 % to 95.2 %, inside one second of the outage reaching the output, with a control that never moves more than 13 points. It needs nothing from MoQ, nothing from the groomer and no cooperation from the sender — it is a property of the bytes, which is the quality T22 valued in PCR progression and which PCR progression turns out not to have. Its floor is one second only because that is the measurement bucket.
+**The stuffing ratio is an excellent detector for a large stream.** 13.7 % to 95.2 %, inside one second of the outage reaching the output, with a control that never moves more than 13 points. It needs nothing from MoQ, nothing from the pacer and no cooperation from the sender — it is a property of the bytes, which is the quality T22 valued in PCR progression and which PCR progression turns out not to have. Its floor is one second only because that is the measurement bucket.
 
 **The same detector is blind to a small stream.** The two audio streams and the subtitles together are about 440 kb/s of a 9.5 Mb/s programme. Removing them moved the peak stuffing ratio to 27.0 % against a control whose own peak is 27.1 % — the two are not separable, and the "fires at t=41" reading is an artefact of a noisy series crossing a threshold 13 s late rather than a detection. **A stuffing-ratio alarm sensitive enough to catch a dead audio stream would false-positive on healthy variable-bitrate video.** The detector's sensitivity is proportional to the dead stream's share of the mux, and that is a property of the measurement, not of this lane.
 
-**The groomer's underrun counter is a strong second detector for the same case and no help for the other.** 406,850 underruns against zero on the control, because with the video gone the groomer had nothing to release and emitted stuffing instead. It says nothing about the audio arm, for the same proportional reason.
+**The pacer's underrun counter is a strong second detector for the same case and no help for the other.** 406,850 underruns against zero on the control, because with the video gone the pacer had nothing to release and emitted stuffing instead. It says nothing about the audio arm, for the same proportional reason.
 
 ### Recovery
 
 Every arm recovered without operator action and without damage:
 
-| Arm | Streams back | Continuity errors on resume | Dropped | Groomer resyncs | PCR rebases |
+| Arm | Streams back | Continuity errors on resume | Dropped | Pacer resyncs | PCR rebases |
 | --- | --- | --- | --- | --- | --- |
 | `video` | all | **0** | 0 | 0 | 0 |
 | `audio` | all | **0** | 0 | 0 | 0 |
 | `es` | all | **0** | 0 | 0 | 1 |
 
-The `es` arm is worth separating: recovering from a total 60 s outage the groomer took **one PCR rebase**, produced **one** over-limit PCR interval and one backward step at the seam, and still delivered **zero continuity errors and zero dropped packets**. That is the correct shape for a recovery — the discontinuity is declared once, at the seam, and nothing downstream of it is corrupted.
+The `es` arm is worth separating: recovering from a total 60 s outage the pacer took **one PCR rebase**, produced **one** over-limit PCR interval and one backward step at the seam, and still delivered **zero continuity errors and zero dropped packets**. That is the correct shape for a recovery — the discontinuity is declared once, at the seam, and nothing downstream of it is corrupted.
 
 ## What this establishes
 
@@ -151,7 +151,7 @@ The `es` arm is worth separating: recovering from a total 60 s outage the groome
 2. **Dead video behind a live PCR is invisible to TR 101 290's P1 set and its PCR checks.** Zero continuity errors, zero PCR intervals over 40 ms, a worst interval identical to the control's, and 57 s with no pictures. Any monitoring design that stops there will report a dead service as healthy, indefinitely. P2's PTS check (2.5, a PTS repetition period over 700 ms) should see the video PID stop carrying PTS; it was not graded. Dead audio is not invisible: its PIDs vanish, and P1's `PID_error` (1.6), which these checks did not grade, fires within 7 s ([T79](test-79-hls-telemetry-faults.md)).
 3. **[T22](test-22-silent-media-plane-failure.md)'s recommendation is corrected.** "PCR progression is the detector to build on" holds for a total stall and fails for a partial one, because PCR shares a PID with the video whose absence it is being asked to report. The detector to build on is **per-PID access-unit liveness**, which caught every arm at its true length with no false positive on the control.
 4. **Content-rate detection works in proportion to the dead stream's share of the mux.** Unmissable for video at 82 % of the mux; useless for audio and subtitles at 4 %. An operator can be told what a stuffing-ratio alarm will and will not catch, which is more useful than being told it works.
-5. **The groomer's stall policy remains a monitoring decision.** `--on-stall mute` is what made the total-loss arm detectable at all, and it converted that arm into an absence of bytes. It does nothing for either partial arm, in which the groomer never entered a stall state.
+5. **The pacer's stall policy remains a monitoring decision.** `--on-stall mute` is what made the total-loss arm detectable at all, and it converted that arm into an absence of bytes. It does nothing for either partial arm, in which the pacer never entered a stall state.
 
 ## What this does not establish
 

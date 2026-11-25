@@ -1,17 +1,17 @@
 # Test 59 — Segmented 1+1 over CloudFront: two pathways, two receivers, an ST 2022-7 merge
 
-**State: run, one topology (two receivers and a merge); the fallback topology waits on B-8's fallback.** H2 and H4 hold; H1 holds, but its injection control matched too; H3 holds only for a receiver whose window covers the skew, which a Class C receiver's did in two cells of seven. The run found and fixed two defects in the stream-clocked groomer, one of which turned a packager freeze into a permanently corrupt merge.
+**State: run, one topology (two receivers and a merge); the fallback topology waits on B-8's fallback.** H2 and H4 hold; H1 holds, but its injection control matched too; H3 holds only for a receiver whose window covers the skew, which a Class C receiver's did in two cells of seven. The run found and fixed two defects in the stream-clocked pacer, one of which turned a packager freeze into a permanently corrupt merge.
 
 ## Objective
 
-P1-ai asks R2 (survivability) and R6 (redundancy) of the segmented lane on a real CDN rather than T30's single nginx edge. The feeds are 24/7: every packager and receiver joins a running stream, and a restarted one is a late joiner. T30 showed a late packager cannot join a shared namespace, so here each pathway has its own packager, origin and namespace, and the protection is assembled downstream: two receivers, each fetching one pathway into a stream-clocked groomer, whose RTP legs an ST 2022-7 receiver merges. That is the topology the author takes as the safer production assumption: the merge is done by the affiliate's receivers, not by one fetcher choosing a pathway.
+P1-ai asks R2 (survivability) and R6 (redundancy) of the segmented lane on a real CDN rather than T30's single nginx edge. The feeds are 24/7: every packager and receiver joins a running stream, and a restarted one is a late joiner. T30 showed a late packager cannot join a shared namespace, so here each pathway has its own packager, origin and namespace, and the protection is assembled downstream: two receivers, each fetching one pathway into a stream-clocked pacer, whose RTP legs an ST 2022-7 receiver merges. That is the topology the author takes as the safer production assumption: the merge is done by the affiliate's receivers, not by one fetcher choosing a pathway.
 
 The second topology P1-ai names, one receiver falling back between pathways by content, needs B-8's fallback, which is not built; each leg's own loss below is its no-fallback baseline.
 
 ## Hypotheses, fixed before running
 
 - **H1 (identity).** Legs from packagers started apart are byte-identical under equal RTP numbers when both packagers slice the source unchanged (`--slice-only`), and are not when each injects its own PAT and PMT per segment (TSDuck's default), because the injected packets differ in position and continuity counter between packagers.
-- **H2 (skew).** A stream-clocked groomer fixes its wall-clock offset once, at its first output, from the live edge it holds then. A segmented leg's edge is between a fetch and a segment duration old at that instant, so the skew between two legs started apart is set by where each receiver started and ranges up to about one segment (2 s). A Class C receiver (450 ms) merges hitlessly only when the skew lands inside its window.
+- **H2 (skew).** A stream-clocked pacer fixes its wall-clock offset once, at its first output, from the live edge it holds then. A segmented leg's edge is between a fetch and a segment duration old at that instant, so the skew between two legs started apart is set by where each receiver started and ranges up to about one segment (2 s). A Class C receiver (450 ms) merges hitlessly only when the skew lands inside its window.
 - **H3 (protection).** With H1 holding and the skew inside the merge window, no failure confined to one pathway costs the merged output a datagram.
 - **H4 (offload).** Each segment leaves each origin a small number of times however many receivers fetch it through CloudFront.
 
@@ -20,7 +20,7 @@ The second topology P1-ai names, one receiver falling back between pathways by c
 - **Source:** the live 24/7 feed (25 Mb/s CBR, one service, no null PID), delivered to the primary and to the secondary from one contribution path as byte-identical packets. Each packager reads its own host's copy.
 - **Pathway A:** `tsp -O hls` on the primary into its own namespace `/a/`, served by an nginx origin on the primary. **Pathway B:** the same on the secondary, `/b/`. 2 s target duration, `--live 6 --live-extra-segments 3 --intra-close`; first segment name and media sequence are the wall clock in seconds, which a counter of 2 s segments never catches, so a restarted packager never reuses a name. The two packagers start minutes apart and run across all cells, as a 24/7 packager would.
 - **CDN:** one CloudFront distribution, provisioned for the test and deleted after it, with one origin per pathway (`/a/*`, `/b/*`); legacy cache settings that honour the origin's `Cache-Control` (playlist `max-age=1`, segments `max-age=60`); error caching 1 s for 404 and 0 s for 502 and 504. A viewer-request function admits only requests carrying a shared secret, and each origin answers only requests carrying CloudFront's origin secret.
-- **Receivers:** both on the tertiary, each fetcher in its own network namespace (NAT to the host) so `netem` can impair one leg's path alone. Fetcher: `b8-hls-recv.py`, `t6-hls-pull.py` grown into B-8's first increment (retries a segment until it leaves the playlist, flags a media sequence going backwards, logs every request with CloudFront's cache result). Groomer: `mpegts-pacer --rtp --stream-clock` at 26 Mb/s, shared SSRC and sequence seed, latency 8 s, cap 14 s, stall 1 s then mute; `5626c88` for the graded cells (_Groomer defects_ below). Both legs are recorded from their sockets on the loopback into one pcap, one clock.
+- **Receivers:** both on the tertiary, each fetcher in its own network namespace (NAT to the host) so `netem` can impair one leg's path alone. Fetcher: `b8-hls-recv.py`, `t6-hls-pull.py` grown into B-8's first increment (retries a segment until it leaves the playlist, flags a media sequence going backwards, logs every request with CloudFront's cache result). Pacer: `mpegts-pacer --rtp --stream-clock` at 26 Mb/s, shared SSRC and sequence seed, latency 8 s, cap 14 s, stall 1 s then mute; `5626c88` for the graded cells (_Pacer defects_ below). Both legs are recorded from their sockets on the loopback into one pcap, one clock.
 - **Grader:** `t55-grade.py` (identity at equal numbers; a 2022-7 receiver model; continuity of the merged output), with the window set to 450 ms and, separately, to cover the measured skew.
 
 ## Procedure
@@ -33,7 +33,7 @@ Cells of 300 s. Leg A's receiver starts at 0, leg B's at 20 s, so the receivers 
 | `pack-kill` | packager killed at 120 s, restarted at 130 s under new wall-clock names |
 | `pack-freeze` | packager stopped (`SIGSTOP`) for 10 s, then continued |
 | `origin-down` | origin nginx stopped for 30 s |
-| `recv-restart` | leg A's fetcher and groomer killed at 120 s, restarted at 130 s |
+| `recv-restart` | leg A's fetcher and pacer killed at 120 s, restarted at 130 s |
 | `loss` | `netem` 2 % loss and 20 ms delay on leg A's path for 60 s |
 | `inject` | both packagers restarted without `--slice-only`; clean (H1's control) |
 
@@ -55,7 +55,7 @@ Reported, not graded: each leg's own loss (media lost with no partner, per failu
 
 ## Results
 
-_Groomer `5626c88`; graded from leg B's settling (40 s) to 12 s before the end, where both legs drain. Skew is leg B's arrival less leg A's at equal numbers, median, with its spread in the cell. "Wide" is a receiver window of the cell's largest skew plus 500 ms._ Every cell passes criterion 1: both legs captured, CloudFront answering throughout (every segment a `Miss` at PoP DUB2-P1, one receiver per pathway).
+_Pacer `5626c88`; graded from leg B's settling (40 s) to 12 s before the end, where both legs drain. Skew is leg B's arrival less leg A's at equal numbers, median, with its spread in the cell. "Wide" is a receiver window of the cell's largest skew plus 500 ms._ Every cell passes criterion 1: both legs captured, CloudFront answering throughout (every segment a `Miss` at PoP DUB2-P1, one receiver per pathway).
 
 | Cell | Skew (spread) | Identity: matched, mismatched | Leg A's own loss | Merged, wide: lost, conflicts, CC errors | Class C receiver (450 ms) |
 | --- | --- | --- | --- | --- | --- |
@@ -77,7 +77,7 @@ _Groomer `5626c88`; graded from leg B's settling (40 s) to 12 s before the end, 
 
 **Offload** ([`t59-offload.sh`](scripts/t59-offload.sh), 102 s, no legs running). Four receivers on pathway A, three at the Dublin edge and one at London: origin A served 41 of 42 segments exactly twice, once per edge, and revalidated the playlist 1.99 times a second (once a second per edge, 120 of 203 answered 304). The three Dublin receivers' 126 fetches were 42 misses and 84 hits: one origin fetch per segment per edge, however many receivers. Origin egress was 50 Mb/s against 100 Mb/s delivered.
 
-## Groomer defects found
+## Pacer defects found
 
 The first four cells ran on `ea88793`, whose stream-clocked grid had two faults the synthetic and looped sources of T12 and T55 never exercised. Both are fixed in `mpegts-pacer`, each with a test that fails without it; the table above is the fixed build's.
 

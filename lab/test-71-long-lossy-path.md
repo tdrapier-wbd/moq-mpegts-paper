@@ -102,5 +102,5 @@ The passthrough lane's rates sit near a Reno-like sender's loss bound at 1,200-b
 
 - One path between two regions, one 10 Mb/s clip, 120 s cells and three replicates: one failure in three is an existence result at 1 %, not a rate.
 - Independent random loss only, the same each way; no burst loss, reordering or rate limit.
-- One budget: whether a longer MoQ delay restores whole delivery at 1 % is not measured. SRT is ungroomed TSDuck at `--latency 1000`.
+- One budget: whether a longer MoQ delay restores whole delivery at 1 % is not measured. SRT is unpaced TSDuck at `--latency 1000`.
 - Software receivers only; no IRD.
