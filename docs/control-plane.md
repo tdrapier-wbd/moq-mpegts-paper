@@ -10,6 +10,7 @@ Status: working draft. Layer: **above the transport.** Scope: the provisioning, 
 - [2. Entities](#2-entities)
   - [2.1 API](#21-api)
   - [2.2 State](#22-state)
+  - [2.3 Fleet operation (R9)](#23-fleet-operation-r9)
 - [3. Identity](#3-identity)
 - [4. Entitlement (R7)](#4-entitlement-r7)
   - [4.1 Revocation](#41-revocation)
@@ -38,6 +39,8 @@ Status: working draft. Layer: **above the transport.** Scope: the provisioning, 
 **On the September 2026 relay measured, revocation is a poll, not a push, and three settings disable it silently; that, not its speed, is what binds a primary-broadcast deployment** (§4.1, §8). Read the acceptance criteria in §8 as proposals, one of which §4.1 records as unachievable.
 
 **For a token, de-provisioning is surgical only under one key per unit of entitlement** (§4); upstream's authorization server narrows a certificate's grant in place (§3).
+
+**A fleet cannot run without this layer**: hand provisioning serves a handful of feeds, so inventory, receiver enrolment and the interface to a bought relay fabric come before scale (§2.3, R9).
 
 **Read what follows as a specification for something an operator builds**, with the token, key and enforcement machinery as the part sensibly adopted rather than written (§6).
 
@@ -85,6 +88,14 @@ Two properties are load-bearing rather than cosmetic. **Idempotency** — every 
 **State separates into two tiers**: an **authoritative store** that is strongly consistent and replicated for tenant records, policy and entitlements, so no two conflicting views of authorization can exist; and **runtime projections**, a local eventually-consistent cache of pushed config at each data-plane node.
 
 This asymmetry — a strongly consistent but comparatively slow control plane, a fast but eventually-consistent data plane — is deliberate and load-bearing. Control operations are human- or automation-paced (seconds), not media-paced (milliseconds).
+
+### 2.3 Fleet operation (R9)
+
+**Design, not built: every publisher, relay and receiver measured here was provisioned by hand, which serves a handful of feeds and not a fleet.** Three pieces turn the entity model into something an operations team runs.
+
+- **Inventory.** Every publisher, relay and receiver is a record with its software version, configuration and last reported health, so the NOC sees the fleet from one place, and an upgrade is a planned change across it, rolled through a 1+1 pair one leg at a time.
+- **Receiver enrolment.** A receiver installed at a client's plant from one download takes a one-time code, exchanges it for its credential and pulls its configuration: routes, outputs, and the relays it fails over between. The credential is bound to that installation, revocable on its own and refreshed in band; through a control-plane outage the receiver runs on the configuration and token it last held (§1.1).
+- **A relay fabric someone else runs.** Where fan-out is bought, the interface to its operator is an entitlement API that accepts this layer's grants, or tokens issued under its key, per-feed metrics exported to the NOC, and a service level. Revocation's bound is then the operator's re-check cadence, not this layer's (§4.1).
 
 ---
 
@@ -302,6 +313,7 @@ Behavioural criteria, which matter more than the numbers:
 - **A stub drove every run**, so the integration surface that §6 makes decisive is untested; no attempt yet.
 - **Rights windows, §4's _temporary_ grant type, are unexercised**: expiry ends a session within 0.11 s (§4.1), but no grant measured was scheduled to open, nor a window composed against the re-check cadence (§10); no attempt yet.
 - **Object-level encryption and BISS-CA's key ladder are unmeasured**; only scrambled carriage is (§7.3). No attempt yet.
+- **Fleet operation is design only** (§2.3): nothing here was provisioned, enrolled or upgraded through a control plane, and no third party has installed a receiver; a multi-feed soak run through one would discharge it. No attempt yet.
 - **The market is crowded.** MediaConnect, Zixi, LTN and others ship capable provisioning and management planes. "Value lives in the control plane" is therefore a _necessary_ condition for defensibility, not a sufficient one: it has to be materially better for _this_ job, not merely present. Nothing here demonstrates that it is, and no experiment could: it is commercial.
 
 ---

@@ -141,7 +141,7 @@ Every rate is a constant at the top of the script, so re-pricing against a diffe
 
 What is and is not established is stated once, in [evidence](evidence.md) §2, and the limits of the evidence in §4. What is outstanding, what blocks it and in what order to run it is stated once, in [planned-experiments.md](planned-experiments.md), ranked P0/P1/P2 by what a result could change. Neither is restated here. Read every row of the table above against the limits in evidence §4, above all that **nothing has been fed to a hardware IRD or graded by a hardware analyser**: "complete" means complete in software.
 
-The programme has two strands: the original asks which of two data planes can be run permanently, at scale, by an operations team; the second scores against [control-plane.md](../docs/control-plane.md). **Three milestones lie beyond the gates, and a deployment decision needs each:** _operations_, a platform a broadcast NOC can monitor and support under an SLA (R8); _entitlement and security_, whose enforcement is measured and whose remainder is design; and _dependency risk_, a lane built on a fast-moving upstream that speaks draft protocol versions.
+The programme has two strands: the original asks which of two data planes can be run permanently, at scale, by an operations team; the second scores against [control-plane.md](../docs/control-plane.md). **Three milestones lie beyond the gates, and a deployment decision needs each:** _operations_, a platform a broadcast NOC can monitor and support under an SLA (R8, R9); _entitlement and security_, whose enforcement is measured and whose remainder is design; and _dependency risk_, a lane built on a fast-moving upstream that speaks draft protocol versions.
 
 ## Shared test environment and conventions
 

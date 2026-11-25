@@ -45,7 +45,7 @@ Status: working draft. Layer: **cross-cutting.** Scope: a cost framework for com
 
 **Hypothesis, not result:** always-on trunk is the hardest case but not permanently lost — clearest for dynamic, short-lived, long-tail or global-reach-on-demand routes (§6).
 
-**Every figure is published or derived in the open from something published, and commercially sensitive inputs are excluded**, so the incumbent's side is a parity threshold rather than a cost, and three inputs that are neither published nor measured are labelled wherever they appear. Staffing and the control plane are outside every figure: this is a transport-line comparison, not a business case (§9).
+**Every figure is published or derived in the open from something published, and commercially sensitive inputs are excluded**, so the incumbent's side is a parity threshold rather than a cost, and the two inputs that are neither published nor measured are labelled wherever they appear. Staffing and the control plane are outside every figure: this is a transport-line comparison, not a business case (§9).
 
 ---
 
@@ -176,7 +176,7 @@ _The latency column is source-to-groomed-egress over the public internet from a 
 
 **A CDN can operate a MoQ relay; it cannot commoditise SRT.** A relay is a cache and holds no per-destination state a CDN would have to operate, whereas SRT fan-out needs a stateful gateway per stream per destination, which is a media-server business. SRT therefore scales through re-origination or owned transit, and CDNs take it only as contribution ingest. **An open specification combined with a cache-shaped relay primitive** is what enables multi-vendor competition; openness alone, in SRT's case, did not.
 
-**The argument is limited to sub-second routes.** At seconds of latency, primary distribution favours segmented HTTP on commodity economics, and the cost of the broadcast-grade edge layer remains on either plane (§7.2). **The price follows the product, not the HTTP version**: classic HLS rides HTTP/1.1 and Low-Latency HLS needs HTTP/2 or HTTP/3, and CloudFront and Akamai publish no surcharge for HTTP/3 delivery, so either segmented mode sits in a delivery contract already negotiated, where a MoQ relay is a separate product with its own rate.
+**The argument is limited to sub-second routes.** At seconds of latency the case for MoQ's lead lane is not economic: rented delivery favours segmented HTTP, only self-operated relays on rented servers undercut it before staffing (§4.3), and the cost of the broadcast-grade edge layer remains on either plane (§7.2). **The price follows the product, not the HTTP version**: classic HLS rides HTTP/1.1 and Low-Latency HLS needs HTTP/2 or HTTP/3, and CloudFront and Akamai publish no surcharge for HTTP/3 delivery, so either segmented mode sits in a delivery contract already negotiated, where a MoQ relay is a separate product with its own rate.
 
 **At its narrowest, then, the claim is about the sub-second band and is not a general cheapest-feed claim**: parity at ~95 destinations on published cloud rates against ~323 at an _assumed_ commodity relay rate (§4.4). The whole of that gap is the assumption.
 

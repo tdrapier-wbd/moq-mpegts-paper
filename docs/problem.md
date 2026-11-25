@@ -41,7 +41,7 @@ Status: working draft. Layer: **the requirement.** Scope: what primary distribut
 
 **A successor has to put something in the path that behaves like a cache** (§4). Two honest alternatives remain: an API-driven control plane over existing managed IP, which narrows the agility mismatch but not the economics of the thousandth destination, and satellite with an IP repair channel, which makes the choice at least three-way.
 
-**R1–R3 decide whether a candidate is usable at all, and R3 and R6–R8 sit above the transport, required whichever data plane is chosen** (§5).
+**R1–R3 decide whether a candidate is usable at all, and R3 and R6–R9 sit above the transport, required whichever data plane is chosen** (§5).
 
 Nothing is measured in this document (§6).
 
@@ -174,7 +174,7 @@ The conclusion is not that satellite and managed fibre disappear, but that the _
 
 **Everything downstream is scored against this list.** It merges the characteristics of §1, the transport properties primary distribution imposes, and the contract the installed base enforces.
 
-The order is deliberate. **R1–R3 are the requirements that decide whether a candidate is usable at all** — carry the multiplex, fan it out at the scale that matters, and hand it over in a form the installed base accepts. R4–R8 are then the requirements that decide whether it is _good_. And **R3 and R6–R8 sit above the transport and are required whichever data plane is chosen**, which is the observation the rest of this repository turns out to be about.
+The order is deliberate. **R1–R3 are the requirements that decide whether a candidate is usable at all** — carry the multiplex, fan it out at the scale that matters, and hand it over in a form the installed base accepts. R4–R9 are then the requirements that decide whether it is _good_. And **R3 and R6–R9 sit above the transport and are required whichever data plane is chosen**, which is the observation the rest of this repository turns out to be about.
 
 | # | Requirement | Why | Where it is assessed |
 | --- | --- | --- | --- |
@@ -186,6 +186,7 @@ The order is deliberate. **R1–R3 are the requirements that decide whether a ca
 | **R6** | **Engineered redundancy meeting "no visible failure during contracted content".** In practice 1+1 with hitless selection at the receiver, on a receive chain itself doubled (two receivers, two IRDs), because that is what the installed base already implements. The legs start, fail and restart independently, so failover must hold between legs started at different times. | §1.1 | [Architecture](architecture.md) §5, [Evidence](../lab/evidence.md) §3.4 |
 | **R7** | **Dynamic, revocable entitlement.** A feed reaches an endpoint only while that endpoint holds a valid grant, with a bounded worst-case revocation time — so rights windows, partner onboarding and emergency takedown are control-plane operations rather than manual receiver reconfiguration. | §3.7 | [Control](control-plane.md), [Comparison](comparison.md) §8, [Evidence](../lab/evidence.md) §3.10 |
 | **R8** | **Observability in broadcast terms.** Signal conformance, error seconds and PCR integrity, correlatable with systems-domain telemetry, so a broadcast NOC can operate the platform without adopting a new vocabulary. **Scored at the distributor's own egress**, which is where the contract is written; whether an origin can establish that what a _subscriber_ received was intact is a further capability no candidate here provides in full, and it is not part of R8 ([Architecture](architecture.md) §9.4). | §1.3 | [Architecture](architecture.md) §9, [Evidence](../lab/evidence.md) §3.12 |
+| **R9** | **Operable at fleet scale by a broadcast engineering team.** Publishers, relays and receivers are deployed, provisioned, monitored and upgraded through a control plane rather than by hand, each role under a supported product with a service level. A receiver at a client's plant installs on commodity hardware or a virtual machine from one download, with minimal configuration and no software stack to assemble, as point-to-point receivers do today. It decides whether the platform can be run rather than whether the bytes arrive, so no data plane meets it alone. | §1.3, §1.5, §3.7 | [Control](control-plane.md) §2.3, [Comparison](comparison.md) §11.1 |
 
 Three notes on how this list is used.
 
