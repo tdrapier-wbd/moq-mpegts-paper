@@ -14,6 +14,7 @@
 # candidate's relay and clients; empty for the default), BCAST, GROUP, RATE, DELAY, FOLLOW (10s:
 # the candidate's export follows a republish as a program switch, `--follow FOLLOW --stitch`;
 # empty: it exits), PUBLIC (**, the relay's anonymous grant; current main takes ''), MA_LAT_MS,
+# ON_STALL (mute; fail exits the pacer on a stall or a leg behind, and `serve` restarts the export),
 # PACER, MOQ_MA, SRC, MA_JWT_FILE.
 set -u
 BIN=${BIN:-$HOME/bin-9757807f}
@@ -25,6 +26,7 @@ FOLLOW=${FOLLOW-10s}
 PUBLIC=${PUBLIC-**}
 FOLLOWS=${FOLLOW:+--follow $FOLLOW --stitch}
 MA_LAT_MS=${MA_LAT_MS:-1000}
+ON_STALL=${ON_STALL:-mute}
 PACER=${PACER:-$HOME/pacer-97f3a38/mpegts-pacer}
 MOQ_MA=${MOQ_MA:-$HOME/bin-3c0daa21/moq}
 SRC=${SRC-}
@@ -33,11 +35,11 @@ MA_JWT_FILE=${MA_JWT_FILE:-$HOME/.moq-live/probe.jwt}
 RUN=${RUN:-$HOME/ma-window}
 PORT=${PORT:-4495}
 mkdir -p "$RUN"
-export PACER RATE MA_LAT_MS
+export PACER RATE MA_LAT_MS ON_STALL
 
 groom() {
 	"$PACER" "127.0.0.1:$1" "$RATE" --stream-clock --sequence-seed 0 --stall-ms 1000 \
-		--on-stall mute --stats-interval-ms 10000 --latency-ms "$MA_LAT_MS" --max-latency-ms 8000
+		--on-stall "$ON_STALL" --stats-interval-ms 10000 --latency-ms "$MA_LAT_MS" --max-latency-ms 8000
 }
 
 export -f groom
