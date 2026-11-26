@@ -161,6 +161,19 @@ _The growth profiled, criteria fixed before running._ For 24 h on the same commi
 - **HP3, attribution.** If arm J's sampled live heap grows by at least 70 % of its relay's resident growth, the growth is held allocations, and the stacks that grew most between the first and last profiles are reported; otherwise it is the allocator's own overhead. The same for the export.
 - **HP4, the profile costs no media.** Each arm's taps count the same packets in and out (SH3's difference holding within twice arm G's range), so a profiled process that falls behind voids its arm.
 
+_Results, 23.8 h: every criterion holds for the relay; the export's growth lies in the allocator._
+
+| Process | Arm G, after 1 h → end | Arm J, after 1 h → end | J's sampled heap, 1 h → 24 h |
+| --- | --- | --- | --- |
+| relay | 239 → 352 MB (1.47×, +113) | 226 → 247 MB (1.09×, +21) | 155 → 181 MB (+25) |
+| export | 266 → 338 MB (1.27×, +72) | 230 → 253 MB (1.10×, +23) | 156 → 139 MB (−17) |
+| import | 215 → 231 MB (1.07×, +16) | 193 → 205 MB (1.06×, +11) | 154 → 150 MB (−4) |
+
+- **HP1 holds:** arm G's relay grew 47 %.
+- **HP2 holds:** arm J's relay grew 19 % of arm G's (21 against 113 MB), and its export 32 %. The default allocator accounts for most of the resident growth.
+- **HP3 holds for the relay** (its sampled heap grew 120 % of its resident growth) **and fails for the export** (its heap shrank as it grew). Of the relay's 25 MB, 17 MB is one map, `moq_net::model::record::Record`'s ranges of `Report`, filled from the publisher's forward-drop path (`TrackRun::poll_forward_drop`, the track's `DropCursor`): 0.6 MB after the first hour, rising by 0.75 MB every hour to 17.8 MB, never freed. The frame cache (`FrameStorage`) held 100–120 MB throughout without a trend.
+- **HP4 holds:** after the first hour, each arm's difference between its cumulative input and output counts moved over a range of 753 packets (G) and 715 (J). Arm J's export ran a constant 0.84 s further behind, without drifting. Neither arm restarted a process; neither tap recorded a PCR step or a continuity error.
+
 ## Conclusions
 
 1. **Upstream's import now carries an unflagged encoder switch in both directions**, as a marked programme switch that `export ts --stitch --follow` follows. Neither the backward step that ended T34's imports nor the forward one that ended its exports ends anything on `main`.
