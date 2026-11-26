@@ -72,5 +72,6 @@ Each `none` session that ended was its subscriber's export failing on its own cl
 ## Limits, stated in advance
 
 - One host and one synthetic last mile: Bernoulli loss and `netem` reorder.
+- No real path the campaign carries loses at a rate the 2 % threshold sees: the live contribution's SRT ingest recovers under 4 packets in 10 million, and the long internet path of [T71](test-71-long-lossy-path.md) dropped none unshaped. So these results are a record of the loss response, not a case for changing it, and were not put upstream.
 - One flow per bottleneck, and `cake` isolates flows: what a sender that ignores loss costs other traffic is not measured.
 - One lane at one column.
