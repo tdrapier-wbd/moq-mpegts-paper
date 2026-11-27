@@ -134,9 +134,9 @@ Export waited for every SI entry, so a track that never resolved left the progra
 
 **Report.** The ingest half of [#1838](https://github.com/moq-dev/moq/issues/1838): `moq import ts` and the SRT gateway graded nothing of the feed they received beyond PSI CRCs and liveness. **Contributed.** A `ts::health` module counting TR 101 290 V1.4.1's `TS_sync_loss`, `Sync_byte_error`, `PAT_error_2`, `Continuity_count_error`, `PMT_error_2`, `Transport_error`, `PCR_repetition_error`, `PCR_discontinuity_indicator_error` and `PTS_error` at ETSI's limits, and logging one line of totals whenever any moves; `PCR_accuracy_error` is not measured.
 
-**Verified** before and after the merge on the 72 s excerpt of `contrib-10m.ts`: a clean feed logs nothing; twenty aligned 7-packet drops read 28 continuity errors, exactly TSDuck's count; one TEI packet reads one transport error; twenty unaligned cuts read 20 sync losses and 40 sync-byte errors. Through `srt-live-transmit`, sync losses climb from the first second: its zero-padding of short reads, which the counter now shows directly. Decode throughput is 1,054–1,086 MB/s against 1,091.
+**Verified** before and after the merge on the 72 s excerpt of `contrib-10m.ts`: a clean feed logs nothing; twenty aligned 7-packet drops read 28 continuity errors, exactly TSDuck's count; one TEI packet reads one transport error; twenty unaligned cuts read 20 sync losses and 40 sync-byte errors. Through `srt-live-transmit`, sync losses climb from the first second: its zero-padding of short reads, which the counter now shows directly.
 
-**State:** merged, with the maintainer's fix for a `PTS_error` that grew on a PID a PMT revision dropped; our two offered follow-ups on its per-PID state (at most about 1.5 MB per importer) have had no answer. **Open:** an unsignalled forward PCR jump under 1 s stretches the program clock and counts as late tables; the counters stop at ingest.
+**State:** merged, with the maintainer's fix for a `PTS_error` that grew on a PID a PMT revision dropped; our two offered follow-ups on its per-PID state (at most about 1.5 MB per importer) have had no answer. **Open:** an unsignalled forward PCR jump under 1 s stretches the program clock and counts as late tables; the counters stop at ingest. The SRT link's own health (RTT, loss, retransmits, too-late drops) is requested as [#9776](https://github.com/moq-dev/moq/issues/9776), citing [openmoq/moq2ts#56](https://github.com/openmoq/moq2ts/pull/56).
 
 ---
 
@@ -385,7 +385,7 @@ Filed as [**#3925**](https://github.com/moq-dev/moq/issues/3925): conformant egr
 
 Residue outside both issues: TDT/TOT off-grid, one or two PCR-only packets per 40 s between legs, and CC per process ([#2779](https://github.com/moq-dev/moq/issues/2779), abandoned).
 
-**#4001 cost a subscriber most of its delivery under random loss**: 0.49–0.67 Mb/s at 10 % against its parent's 10.40 ([T8b](test-8b-congestion-control.md) § _C7_). Reported as [#4613](https://github.com/moq-dev/moq/issues/4613), fixed by our [#4618](https://github.com/moq-dev/moq/pull/4618), merged: each skip under loss renewed the hold's full `max_age`. The fix ends the exporter's stall, but graded on content the merged build carries 8.0 % and 2.6 % of the video at 10 % loss, as little as before, so the loss #4613 reports remains ([corrected on #4613](https://github.com/moq-dev/moq/issues/4613#issuecomment-6131858696)).
+**#4001 cost a subscriber most of its delivery under random loss**: 0.49–0.67 Mb/s at 10 % against its parent's 10.40 ([T8b](test-8b-congestion-control.md) § _C7_). Reported as [#4613](https://github.com/moq-dev/moq/issues/4613), fixed by our [#4618](https://github.com/moq-dev/moq/pull/4618), merged: each skip under loss renewed the hold's full `max_age`. The fix ends the exporter's stall, but the merged build carries 8.0 % and 2.6 % of the video at 10 % loss, so #4613's loss remains ([corrected on #4613](https://github.com/moq-dev/moq/issues/4613#issuecomment-6131858696)).
 
 ### The video DTS reserve froze at the PMT — contributed as [#4500](https://github.com/moq-dev/moq/pull/4500), merged and verified on `main`
 
