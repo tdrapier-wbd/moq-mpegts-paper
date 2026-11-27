@@ -3,8 +3,9 @@
 #
 # Lists every openmoq/moq2ts issue and pull request updated since DATE, and every commit on moq-dev
 # `main` since SHA that touches the TS path (moq-mux's TS container and catalog, moq-srt, moq-msf).
-# Each line is `ok` when cross-check.md cites the item and `new` when it does not. It changes
-# nothing: each `new` line is an item to triage into the register, or to pass over (build,
+# Each line is `ok` when cross-check.md cites the item, `closed` when only the notebook links it
+# (a settled item updated again: re-read only if the update reopens it), and `new` otherwise. It
+# changes nothing: each `new` line is an item to triage into the register, or to pass over (build,
 # packaging, UI). Then set STATUS.md's cross-check line to the date and the `main` it printed.
 #
 # Requires a clone of moq-dev/moq (`origin` = upstream) and `gh`. Fetches `origin main`; never
@@ -40,11 +41,19 @@ done
 SINCE_DATE=${ARGS[0]} SINCE_SHA=${ARGS[1]}
 
 REG="$(cd "$(dirname "$0")/.." && pwd)/cross-check.md"
+NOTES="$(dirname "$REG")/notebook.local.md"
 git -C "$DIR" fetch -q origin main
 MAIN=$(git -C "$DIR" rev-parse --short=10 origin/main)
 
-cited() { # <repo path> <number>: ok when the register links the item
-	if grep -qE "github\.com/$1/(issues|pull)/$2([^0-9]|$)" "$REG"; then echo ok; else echo new; fi
+cited() { # <repo path> <number>: ok when the register links the item, closed when the notebook does
+	local link="github\.com/$1/(issues|pull)/$2([^0-9]|$)"
+	if grep -qE "$link" "$REG"; then
+		echo ok
+	elif [[ -f $NOTES ]] && grep -qE "$link" "$NOTES"; then
+		echo closed
+	else
+		echo new
+	fi
 }
 
 echo "cross-check against moq2ts updated since ${SINCE_DATE} and moq-dev ${SINCE_SHA}..${MAIN}"
@@ -52,7 +61,7 @@ for kind in issue pr; do
 	gh "$kind" list --repo openmoq/moq2ts --state all --limit 200 --search "updated:>=${SINCE_DATE}" \
 		--json number,state,author,title --jq '.[] | "\(.number)\t\(.state)\t\(.author.login)\t\(.title)"' |
 		while IFS=$'\t' read -r n state who title; do
-			printf '%-4s moq2ts#%s %s %s %s: %s\n' "$(cited openmoq/moq2ts "$n")" "$n" "$kind" "$state" "$who" "$title"
+			printf '%-6s moq2ts#%s %s %s %s: %s\n' "$(cited openmoq/moq2ts "$n")" "$n" "$kind" "$state" "$who" "$title"
 		done
 done
 git -C "$DIR" log --format='%h%x09%s' "${SINCE_SHA}..origin/main" -- \
@@ -61,5 +70,5 @@ git -C "$DIR" log --format='%h%x09%s' "${SINCE_SHA}..origin/main" -- \
 		pr=$(grep -oE '\(#[0-9]+\)$' <<<"$subject" | tr -dc '0-9' || true)
 		mark=new
 		[[ -n "$pr" ]] && mark=$(cited moq-dev/moq "$pr")
-		printf '%-4s moq-dev %s: %s\n' "$mark" "$h" "$subject"
+		printf '%-6s moq-dev %s: %s\n' "$mark" "$h" "$subject"
 	done
