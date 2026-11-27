@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Is STATUS.md's upstream tracker still true?
 #
-# Reads every table row under STATUS.md's "## Upstream": the GitHub links in its first cell are the
-# tracked items, and the row's first ISO date is the last word already read. Reports, per item, its
+# Reads every table row under STATUS.md's "## Upstream": the GitHub links in the first cell holding any are
+# the tracked items, and the row's first ISO date is the last word already read. Reports, per item, its
 # state and who spoke last: `ok` when nothing needs reading, `CHECK` with flags otherwise. It changes
 # nothing: each flag is a row to re-read.
 #
@@ -39,7 +39,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 ROWS=$(awk '/^## Upstream/ { p = 1; next } /^## / { p = 0 } p && /^\|/' "$STATUS")
-grep -qE '^\|[^|]*https://github\.com/' <<<"$ROWS" || {
+grep -qE '^\|.*https://github\.com/' <<<"$ROWS" || {
 	echo "no tracked links under '## Upstream' in $STATUS" >&2
 	exit 1
 }
@@ -71,7 +71,7 @@ def bot: test("\\[bot\\]$|^(github-actions|coderabbitai|copilot|chatgpt-codex-co
 
 echo "upstream tracker in $(basename "$STATUS"), as $ME, $(date -u +%Y-%m-%dT%H:%MZ)"
 while IFS= read -r row; do
-	first=$(awk -F'|' '{ print $2 }' <<<"$row")
+	first=$(awk -F'|' '{ for (i = 2; i < NF; i++) if ($i ~ /github\.com/) { print $i; exit } }' <<<"$row")
 	seen=$(grep -oE '20[0-9]{2}-[0-9]{2}-[0-9]{2}' <<<"$row" | head -1 || true)
 	for url in $(grep -oE 'https://github\.com/[^/]+/[^/]+/(issues|pull)/[0-9]+' <<<"$first" || true); do
 		repo=$(cut -d/ -f4,5 <<<"$url")
