@@ -1,6 +1,6 @@
 # Cross-check: `moq-dev` and `moq2ts`
 
-**State: answers by code at `moq-dev` `main` from `cd560bde5e` to `e9b1a5ff48` and `moq2ts` `main` from `5ea1c0b60` to `be3a18d`, and three laptop checks run. One shared property was reported to `moq-dev` and fixed, and one `moq-dev` has fixed is shared by `moq2ts` at start-up; three stand by `moq-dev`'s design or lack, one is open on its side and two on `moq2ts`'s.**
+**State: answers by code at `moq-dev` `main` from `cd560bde5e` to `e9b1a5ff48` and `moq2ts` `main` from `5ea1c0b60` to `be3a18d`, and three laptop checks run. One shared property was reported to `moq-dev` and fixed, and one `moq-dev` has fixed is shared by `moq2ts` at start-up; three stand by `moq-dev`'s design or lack, two are open on its side and three on `moq2ts`'s.**
 
 `moq-dev` and OpenMOQ's `moq2ts` both carry MPEG-TS over MoQ. `moq-dev` does it in Rust, on `moq-lite` and MoQT, with its own catalog beside MSF. `moq2ts` does it in C++, publishing on `moqxr` and receiving on `moq5`, on MoQT under MSF and MSFTS. A defect found or fixed in one is a hypothesis about the other. This file holds each such item, the question it puts to the other implementation, the answer with its evidence, and what follows. Whether the two exchange media is interop, which is [T11](test-11-interop.md)'s.
 
