@@ -8,7 +8,7 @@
 # `void` when packets 10,000-10,400 are missing (the export never joined).
 #
 # Usage: xc-input-pause.sh OUT    env: MOQ (bin dir), CLIP, PACKETS (133000), SPLIT (50000),
-#                                      PAUSE (2.5), DELAY (2s), HELD (400), RUNS (3)
+#                                      PAUSE (2.5), DELAY (2s), HELD (400), RUNS (3), LIMIT (120 s)
 
 set -uo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
@@ -37,14 +37,14 @@ echo "build=$(head -1 "$MOQ.sha" 2>/dev/null || echo unknown) packets=$PACKETS s
 
 for n in $(seq 1 "$RUNS"); do
 	b=xc-pause-$n
-	timeout 120 "$M" "${DIAL[@]}" --broadcast "$b" export ts --passthrough --delay "$DELAY" >"run-$n.ts" 2>"run-$n.export.log" &
+	timeout "${LIMIT:-120}" "$M" "${DIAL[@]}" --broadcast "$b" export ts --passthrough --delay "$DELAY" >"run-$n.ts" 2>"run-$n.export.log" &
 	ep=$!
 	sleep 1
 	{
 		tsp -I file part1.ts -P regulate --pcr-synchronous -O file - 2>/dev/null
 		sleep "$PAUSE"
 		tsp -I file part2.ts -P regulate --pcr-synchronous -O file - 2>/dev/null
-	} | RUST_LOG=info timeout 120 "$M" "${DIAL[@]}" --broadcast "$b" import ts --passthrough 2>"run-$n.import.log"
+	} | RUST_LOG=info timeout "${LIMIT:-120}" "$M" "${DIAL[@]}" --broadcast "$b" import ts --passthrough 2>"run-$n.import.log"
 	wait "$ep"
 	python3 - "$n" "$SPLIT" "$HELD" <<'EOF' | tee -a results.tsv
 import sys
